@@ -1,0 +1,150 @@
+{
+  "_comment": "Vectores dorados del BalanceEngine. Importes en céntimos. El orden de las liquidaciones esperadas es parte del contrato (determinismo).",
+  "cases": [
+    {
+      "name": "un pagador, dos personas",
+      "participants": ["a", "b"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 1000, "consumption": { "a": 500, "b": 500 } }
+      ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 1000, "consumed": 500, "net": 500, "outstanding": 500 },
+          "b": { "paid": 0, "consumed": 500, "net": -500, "outstanding": -500 }
+        },
+        "settlements": [ { "from": "b", "to": "a", "amount": 500 } ]
+      }
+    },
+    {
+      "name": "multi-pagador: dos tickets, tres personas",
+      "participants": ["a", "b", "c"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 3000, "consumption": { "a": 1000, "b": 1000, "c": 1000 } },
+        { "paidBy": "b", "grandTotal": 1500, "consumption": { "a": 500, "b": 500, "c": 500 } }
+      ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 3000, "consumed": 1500, "net": 1500, "outstanding": 1500 },
+          "b": { "paid": 1500, "consumed": 1500, "net": 0, "outstanding": 0 },
+          "c": { "paid": 0, "consumed": 1500, "net": -1500, "outstanding": -1500 }
+        },
+        "settlements": [ { "from": "c", "to": "a", "amount": 1500 } ]
+      }
+    },
+    {
+      "name": "simplificación voraz con 4 personas (orden de emisión determinista)",
+      "participants": ["a", "b", "c", "d"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 700, "consumption": { "c": 600, "d": 100 } },
+        { "paidBy": "b", "grandTotal": 300, "consumption": { "d": 300 } }
+      ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 700, "consumed": 0, "net": 700, "outstanding": 700 },
+          "b": { "paid": 300, "consumed": 0, "net": 300, "outstanding": 300 },
+          "c": { "paid": 0, "consumed": 600, "net": -600, "outstanding": -600 },
+          "d": { "paid": 0, "consumed": 400, "net": -400, "outstanding": -400 }
+        },
+        "settlements": [
+          { "from": "c", "to": "a", "amount": 600 },
+          { "from": "d", "to": "b", "amount": 300 },
+          { "from": "d", "to": "a", "amount": 100 }
+        ]
+      }
+    },
+    {
+      "name": "liquidación congelada parcial reduce lo pendiente (RF-53)",
+      "participants": ["a", "b"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 1000, "consumption": { "a": 500, "b": 500 } }
+      ],
+      "frozenSettlements": [ { "from": "b", "to": "a", "amount": 300 } ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 1000, "consumed": 500, "net": 500, "outstanding": 200 },
+          "b": { "paid": 0, "consumed": 500, "net": -500, "outstanding": -200 }
+        },
+        "settlements": [ { "from": "b", "to": "a", "amount": 200 } ]
+      }
+    },
+    {
+      "name": "liquidación congelada total: nada pendiente",
+      "participants": ["a", "b"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 1000, "consumption": { "a": 500, "b": 500 } }
+      ],
+      "frozenSettlements": [ { "from": "b", "to": "a", "amount": 500 } ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 1000, "consumed": 500, "net": 500, "outstanding": 0 },
+          "b": { "paid": 0, "consumed": 500, "net": -500, "outstanding": 0 }
+        },
+        "settlements": []
+      }
+    },
+    {
+      "name": "todos en paz: sin liquidaciones",
+      "participants": ["a", "b"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 600, "consumption": { "a": 300, "b": 300 } },
+        { "paidBy": "b", "grandTotal": 600, "consumption": { "a": 300, "b": 300 } }
+      ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 600, "consumed": 600, "net": 0, "outstanding": 0 },
+          "b": { "paid": 600, "consumed": 600, "net": 0, "outstanding": 0 }
+        },
+        "settlements": []
+      }
+    },
+    {
+      "name": "consumo que no cuadra con el total es error",
+      "participants": ["a", "b"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 1000, "consumption": { "a": 450, "b": 450 } }
+      ],
+      "expectedError": "consumptionMismatch"
+    },
+    {
+      "name": "empate entre deudores: gana el orden de participantes",
+      "participants": ["a", "b", "c"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 1000, "consumption": { "b": 500, "c": 500 } }
+      ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 1000, "consumed": 0, "net": 1000, "outstanding": 1000 },
+          "b": { "paid": 0, "consumed": 500, "net": -500, "outstanding": -500 },
+          "c": { "paid": 0, "consumed": 500, "net": -500, "outstanding": -500 }
+        },
+        "settlements": [
+          { "from": "b", "to": "a", "amount": 500 },
+          { "from": "c", "to": "a", "amount": 500 }
+        ]
+      }
+    },
+    {
+      "name": "congelada por exceso: la deuda se invierte",
+      "participants": ["a", "b"],
+      "tickets": [
+        { "paidBy": "a", "grandTotal": 1000, "consumption": { "b": 1000 } }
+      ],
+      "frozenSettlements": [ { "from": "b", "to": "a", "amount": 1300 } ],
+      "expected": {
+        "balances": {
+          "a": { "paid": 1000, "consumed": 0, "net": 1000, "outstanding": -300 },
+          "b": { "paid": 0, "consumed": 1000, "net": -1000, "outstanding": 300 }
+        },
+        "settlements": [ { "from": "a", "to": "b", "amount": 300 } ]
+      }
+    },
+    {
+      "name": "pagador desconocido es error",
+      "participants": ["a", "b"],
+      "tickets": [
+        { "paidBy": "x", "grandTotal": 100, "consumption": { "a": 100 } }
+      ],
+      "expectedError": "unknownParticipant"
+    }
+  ]
+}

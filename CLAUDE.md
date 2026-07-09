@@ -43,7 +43,9 @@ registra como revisión del documento ANTES de implementarlo.
 
 - [x] Especificación v2.0 congelada
 - [x] M0 Cimientos (verificado: analyze limpio, tests app OK, build web 11 KB gzip, build functions OK)
-- [ ] M1 Dominio · [ ] M2 OCR · [ ] M3 Sesiones · [ ] M4 Invitados · [ ] M5 Pulido · [ ] M6 IA
+- [x] M1 Dominio (Money/allocate, ShareCode, SplitEngine, BalanceEngine; 54 tests Dart +
+      29 TS; vectores dorados compartidos en packages/domain/test/golden/)
+- [ ] M2 OCR · [ ] M3 Sesiones · [ ] M4 Invitados · [ ] M5 Pulido · [ ] M6 IA
 
 ## Entorno de esta máquina (Windows 11)
 

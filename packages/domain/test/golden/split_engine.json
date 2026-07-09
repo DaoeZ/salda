@@ -1,0 +1,211 @@
+{
+  "_comment": "Vectores dorados del SplitEngine. Importes en céntimos. Ejecutados por packages/domain (Dart) y backend/functions (TS): ambas implementaciones deben producir EXACTAMENTE esto. Valores esperados calculados a mano.",
+  "cases": [
+    {
+      "name": "equal: dos personas, total par",
+      "participants": ["a", "b"],
+      "mode": "equal",
+      "ticket": { "grandTotal": 1000, "lines": [] },
+      "expected": { "a": 500, "b": 500 }
+    },
+    {
+      "name": "equal: tres personas con resto (el céntimo extra al primero)",
+      "participants": ["a", "b", "c"],
+      "mode": "equal",
+      "ticket": { "grandTotal": 1000, "lines": [] },
+      "expected": { "a": 334, "b": 333, "c": 333 }
+    },
+    {
+      "name": "equal: una sola persona",
+      "participants": ["a"],
+      "mode": "equal",
+      "ticket": { "grandTotal": 999, "lines": [] },
+      "expected": { "a": 999 }
+    },
+    {
+      "name": "equal: total cero",
+      "participants": ["a", "b"],
+      "mode": "equal",
+      "ticket": { "grandTotal": 0, "lines": [] },
+      "expected": { "a": 0, "b": 0 }
+    },
+    {
+      "name": "equal: sin participantes es error",
+      "participants": [],
+      "mode": "equal",
+      "ticket": { "grandTotal": 100, "lines": [] },
+      "expectedError": "emptyParticipants"
+    },
+    {
+      "name": "byItem: dos líneas individuales sin ajustes",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 800,
+        "lines": [
+          { "id": "l1", "totalPrice": 500, "assignment": { "type": "one", "weights": { "a": 1 } } },
+          { "id": "l2", "totalPrice": 300, "assignment": { "type": "one", "weights": { "b": 1 } } }
+        ]
+      },
+      "expected": { "a": 500, "b": 300 }
+    },
+    {
+      "name": "byItem: impuesto 10% prorrateado proporcionalmente (DC-11)",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 880,
+        "lines": [
+          { "id": "l1", "totalPrice": 500, "assignment": { "type": "one", "weights": { "a": 1 } } },
+          { "id": "l2", "totalPrice": 300, "assignment": { "type": "one", "weights": { "b": 1 } } }
+        ]
+      },
+      "expected": { "a": 550, "b": 330 }
+    },
+    {
+      "name": "byItem: descuento (total menor que las líneas) prorrateado",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 900,
+        "lines": [
+          { "id": "l1", "totalPrice": 500, "assignment": { "type": "one", "weights": { "a": 1 } } },
+          { "id": "l2", "totalPrice": 500, "assignment": { "type": "one", "weights": { "b": 1 } } }
+        ]
+      },
+      "expected": { "a": 450, "b": 450 }
+    },
+    {
+      "name": "byItem: línea compartida con pesos 2:1",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 900,
+        "lines": [
+          { "id": "l1", "totalPrice": 900, "assignment": { "type": "shared", "weights": { "a": 2, "b": 1 } } }
+        ]
+      },
+      "expected": { "a": 600, "b": 300 }
+    },
+    {
+      "name": "byItem: línea 'todos' entre tres con resto",
+      "participants": ["a", "b", "c"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 1000,
+        "lines": [
+          { "id": "l1", "totalPrice": 1000, "assignment": { "type": "all" } }
+        ]
+      },
+      "expected": { "a": 334, "b": 333, "c": 333 }
+    },
+    {
+      "name": "byItem: sin líneas cae a partes iguales (ticket manual)",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": { "grandTotal": 500, "lines": [] },
+      "expected": { "a": 250, "b": 250 }
+    },
+    {
+      "name": "byItem: línea sin asignar con política por defecto es error",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 300,
+        "lines": [
+          { "id": "l1", "totalPrice": 300, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expectedError": "unassignedLine"
+    },
+    {
+      "name": "byItem: línea sin asignar con política splitAmongAll",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "unassignedPolicy": "all",
+      "ticket": {
+        "grandTotal": 600,
+        "lines": [
+          { "id": "l1", "totalPrice": 300, "assignment": { "type": "unassigned" } },
+          { "id": "l2", "totalPrice": 300, "assignment": { "type": "one", "weights": { "a": 1 } } }
+        ]
+      },
+      "expected": { "a": 450, "b": 150 }
+    },
+    {
+      "name": "byItem: caso complejo (individual + compartida + todos + propina)",
+      "participants": ["a", "b", "c"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 3000,
+        "lines": [
+          { "id": "l1", "totalPrice": 1200, "assignment": { "type": "one", "weights": { "a": 1 } } },
+          { "id": "l2", "totalPrice": 600, "assignment": { "type": "shared", "weights": { "a": 1, "b": 1 } } },
+          { "id": "l3", "totalPrice": 900, "assignment": { "type": "all" } }
+        ]
+      },
+      "expected": { "a": 2000, "b": 667, "c": 333 }
+    },
+    {
+      "name": "byItem: participante desconocido en asignación es error",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 100,
+        "lines": [
+          { "id": "l1", "totalPrice": 100, "assignment": { "type": "one", "weights": { "x": 1 } } }
+        ]
+      },
+      "expectedError": "unknownParticipant"
+    },
+    {
+      "name": "byItem: doble redondeo en cascada (línea y total)",
+      "participants": ["a", "b", "c"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 100,
+        "lines": [
+          { "id": "l1", "totalPrice": 100, "assignment": { "type": "all" } }
+        ]
+      },
+      "expected": { "a": 34, "b": 33, "c": 33 }
+    },
+    {
+      "name": "byItem: pesos inválidos (cero) es error",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 100,
+        "lines": [
+          { "id": "l1", "totalPrice": 100, "assignment": { "type": "shared", "weights": { "a": 0, "b": 1 } } }
+        ]
+      },
+      "expectedError": "invalidWeights"
+    },
+    {
+      "name": "byItem: 'one' con dos participantes es error",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 100,
+        "lines": [
+          { "id": "l1", "totalPrice": 100, "assignment": { "type": "one", "weights": { "a": 1, "b": 1 } } }
+        ]
+      },
+      "expectedError": "invalidWeights"
+    },
+    {
+      "name": "byItem: propina impar con empate (céntimo al primero en orden)",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 1001,
+        "lines": [
+          { "id": "l1", "totalPrice": 250, "assignment": { "type": "one", "weights": { "a": 1 } } },
+          { "id": "l2", "totalPrice": 250, "assignment": { "type": "one", "weights": { "b": 1 } } }
+        ]
+      },
+      "expected": { "a": 501, "b": 500 }
+    }
+  ]
+}

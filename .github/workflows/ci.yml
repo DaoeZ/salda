@@ -64,7 +64,7 @@ jobs:
           cache: npm
           cache-dependency-path: backend/functions/package-lock.json
       - run: npm ci
-      - run: npm run build
+      - run: npm test # compila y ejecuta los vectores dorados (paridad con Dart)
 
   # Los tests de reglas de Firestore contra la Emulator Suite se añaden en M3
   # (job "rules" con firebase emulators:exec). Ver CLAUDE.md.
