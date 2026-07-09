@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dart:
+    name: Paquetes Dart + app Flutter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolver workspace
+        run: flutter pub get
+      - name: Tokens generados al día
+        run: |
+          dart run design_tokens:generate
+          git diff --exit-code -- packages/design_tokens/lib apps/guest_web/src/styles
+      - name: Análisis estático
+        run: dart analyze --fatal-infos
+      - name: Tests de paquetes
+        run: |
+          for pkg in packages/domain packages/ocr_parser packages/ai_providers packages/design_tokens; do
+            if [ -d "$pkg/test" ]; then (cd "$pkg" && dart test); fi
+          done
+      - name: Tests de la app
+        working-directory: apps/mobile
+        run: |
+          if [ -d test ]; then flutter test; fi
+
+  guest-web:
+    name: Web de invitados
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/guest_web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/guest_web/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+
+  functions:
+    name: Cloud Functions
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/functions/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  # Los tests de reglas de Firestore contra la Emulator Suite se añaden en M3
+  # (job "rules" con firebase emulators:exec). Ver CLAUDE.md.

@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// M0: denegación total por defecto. En M3/M4 se abre únicamente
+// receipts/{sessionId}/** para owner (R/W) e invitados con shareCode (R),
+// en espejo de las reglas de Firestore (spec §13.2).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

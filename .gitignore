@@ -1,0 +1,58 @@
+# --- Dart / Flutter ---
+.dart_tool/
+.packages
+build/
+*.g.dart.bak
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+!apps/mobile/pubspec.lock
+
+# --- Android ---
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/android/app/.cxx/
+*.keystore
+*.jks
+key.properties
+
+# --- iOS / macOS ---
+apps/mobile/ios/Pods/
+apps/mobile/ios/.symlinks/
+apps/mobile/ios/Flutter/ephemeral/
+**/xcuserdata/
+
+# --- Node ---
+node_modules/
+*.tsbuildinfo
+
+# --- Web build ---
+apps/guest_web/dist/
+
+# --- Functions build ---
+backend/functions/lib/
+
+# --- Firebase ---
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+storage-debug.log
+*-debug.log
+emulator-data/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# --- Secrets (never commit) ---
+*.env
+.env.*
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+serviceAccount*.json

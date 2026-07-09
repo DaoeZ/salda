@@ -1,0 +1,16 @@
+# Análisis estricto para todos los paquetes Dart puros del workspace.
+# apps/mobile tiene el suyo propio (flutter_lints) que hereda de este.
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_dynamic_calls
+    - prefer_final_locals
+    - prefer_single_quotes
+    - unawaited_futures
+    - directives_ordering

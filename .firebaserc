@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "demo-salda",
+    "dev": "salda-dev",
+    "prod": "salda-prod"
+  }
+}

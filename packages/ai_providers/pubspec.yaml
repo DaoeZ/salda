@@ -1,0 +1,19 @@
+name: ai_providers
+description: >-
+  Contrato AiReceiptProvider + adaptadores (Claude, OpenAI, Gemini, DeepSeek,
+  GLM, OpenRouter y genérico OpenAI-compatible). Añadir un proveedor = crear
+  un directorio en lib/src/providers/ y registrarlo; nada más cambia.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  domain:
+  dio: ^5.7.0
+  meta: ^1.15.0
+
+dev_dependencies:
+  test: ^1.25.0

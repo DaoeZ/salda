@@ -1,0 +1,13 @@
+name: _salda_workspace
+description: Monorepo workspace (pub workspace) del proyecto Salda (nombre provisional).
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+workspace:
+  - packages/design_tokens
+  - packages/domain
+  - packages/ocr_parser
+  - packages/ai_providers
+  - apps/mobile

@@ -1,0 +1,17 @@
+name: ocr_parser
+description: >-
+  Parser heurístico de tickets españoles (Dart puro). Convierte el texto
+  reconocido por ML Kit en un ReceiptExtraction con confianzas por campo.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  domain:
+  meta: ^1.15.0
+
+dev_dependencies:
+  test: ^1.25.0

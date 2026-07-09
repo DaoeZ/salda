@@ -1,0 +1,16 @@
+name: design_tokens
+description: >-
+  Fuente única de verdad del diseño (brand.json + design_tokens.json).
+  El generador emite constantes Dart para la app y CSS custom properties
+  para la web de invitados.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+# Paquete Dart puro a propósito: los tokens no dependen de Flutter.
+# La app convierte los valores (int ARGB, ms, dp) a tipos de Flutter.
+dev_dependencies:
+  test: ^1.25.0

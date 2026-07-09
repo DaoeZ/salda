@@ -1,0 +1,41 @@
+{
+  "_comment": "Tokens de diseño según ESPECIFICACION.md §3. Colores en hex #RRGGBB.",
+  "color": {
+    "seed": "#0B6E5D",
+    "semantic": {
+      "settlementPending": { "light": "#5F6368", "dark": "#9AA0A6" },
+      "settlementMarked": { "light": "#B58500", "dark": "#FFD166" },
+      "settlementConfirmed": { "light": "#1B7A43", "dark": "#6CD597" },
+      "balancePositive": { "light": "#1B7A43", "dark": "#6CD597" },
+      "balanceNegative": { "light": "#B3261E", "dark": "#F2B8B5" }
+    },
+    "avatarPalette": [
+      "#0B6E5D", "#5B7C99", "#8C6D4F", "#7A5EA6",
+      "#B05A7A", "#4E8098", "#96772E", "#5E8C5A"
+    ]
+  },
+  "typography": {
+    "fontFamily": "Inter",
+    "moneyFeatures": ["tnum"],
+    "scale": {
+      "displayLarge": { "size": 45, "weight": 600 },
+      "headline": { "size": 28, "weight": 600 },
+      "title": { "size": 20, "weight": 600 },
+      "body": { "size": 16, "weight": 400 },
+      "bodySmall": { "size": 14, "weight": 400 },
+      "label": { "size": 12, "weight": 500 }
+    }
+  },
+  "spacing": { "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32 },
+  "radius": {
+    "card": 16, "sheet": 28, "button": 24, "field": 12, "thumbnail": 8
+  },
+  "motion": {
+    "easingEmphasized": [0.2, 0.0, 0.0, 1.0],
+    "durations": { "toggleMs": 150, "exitMs": 200, "enterMs": 350, "maxMs": 500 },
+    "listStaggerMs": 25,
+    "skeletonShimmerMs": 1200,
+    "syncIndicatorDelayMs": 400
+  },
+  "layout": { "screenMargin": 16, "minTouchTarget": 48, "thumbnailSize": 56 }
+}

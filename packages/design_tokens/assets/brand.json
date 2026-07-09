@@ -1,0 +1,8 @@
+{
+  "_comment": "ÚNICO lugar donde vive el branding. Cambiar aquí y ejecutar `dart run design_tokens:generate` re-brandea app y web.",
+  "appName": "Salda",
+  "tagline": "Escanea el ticket, reparte y salda cuentas.",
+  "provisional": true,
+  "hostingDomain": "salda-app.web.app",
+  "androidApplicationId": "dev.salda.app"
+}

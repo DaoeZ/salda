@@ -1,0 +1,40 @@
+/* Estilos base de la web de invitados. Los tokens viven en tokens.g.css
+   (generado — no editar). Aquí solo reset y primitivas de layout. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+/* Cifras tabulares en cualquier importe (spec §3.2). */
+.money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+button {
+  font: inherit;
+  min-height: 48px; /* target táctil mínimo (spec §3, RNF-06) */
+  border-radius: var(--radius-button);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
