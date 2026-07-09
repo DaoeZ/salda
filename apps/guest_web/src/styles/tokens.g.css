@@ -1,0 +1,55 @@
+/* GENERATED por design_tokens:generate — NO EDITAR A MANO. */
+/* Fuente: packages/design_tokens/assets/ · App: Salda */
+
+:root {
+  --color-seed: #0B6E5D;
+  --font-family: 'Inter', system-ui, sans-serif;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+  --radius-card: 16px;
+  --radius-sheet: 28px;
+  --radius-button: 24px;
+  --radius-field: 12px;
+  --radius-thumbnail: 8px;
+  --easing-emphasized: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --duration-toggle: 150ms;
+  --duration-exit: 200ms;
+  --duration-enter: 350ms;
+  --duration-max: 500ms;
+  --color-settlement-pending: #5F6368;
+  --color-settlement-marked: #B58500;
+  --color-settlement-confirmed: #1B7A43;
+  --color-balance-positive: #1B7A43;
+  --color-balance-negative: #B3261E;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+  --color-settlement-pending: #9AA0A6;
+  --color-settlement-marked: #FFD166;
+  --color-settlement-confirmed: #6CD597;
+  --color-balance-positive: #6CD597;
+  --color-balance-negative: #F2B8B5;
+  }
+}
+
+/* El toggle manual de tema (si existe) estampa data-theme y debe ganar. */
+:root[data-theme='light'] {
+  --color-settlement-pending: #5F6368;
+  --color-settlement-marked: #B58500;
+  --color-settlement-confirmed: #1B7A43;
+  --color-balance-positive: #1B7A43;
+  --color-balance-negative: #B3261E;
+}
+
+:root[data-theme='dark'] {
+  --color-settlement-pending: #9AA0A6;
+  --color-settlement-marked: #FFD166;
+  --color-settlement-confirmed: #6CD597;
+  --color-balance-positive: #6CD597;
+  --color-balance-negative: #F2B8B5;
+}

@@ -42,7 +42,7 @@ registra como revisión del documento ANTES de implementarlo.
 ## Estado del desarrollo (actualizar al cerrar cada fase)
 
 - [x] Especificación v2.0 congelada
-- [ ] M0 Cimientos (en curso)
+- [x] M0 Cimientos (verificado: analyze limpio, tests app OK, build web 11 KB gzip, build functions OK)
 - [ ] M1 Dominio · [ ] M2 OCR · [ ] M3 Sesiones · [ ] M4 Invitados · [ ] M5 Pulido · [ ] M6 IA
 
 ## Entorno de esta máquina (Windows 11)
@@ -50,6 +50,8 @@ registra como revisión del documento ANTES de implementarlo.
 - Flutter en `C:\dev\flutter` (añadido al PATH de usuario). Node 26. Firebase CLI global.
 - SDK de Android: PENDIENTE de instalar (necesario para `flutter run`/APK; no bloquea
   analyze/tests). Sugerir Android Studio al usuario cuando toque probar en dispositivo.
+- JDK: PENDIENTE (lo requiere el emulador de Firestore y el build Android; instalar
+  antes de M3 — Temurin 21 o el JDK que trae Android Studio).
 - Emuladores Firebase: `firebase emulators:start` (proyecto `demo-salda`, sin credenciales).
 
 ## Comandos de verificación por fase

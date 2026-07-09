@@ -5,8 +5,9 @@ build/
 *.g.dart.bak
 .flutter-plugins
 .flutter-plugins-dependencies
+# Con pub workspace, el único lockfile real es el de la raíz (se commitea).
 pubspec.lock
-!apps/mobile/pubspec.lock
+!/pubspec.lock
 
 # --- Android ---
 apps/mobile/android/.gradle/
