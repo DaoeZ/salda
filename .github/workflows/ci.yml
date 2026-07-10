@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -10,18 +10,18 @@ jobs:
     name: Paquetes Dart + app Flutter
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - name: Resolver workspace
         run: flutter pub get
-      - name: Tokens generados al día
+      - name: Tokens generados al dÃ­a
         run: |
           dart run design_tokens:generate
           git diff --exit-code -- packages/design_tokens/lib apps/guest_web/src/styles
-      - name: Análisis estático
+      - name: AnÃ¡lisis estÃ¡tico
         run: dart analyze --fatal-infos
       - name: Tests de paquetes
         run: |
@@ -40,8 +40,8 @@ jobs:
       run:
         working-directory: apps/guest_web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -57,8 +57,8 @@ jobs:
       run:
         working-directory: backend/functions
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -66,5 +66,5 @@ jobs:
       - run: npm ci
       - run: npm test # compila y ejecuta los vectores dorados (paridad con Dart)
 
-  # Los tests de reglas de Firestore contra la Emulator Suite se añaden en M3
+  # Los tests de reglas de Firestore contra la Emulator Suite se aÃ±aden en M3
   # (job "rules" con firebase emulators:exec). Ver CLAUDE.md.
