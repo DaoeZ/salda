@@ -17,11 +17,11 @@ jobs:
           cache: true
       - name: Resolver workspace
         run: flutter pub get
-      - name: Tokens generados al dÃ­a
+      - name: Tokens generados al día
         run: |
           dart run design_tokens:generate
           git diff --exit-code -- packages/design_tokens/lib apps/guest_web/src/styles
-      - name: AnÃ¡lisis estÃ¡tico
+      - name: Análisis estático
         run: dart analyze --fatal-infos
       - name: Tests de paquetes
         run: |
@@ -66,5 +66,5 @@ jobs:
       - run: npm ci
       - run: npm test # compila y ejecuta los vectores dorados (paridad con Dart)
 
-  # Los tests de reglas de Firestore contra la Emulator Suite se aÃ±aden en M3
+  # Los tests de reglas de Firestore contra la Emulator Suite se añaden en M3
   # (job "rules" con firebase emulators:exec). Ver CLAUDE.md.
