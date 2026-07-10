@@ -1,329 +1,349 @@
 # Salda (nombre provisional) — documento de traspaso y guía de desarrollo
 
-> **Propósito de este archivo:** que una sesión de Claude Code (u otra persona) en
-> cualquier máquina pueda retomar el proyecto sin haber visto las conversaciones
-> anteriores. Léelo entero antes de tocar código.
+> **Propósito:** que una sesión de Claude Code (u otra persona) en cualquier máquina
+> retome el proyecto sin haber visto las conversaciones anteriores. Léelo entero antes
+> de tocar código. La especificación `docs/ESPECIFICACION.md` v2.0 es **definitiva y
+> congelada** y manda sobre este resumen.
 
 ---
 
-## 1. Resumen del proyecto y estado general
+## 1. Resumen del proyecto: qué es y estado general
 
-**Qué es:** app móvil (Android primero, iOS después, misma base Flutter) tipo Tricount
-pero automatizada con OCR: el anfitrión fotografía un ticket, la app extrae
-establecimiento/fecha/productos/total con ML Kit + parser propio, define participantes y
-reparte el gasto. Los invitados NO instalan nada: abren un enlace/QR (web ligera) donde
-eligen quién son, marcan sus productos y ven cuánto deben. Con IA opcional multi-proveedor
-(la clave la pone el usuario) como ÚLTIMO recurso cuando el OCR falla.
+**Qué es:** app móvil (Android primero; iOS después desde la misma base Flutter) tipo
+Tricount pero automatizada con OCR: el anfitrión fotografía un ticket, la app extrae
+establecimiento/fecha/productos/total con ML Kit + parser propio (gratis, on-device),
+añade participantes y reparte el gasto ("todo a medias" o "cada uno lo suyo" por línea).
+Los invitados NO instalan nada: abren un enlace/QR (web ligera Svelte) donde eligen quién
+son, se asignan productos, ven cuánto deben y marcan "ya he pagado". IA opcional
+multi-proveedor (con la API key del propio usuario, guardada solo en su dispositivo) como
+ÚLTIMO recurso cuando el OCR falla. Concepto superior **Sesión** ("Viaje a Madrid") que
+agrupa cuentas (Hotel, Gasolina…) con balance global multi-pagador y simplificación de
+deudas. Uso personal/amigos; coste objetivo 0–1 €/mes (techo 5 €).
 
-**Referencia obligatoria:** `docs/ESPECIFICACION.md` v2.0 es la especificación
-**definitiva y congelada**. No se rediseña arquitectura ni alcance; cualquier cambio
-importante se propone al usuario y se registra como revisión del documento ANTES de
-implementarlo. Este CLAUDE.md resume; la spec manda.
-
-**Estado general:** M0 (cimientos), M1 (motores de dominio) y M2 (pipeline OCR completo)
-terminados y verificados. Sin backend real todavía (reglas deny-all, functions vacías):
-eso es M3. La app compila y los 112 tests pasan, pero NUNCA se ha ejecutado en un
-dispositivo real (no hay SDK de Android en la máquina de desarrollo).
+**Estado general:** M0 (cimientos), M1 (motores de dominio) y M2 (pipeline OCR) están
+**terminados, verificados y en verde** (112 tests; CI de GitHub pasando). No hay backend
+real todavía (reglas deny-all, functions vacías): eso es M3. La app **nunca se ha
+ejecutado en un dispositivo real** (falta el SDK de Android en la máquina de desarrollo).
 
 **Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 Sesiones ⬜ · M4 Invitados ⬜ · M5 Pulido ⬜ · M6 IA ⬜
 
-## 2. Reglas de trabajo acordadas con el usuario (permanentes)
+## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
-- Idioma del usuario: **español** (UI en español; código e identificadores en inglés).
-- Tomar automáticamente las decisiones menores siguiendo mejores prácticas. Preguntar
-  SOLO cuando afecte significativamente a funcionamiento, seguridad, coste o UX.
-- Si se detecta una decisión de arquitectura claramente mejor que la spec, **consultar
-  antes de cambiarla**. Si una librería deja de ser la mejor opción, proponer el cambio.
+**Punto exacto:** M2 cerrado y subido (commit `3aca453` + docs/CI posteriores). Lo
+siguiente es preparar el entorno para M3 (ver §11).
+
+**Qué se hizo en la última sesión de trabajo, en orden:**
+1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
+   sesiones, multi-pagador, web ligera de invitados, functions autoritativas, proveedor
+   IA genérico OpenAI-compatible, guía de diseño, backups JSON, presupuesto 5 €.
+2. Naming: se propusieron ~30 nombres; elegido **Salda** como provisional. Todo el
+   branding quedó centralizado en `packages/design_tokens/assets/brand.json`.
+3. **M0**: instalación de Flutter 3.44.6 en `C:\dev\flutter` y Firebase CLI; monorepo
+   pub workspace; paquete de tokens con codegen Dart+CSS; app Flutter con tema M3;
+   web Svelte placeholder; functions esqueleto; reglas deny-all; emuladores; CI.
+4. **M1**: Money/allocateProportionally/ShareCode/SplitEngine/BalanceEngine en Dart puro
+   + espejo TS en functions + 29 vectores dorados compartidos + 54 tests Dart/29 TS.
+5. **M2**: contrato `ReceiptExtraction` en domain; paquete `ocr_parser` completo
+   (geometría, parser es-ES con 10 perfiles de cadena y 9 reglas, corpus de 13 casos con
+   harness de métricas → 12/12 mustPass, 92 % casos completos); en la app: adaptador
+   ML Kit, ScanService (cámara del sistema/galería), pantalla de revisión editable con
+   cuadre en vivo y banner "repetir foto/editar/IA"; i18n ARB.
+6. Se creó el repo GitHub privado **https://github.com/DaoeZ/salda** y se subió todo
+   (hizo falta reautorizar gh con scope `workflow` por el archivo de CI).
+7. Se escribió este documento de traspaso; se subieron las actions a checkout@v5/
+   setup-node@v5 y se reparó un estropicio de encoding causado por PowerShell (ver §9).
+8. CI verificada en verde en GitHub para el último commit.
+
+**Qué quedó a medias (deliberadamente, no por olvido):**
+- Botón **"Continuar"** de `ReviewScreen` es un no-op: se conecta en M3 al crear sesión.
+- Botón **"Analizar con IA"** deshabilitado hasta M6 (no hay proveedores aún).
+- **Captura guiada propia** (bordes/auto-disparo) pospuesta a tener dispositivo real;
+  hoy se usa la cámara del sistema vía image_picker (flujo completo funcional).
+- **Importar PDF** (RF-21) sin UI; el parser ya acepta texto plano (`parsePlainText`).
+- `/review` por deep link sin draft cargado muestra spinner (estado solo en memoria).
+
+## 3. Lógica seguida: el porqué de cada módulo
+
+- **`domain` es Dart puro y las functions tienen un espejo TS** porque el cálculo de
+  dinero vive en dos runtimes: la app (respuesta instantánea + offline) y la Cloud
+  Function (autoritativa, para que un invitado vea recalculos sin que el anfitrión abra
+  la app y para que ningún cliente pueda corromper agregados). La paridad no se confía a
+  la disciplina: **los mismos JSON dorados se ejecutan contra ambas implementaciones en
+  CI** y cualquier divergencia rompe el build.
+- **`allocateProportionally` (resto mayor) es la única primitiva de redondeo**: si toda
+  división de dinero pasa por ahí, "Σ partes == total exacto" es un invariante del
+  sistema, no una esperanza. SplitEngine reparte el grandTotal proporcionalmente al
+  consumo por líneas (en vez de prorratear impuestos/propina aparte) por esa misma razón:
+  un solo redondeo, cero acumulación de error.
+- **BalanceEngine recibe consumos ya calculados** (no llama a SplitEngine): composición
+  simple, testeo independiente, y la function puede recalcular solo lo que cambió.
+  Las liquidaciones confirmadas se "congelan" y se descuentan antes de regenerar las
+  pendientes (así confirmar un pago nunca "baila" por ediciones posteriores).
+- **El parser OCR es un pipeline de fases** (geometría → normalización → perfiles →
+  reglas → confianzas → issues) porque cada fuente de error tiene su capa: ML Kit parte
+  las columnas (lo arregla la geometría), los térmicos confunden O/0 (normalización),
+  cada cadena tiene su formato (perfiles, detectables por NIF cuando la cabecera es
+  ilegible), y los formatos de línea son abiertos (lista ORDENADA de reglas: añadir una
+  nueva no toca las demás). La confianza es POR CAMPO para que la revisión manual
+  resalte solo lo dudoso, y las interpretaciones alternativas se conservan para que
+  corregir sea un toque (chips) en vez de teclear.
+- **`ReceiptExtraction` vive en domain, no en ocr_parser**, porque es el contrato común
+  de TODOS los orígenes (parser hoy, proveedores IA en M6, edición manual): la pantalla
+  de revisión es agnóstica del origen.
+- **La pantalla de revisión trabaja sobre un draft** (`ReviewDraftState`, Riverpod)
+  separado de la extracción inmutable: editar algo pone su confianza a 1.0 (el usuario
+  es la verdad), borra alternativas y recalcula el cuadre en vivo.
+- **Los tokens de diseño se generan desde JSON** para que app y web compartan identidad
+  desde una única fuente; la CI vuelve a generar y hace `git diff --exit-code` para que
+  nadie edite un `.g.` a mano.
+- **La web de invitados no contiene lógica de dinero** por diseño: pinta agregados que
+  escribe la function y hace escrituras quirúrgicas validadas por reglas. Así puede ser
+  minúscula (11 KB gzip hoy) y duplicar "código" deja de ser un problema.
+
+## 4. Normas y convenciones (a rajatabla)
+
+**Reglas acordadas con el usuario (permanentes):**
+- Idioma del usuario: **español** (UI en español vía ARB; código, identificadores y
+  nombres de archivo en inglés).
+- Decisiones menores: tomarlas automáticamente con mejores prácticas. Preguntar SOLO si
+  afecta significativamente a funcionamiento, seguridad, coste o UX. Si hay una
+  arquitectura claramente mejor que la spec, **consultar antes de cambiarla**; si una
+  librería deja de ser la mejor opción, proponer el cambio antes de aplicarlo.
 - No avanzar de fase hasta que la actual compile, pase todos los tests y quede estable.
-- Cada fase termina con: verificación completa (analyze + tests + builds) + commit
-  independiente + explicación de lo construido y decisiones tomadas.
-- Cobertura alta en TODA la lógica de negocio, especialmente motores de dinero.
-- Deuda técnica: se resuelve en la fase en que se detecta, no se pospone.
-- No rehacer módulos terminados salvo motivo técnico importante.
-- Coste: objetivo 0–1 €/mes, techo aceptado 5 €/mes (presupuesto con alertas).
+  Cada fase termina con verificación completa + **commit propio** + explicación de lo
+  construido y las decisiones tomadas.
+- Cobertura alta en TODA la lógica de negocio (motores ≥90 %, RNF-09). Deuda técnica:
+  se resuelve en la fase en que aparece. No rehacer módulos terminados sin motivo.
 
-## 3. Arquitectura
+**Arquitectura y estilo:**
+- **Clean Architecture ligera, feature-first** en la app: `features/<x>/{domain,data,
+  application,presentation}`; transversal en `core/`. Dependencias SIEMPRE hacia dentro:
+  `apps → packages`; `domain` y `ocr_parser` sin Flutter/Firebase/IO.
+- Estado: **Riverpod v3** (Notifier/Provider); navegación: **go_router**.
+- Puertos y adaptadores para todo lo externo (ej.: `ReceiptOcr` ↔ `MlKitReceiptOcr`);
+  los motores son clases estáticas puras y deterministas.
+- Análisis estricto (`analysis_options.yaml` raíz + flutter_lints): `dart analyze
+  --fatal-infos` debe quedar a CERO avisos.
+- Dinero: céntimos `int` envueltos en `Money` (extension type). JAMÁS `double`.
+- Comentarios: en español, explican el PORQUÉ/restricciones, no el qué. Docs `///` en
+  las APIs públicas de los paquetes.
+- **Commits:** en español, imperativos, con prefijo de fase o tipo (`M2: …`, `fix(ci): …`,
+  `docs: …`), cuerpo con viñetas de lo relevante, y SIEMPRE la línea
+  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. Un commit por fase como
+  mínimo; commits pequeños extra para arreglos puntuales.
+- Tests: unitarios por módulo + propiedades con aleatoriedad SEMBRADA (reproducible) +
+  vectores dorados/corpus como contratos. Los nombres de test, en español descriptivo.
 
-### Estructura del monorepo (pub workspace, pubspec.yaml raíz)
+## 5. Arquitectura: estructura del monorepo
 
 ```
 docs/ESPECIFICACION.md      Especificación v2.0 congelada (la biblia del proyecto)
-packages/design_tokens/     Fuente única de diseño y branding:
-                            assets/brand.json + assets/design_tokens.json
-                            bin/generate.dart → genera lib/src/tokens.g.dart (Dart)
+pubspec.yaml                Raíz del pub workspace (lockfile único aquí, commiteado)
+packages/design_tokens/     brand.json + design_tokens.json (fuente única de marca y
+                            diseño) + bin/generate.dart → lib/src/tokens.g.dart (Dart)
                             y apps/guest_web/src/styles/tokens.g.css (CSS)
-packages/domain/            Dart PURO (prohibido Flutter/Firebase/IO):
-                            Money, allocateProportionally, ShareCode, DomainException,
-                            SplitEngine, BalanceEngine, ReceiptExtraction (contrato OCR/IA)
-                            test/golden/*.json ← VECTORES DORADOS compartidos con TS
-packages/ocr_parser/        Dart puro. Pipeline OCR: OcrDocument (agnóstico de motor) →
-                            LineBuilder (geometría) → ReceiptParser (registry por país) →
-                            EsReceiptParser (perfiles por cadena + reglas incrementales)
-                            test/corpus/ ← corpus de regresión con harness de métricas
-packages/ai_providers/      Esqueleto (se implementa en M6): contrato AiReceiptProvider
-apps/mobile/                Flutter (Android+iOS). Riverpod v3 + go_router + M3 theme
-                            desde tokens + l10n ARB (lib/l10n/app_es.arb → generated/)
-                            features/: home, scan (ML Kit adapter + ScanService),
-                            review (draft editable + pantalla con cuadre en vivo)
-apps/guest_web/             Svelte 5 + Vite + TS. Placeholder hasta M4. SIN lógica de
-                            dinero JAMÁS (solo pinta agregados de la function)
-backend/functions/          Cloud Functions v2 TS (europe-west1, maxInstances 3).
-                            src/domain/ = ESPEJO TS de los motores Dart (misma semántica)
-                            src/test/golden.test.ts consume los MISMOS JSON dorados
-backend/firestore/          firestore.rules + storage.rules (hoy deny-all) + índices
-firebase.json / .firebaserc Config Firebase + Emulator Suite (default: demo-salda)
-.github/workflows/ci.yml    CI: dart (analyze+tests+frescura de tokens) · web · functions
+packages/domain/            Dart PURO: Money, allocateProportionally, ShareCode,
+                            DomainException (códigos estables), SplitEngine,
+                            BalanceEngine, ReceiptExtraction. test/golden/*.json =
+                            VECTORES DORADOS compartidos con la implementación TS
+packages/ocr_parser/        Dart puro: OcrDocument/OcrRect (agnóstico de motor) →
+                            LineBuilder (geometría) → ReceiptParser (registry por país)
+                            → EsReceiptParser (perfiles + reglas). test/corpus/ =
+                            corpus de regresión con harness de métricas por campo
+packages/ai_providers/      Esqueleto para M6 (contrato AiReceiptProvider + adaptadores)
+apps/mobile/                Flutter Android+iOS (org dev.salda, proyecto salda_mobile):
+                            core/{theme,routing,utils} · l10n/ (ARB es + generated/)
+                            features/home · features/scan · features/review
+apps/guest_web/             Svelte 5 + Vite + TS. Placeholder hasta M4. SIN dinero.
+backend/functions/          Cloud Functions v2 TS (europe-west1, maxInstances 3):
+                            src/domain/ = espejo TS de los motores; src/test/golden
+backend/firestore/          firestore.rules + storage.rules (deny-all) + índices
+firebase.json / .firebaserc Config + Emulator Suite (default: demo-salda)
+.github/workflows/ci.yml    CI: dart+flutter · guest-web · functions (job rules en M3)
 ```
 
-### Reglas de dependencia (violarlas = revisar el diseño)
+## 6. Firebase
 
-- `apps → packages`; nunca al revés. `domain` y `ocr_parser` sin Flutter/Firebase.
-- Dinero: SIEMPRE céntimos `int` envueltos en `Money` (extension type). JAMÁS `double`.
-- `allocateProportionally` (resto mayor) es LA ÚNICA primitiva de redondeo del sistema.
-- Los motores existen en Dart Y en TS. **Si cambias un motor, cambia ambos y ejecuta los
-  vectores dorados en los dos lados.** Nunca edites un vector para "arreglar" un test.
-- La web de invitados no calcula dinero: lee agregados que escribirá la Cloud Function.
-- Branding: TODO sale de `packages/design_tokens/assets/brand.json` vía codegen.
-  No hardcodear "Salda" en UI: usar `Brand.appName`. Cambiar branding = editar JSON +
-  `dart run design_tokens:generate` (la CI comprueba que lo generado está al día).
+**Servicios y para qué (spec §12):** Auth (Google+Email para anfitrión, **Anónimo** para
+invitados, Apple cuando haya iOS) · Firestore (datos + tiempo real + offline, región
+`europe-west1`) · Storage (fotos de tickets: original ≤1600px + thumb 300px generados
+on-device) · Functions v2 (SOLO 3: `recompute` autoritativa, `notify` FCM, `cleanup`
+borrado en cascada) · Hosting (web invitados + deep links) · App Check (enforced, M3/M4)
+· FCM · Emulator Suite. **Los proyectos reales (`salda-dev`, `salda-prod`) NO existen
+todavía**: crearlos en M3 con la cuenta del usuario, activar Blaze con presupuesto 5 €/mes
+y alertas 50/90/100 % + alertas de métricas (spec §12.4). `.firebaserc` ya los referencia;
+`default` es `demo-salda` (emuladores, sin credenciales).
 
-## 4. Firebase
-
-### Servicios y para qué (spec §12)
-
-| Servicio | Uso | Estado |
-|---|---|---|
-| Auth | Google + Email (anfitrión), **Anónimo** (invitados), Apple (futuro iOS) | Sin configurar (M3) |
-| Firestore | Todos los datos + tiempo real + offline. Región `europe-west1` | Reglas deny-all |
-| Storage | Fotos de tickets (original ≤1600px + thumb 300px, generados on-device) | Reglas deny-all |
-| Functions v2 | SOLO 3: `recompute` (calculadora autoritativa), `notify` (FCM), `cleanup` (borrado en cascada). TS, Node 22, `minInstances 0`, `maxInstances 3` | Esqueleto compila, sin funciones |
-| Hosting | Web de invitados + dominio de deep links | Config lista, sin desplegar |
-| App Check | Se activará **enforced** en Firestore/Storage/Functions | Pendiente M3/M4 |
-| FCM | Push al anfitrión ("X ha pagado") | Pendiente M3 |
-| Emulator Suite | Desarrollo local completo, proyecto `demo-salda` (sin credenciales) | Configurado en firebase.json |
-
-**Proyectos:** `.firebaserc` define `default: demo-salda` (emuladores), `dev: salda-dev`,
-`prod: salda-prod`. **Los proyectos reales NO existen todavía** — crearlos en M3 con la
-cuenta Google del usuario (`firebase login`), activar Blaze con presupuesto de 5 €/mes y
-alertas al 50/90/100 % + alertas de métricas (lecturas >25k/día etc., spec §12.4).
-
-### Modelo de datos (implementarlo en M3 EXACTAMENTE como spec §7)
-
-Raíz = **sesión** (una "cuenta independiente" es una sesión `kind: "single"`; la UI oculta
-la capa). Resumen del árbol:
+**Modelo de datos (implantar en M3 EXACTAMENTE como spec §7):** raíz = **sesión**
+(cuenta suelta = sesión `kind:"single"`, la UI oculta la capa):
 
 ```
-users/{uid}                      perfil, paymentMethods, aiPolicy (NUNCA API keys aquí)
-users/{uid}/frequentPeople/{id}  personas frecuentes
-sessions/{id}                    ownerUid, kind single|multi, shareCode (128 bits),
-                                 status open|closed|archived, splitModeDefault,
-                                 paymentMethodsSnapshot, agregados desnormalizados
-                                 (totals, balances, computeVersion ← SOLO los escribe
-                                 la function; los clientes solo leen)
-  /participants/{pid}            name, isOwner, claimedByDevice
-  /accounts/{aid}                "Hotel", category, totals (agregado)
-    /tickets/{tid}               kind scanned|manual, merchant, paidByParticipantId,
-                                 imagePath, ocr{engine,confidence}, totales, taxes[]
-      /lines/{lid}               name, quantity(×1000), precios, assignment
-                                 {type: unassigned|one|shared|all, participants{pid:peso}}
-  /settlements/{sid}             from, to, amount, state pending|marked|confirmed,
-                                 frozen (confirmada = congelada), stateHistory[]
-  /activity/{eid}                feed append-only
-Storage: receipts/{sessionId}/{ticketId}/original.jpg + thumb.jpg
-Índices: sessions(ownerUid, updatedAt desc) y sessions(ownerUid, status, updatedAt desc)
+users/{uid}                  perfil, paymentMethods, aiPolicy (JAMÁS API keys aquí)
+users/{uid}/frequentPeople   personas frecuentes del anfitrión
+sessions/{id}                ownerUid, kind, shareCode 128 bits, status, splitModeDefault,
+                             paymentMethodsSnapshot, agregados desnormalizados (totals,
+                             balances, computeVersion) ← SOLO los escribe la function
+  participants/{pid}         name, isOwner, claimedByDevice, active
+  accounts/{aid}             "Hotel", category, totals
+    tickets/{tid}            kind, merchant{name,brandKey}, paidByParticipantId,
+                             imagePath, ocr{engine,confidence}, subtotal/taxes[]/
+                             discounts[]/tip/grandTotal, splitModeOverride
+      lines/{lid}            name, quantity(×1000), unitPrice, totalPrice,
+                             assignment{type, participants{pid:peso}}, order
+  settlements/{sid}          from,to,amount,state pending|marked|confirmed, frozen,
+                             stateHistory[], generation
+  activity/{eid}             feed append-only
+Storage: receipts/{sessionId}/{ticketId}/{original,thumb}.jpg
+Índices (ya en firestore.indexes.json): sessions(ownerUid,updatedAt) y (ownerUid,status,updatedAt)
 ```
 
-### Reglas de seguridad: por qué están como están
+**Reglas de seguridad y por qué:** hoy **deny-all a propósito** (no hay backend en uso;
+la política del proyecto es denegación por defecto con `allow` explícitos). En M3 se
+implementa la matriz de spec §13.2: owner R/W si `open`; invitado anónimo presentando el
+shareCode: lectura de la sesión + tres escrituras quirúrgicas validadas campo a campo con
+`diff()` (autoasignarse/quitarse en líneas si `byItem` y abierta; `pending→marked` solo
+en liquidaciones donde él es `from`; su `claimedByDevice`). Los agregados son solo-lectura
+para todos los clientes. **Cada celda de la matriz lleva test positivo y negativo contra
+el Emulator Suite en CI** — es la pieza de seguridad más crítica. El shareCode viaja en
+el **fragment** (`#k=`) para no aparecer en logs de servidor.
 
-Hoy `firestore.rules` y `storage.rules` son **deny-all a propósito**: no hay backend en
-uso y la regla del proyecto es denegación por defecto con `allow` explícitos únicamente.
-En M3 se implementa la **matriz de autorización de spec §13.2** (owner R/W si open;
-invitado anónimo con shareCode: lectura + escrituras quirúrgicas con `diff()` — solo
-autoasignarse líneas, solo marcar `pending→marked` en SUS liquidaciones, solo
-`claimedByDevice`) **con un test por celda de la matriz (positivo y negativo) contra el
-Emulator Suite en CI**. Es la pieza de seguridad más crítica del sistema. El shareCode
-viaja en el fragment de la URL (`#k=`) para que no llegue a logs de servidor.
+## 7. Servidores: comunicación, endpoints y secretos
 
-## 5. Servidores y comunicación
+**No hay servidores propios ni endpoints HTTP propios** (no aplica ese apartado tal
+cual). Comunicación real: app Flutter ↔ Firestore por SDK (listeners tiempo real,
+offline); web invitados ↔ Firestore por Firebase JS modular; las functions se disparan
+por **triggers de Firestore** (no exponen HTTP); la IA (M6) irá directa dispositivo →
+API del proveedor sin tocar Firebase.
 
-**No hay servidores propios.** Todo es serverless:
+**Ubicación de secretos (nunca valores):** API keys de IA → `flutter_secure_storage`
+(Keystore/Keychain) del dispositivo del usuario, excluidas de logs/crashes/backup JSON ·
+config Firebase de la app (`google-services.json`, `GoogleService-Info.plist`,
+`firebase_options.dart`) → **gitignorados**, se generarán con `flutterfire configure` en
+M3 (hoy NO existen) · **no hay `.env` en el repo ni secretos en CI todavía**; cuando
+haya despliegue automático usar Workload Identity Federation · credenciales de gh y
+firebase CLI → keyring del SO del desarrollador.
 
-- **App Flutter ↔ Firestore**: SDK oficial, listeners en tiempo real, persistencia
-  offline activada. Sin endpoints HTTP propios.
-- **Web invitados ↔ Firestore**: Firebase JS modular (Auth anónimo + shareCode).
-- **Cloud Functions**: SOLO triggers de Firestore (onWrite en lines/tickets/participants/
-  settlements) y de borrado. **No exponen endpoints HTTP.** La app calcula en local
-  (optimista, offline) y la function escribe el resultado autoritativo; convergen porque
-  ambas implementaciones pasan los mismos vectores dorados.
-- **IA (M6)**: llamadas directas dispositivo → API del proveedor (Claude/OpenAI/Gemini/
-  DeepSeek/GLM/OpenRouter + genérico OpenAI-compatible con base URL para Ollama/LM Studio).
-  Ninguna clave ni petición pasa por Firebase.
+## 8. Decisiones de diseño tomadas y su motivo
 
-**Secretos y variables de entorno (ubicaciones, nunca valores):**
-- API keys de IA de cada usuario → SOLO `flutter_secure_storage` (Keystore/Keychain) en el
-  dispositivo. Nunca en Firestore, logs, crash reports ni en el backup JSON exportable.
-- Config Firebase de la app (`google-services.json`, `GoogleService-Info.plist`,
-  `firebase_options.dart`) → **gitignorados**; se generan con `flutterfire configure`
-  en M3. No existen todavía.
-- No hay `.env` en el repo. CI (GitHub Actions) no tiene secretos aún; cuando toque
-  desplegar, usar Workload Identity Federation (no service account JSON en el repo).
-- Credenciales gh/firebase CLI → keyring del sistema operativo del desarrollador.
+(Las congeladas DC-1…DC-13 están en spec §0. Operativas añadidas durante el desarrollo:)
 
-## 6. Decisiones de diseño ya tomadas y su motivo
+1. **Flutter** — un código APK+IPA, Material 3 de primera clase, ML Kit oficial.
+2. **Web invitados Svelte, NO Flutter Web** — Flutter Web pesa 1,5–2 MB (3–6 s en 4G)
+   para una página que se abre una vez desde WhatsApp; hoy el bundle son 11 KB gzip.
+3. **Sesión raíz; cuenta suelta = sesión single** — un solo modelo, motor y reglas.
+4. **Multi-pagador + simplificación de deudas** — sin esto las sesiones no funcionan;
+   con un pagador degenera en el caso simple.
+5. **Function autoritativa + cálculo local optimista + vectores dorados** — ver §3.
+6. **Money extension type (céntimos int)** — coste cero, imposible mezclar con int/double.
+7. **Resto mayor como única primitiva de redondeo** — exactitud como invariante.
+8. **SplitEngine reparte el grandTotal por pesos de consumo** — un solo redondeo.
+9. **pub workspace nativo (sin melos)** — menos herramienta, soporte de serie.
+10. **Codegen de tokens JSON → Dart+CSS con verificación en CI** — una sola marca.
+11. **Parser: registry país + perfiles cadena (detección por NIF) + reglas ordenadas** —
+    incremental por construcción; térmico ilegible ≠ marca perdida.
+12. **Confianza por campo + issues tipados + alternativas por línea** — revisión en 1 toque.
+13. **IA último recurso SIEMPRE** — orden fijo: repetir foto → editar → IA; nunca sola.
+14. **image_picker (cámara del sistema) por ahora** — flujo completo sin custom UI;
+    captura guiada cuando haya dispositivo.
+15. **l10n ARB desde M2** — deuda RNF-05 saldada antes de crecer la UI.
+16. **applicationId provisional `dev.salda.app`** — cambiable gratis hasta publicar.
+17. **Repo GitHub privado** (`DaoeZ/salda`) — branding y producto aún provisionales.
 
-(Las 13 decisiones congeladas DC-1…DC-13 están en spec §0; aquí las operativas + motivo.)
+## 9. Enfoques probados y descartados (NO repetir)
 
-1. **Flutter** — una base para APK+IPA, Material 3 de primera clase, ML Kit oficial.
-2. **Web invitados = Svelte 5, NO Flutter Web** — Flutter Web pesa 1,5–2 MB (3–6 s en 4G)
-   para una página que un invitado abre una vez desde WhatsApp; el bundle Svelte actual
-   son 11 KB gzip. La duplicación de lógica se evita porque la web no calcula dinero.
-3. **Sesión como raíz; cuenta suelta = sesión `single`** — un solo modelo/motor/reglas.
-4. **Multi-pagador por ticket + BalanceEngine con simplificación de deudas** — sin esto,
-   las sesiones (Edgar paga hotel, Alba gasolina) no funcionan. Con un solo pagador
-   degenera exactamente en el modelo simple "todos pagan al anfitrión".
-5. **Cloud Function autoritativa + cálculo local optimista + vectores dorados** — el
-   invitado ve importes actualizarse sin que el anfitrión abra la app; el cliente no
-   puede corromper agregados; la paridad Dart↔TS la garantiza la CI, no la disciplina.
-6. **`Money` como extension type sobre int (céntimos)** — coste cero en runtime,
-   imposible mezclar con int crudo, imposible `double` en dinero.
-7. **Resto mayor (largest remainder) como única primitiva de redondeo** — Σ partes ==
-   total EXACTO siempre, determinista (empates → índice menor).
-8. **El SplitEngine reparte el grandTotal proporcionalmente al consumo en líneas** en vez
-   de prorratear impuestos/descuentos/propina por separado — matemáticamente equivalente
-   (DC-11) y elimina el error de redondeo acumulado.
-9. **pub workspace nativo, sin melos** — Dart lo soporta de serie; menos herramientas.
-10. **Tokens de diseño con codegen JSON → Dart + CSS** — app y web comparten identidad
-    desde una sola fuente; la CI vigila que lo generado esté al día.
-11. **Parser OCR: registry por país + perfiles por cadena + reglas ordenadas** — añadir
-    país = clase nueva; añadir cadena = perfil; añadir formato = regla + caso de corpus.
-    Detección de cadena también **por NIF** (sobrevive a cabeceras térmicas ilegibles).
-12. **Confianza POR CAMPO + issues tipados + alternativas por línea** — la revisión
-    manual resalta solo lo dudoso y corregir es 1 toque (chips de alternativas).
-13. **IA como último recurso SIEMPRE** — orden fijo: ① repetir foto ② editar ③ IA.
-    Nunca se lanza sola; botón deshabilitado hasta que haya proveedor configurado (M6).
-14. **Cámara del sistema (image_picker) por ahora** — cubre el flujo completo sin custom
-    UI; la captura guiada propia (bordes/auto-disparo) se hará con dispositivo real.
-15. **l10n ARB desde M2** — deuda de RNF-05 saldada antes de que la UI creciera.
-16. **`applicationId` Android provisional: `dev.salda.app`** — cambiable gratis hasta la
-    primera publicación en Play. Recordarlo al llegar a ese punto.
-
-## 7. Enfoques probados y descartados (NO repetir)
-
-- **Flutter Web para invitados** (spec v1.0) → descartado por peso/latencia (ver #2).
-- **v1 "sin Cloud Functions, todo en cliente"** → descartada al relajar el usuario el
-  presupuesto a 1–5 €/mes: los agregados escritos por clientes exigían transacciones
-  complejas y reglas frágiles, y el invitado no veía recalculos hasta que el anfitrión
-  abría la app.
+- **Flutter Web para invitados** (spec v1.0) → descartado por peso/latencia.
+- **v1 "sin Cloud Functions"** → descartado al aceptar el usuario coste 1–5 €: agregados
+  escritos por clientes = transacciones frágiles y recalculos que no llegaban al invitado.
 - **`node --test lib/test/` (directorio) en Windows** → el runner marca el directorio
-  como test fallido. Usar glob: `node --test "lib/test/**/*.test.js"` (así está en
-  backend/functions/package.json). No "simplificarlo".
-- **`intl ^0.20.3`** → conflicto: flutter_localizations fija 0.20.2. Queda `^0.20.2`.
-- **`synthetic-package` en l10n.yaml** → opción eliminada en Flutter actual; no añadirla.
-- **Canonicalizar importes ANTES de extraer fecha/hora** → bug real: convierte la hora
-  degradada "18.32" en el importe "18,32". El orden correcto (fecha/hora primero sobre
-  líneas originales) está implementado en `EsReceiptParser.parse` con comentario.
-- **pubspec.lock por app** → con pub workspace el único lockfile es el de la RAÍZ
-  (los demás los borra pub). El .gitignore ya lo refleja.
-- **Mapas const con céntimos crudos** (`{'b': 600}`) → no compila donde se espera
-  `Map<String, Money>`; escribir `{'b': Money(600)}`.
-- **Tests de widget de ReviewScreen con viewport por defecto (600px)** → la ListView es
-  perezosa y el pie no se construye: los tests fijan `physicalSize` alto (2000px).
+  como test fallido. Se usa glob: `node --test "lib/test/**/*.test.js"` (package.json).
+- **`intl ^0.20.3`** → conflicto con flutter_localizations (fija 0.20.2). Queda `^0.20.2`.
+- **`synthetic-package` en l10n.yaml** → opción retirada de Flutter; no reintroducir.
+- **Canonicalizar importes ANTES de fecha/hora** → convertía la hora "18.32" en importe.
+  El orden correcto (fecha/hora primero, sobre líneas originales) está comentado en
+  `EsReceiptParser.parse`.
+- **pubspec.lock por app** → con workspace el único lockfile es el de la RAÍZ.
+- **Céntimos crudos en mapas const** (`{'b': 600}` donde se espera `Money`) → no compila;
+  escribir `Money(600)`.
+- **Tests de ReviewScreen con viewport por defecto** → ListView perezosa: el pie no se
+  construye. Los tests fijan `tester.view.physicalSize` alto (2000 px).
+- **Editar YAML con `-replace` de PowerShell 5.1** → leyó UTF-8 como ANSI y corrompió
+  los acentos (mojibake `Ã¡`); hubo commit de reparación. Para editar archivos con
+  tildes usar las herramientas de edición, no sustituciones de PowerShell.
+- **`gh repo create --push` con workflows** → falla si el token no tiene scope
+  `workflow`; se resolvió con `gh auth refresh -h github.com -s workflow` (device flow).
 
-## 8. Estado actual exacto
+## 10. Archivos de referencia clave
 
-### Terminado y verificado (112 tests en verde, analyze limpio)
+| Archivo | Qué es / por qué consultarlo |
+|---|---|
+| `docs/ESPECIFICACION.md` | Spec v2.0 congelada: requisitos RF/RNF, matriz de seguridad §13.2, modelo de datos §7, guía de diseño §3, roadmap §19 |
+| `packages/domain/lib/src/money.dart` | Money + allocateProportionally: LA primitiva de redondeo |
+| `packages/domain/lib/src/engines/split_engine.dart` | Reparto por ticket (modos, pesos, política de líneas sin asignar) |
+| `packages/domain/lib/src/engines/balance_engine.dart` | Balance multi-pagador, congeladas y simplificación de deudas |
+| `packages/domain/lib/src/receipt/receipt_extraction.dart` | Contrato canónico OCR/IA/manual con confianzas e issues |
+| `packages/domain/test/golden/*.json` | Vectores dorados Dart↔TS: contrato de paridad (¡no editarlos a la ligera!) |
+| `backend/functions/src/domain/*.ts` | Espejo TS de los motores; si tocas uno, toca ambos |
+| `packages/ocr_parser/lib/src/es/es_receipt_parser.dart` | Orquestador del parser: fases, reglas, issues (el archivo más denso del proyecto) |
+| `packages/ocr_parser/lib/src/es/es_profiles.dart` | Perfiles por cadena; aquí se añade una cadena nueva |
+| `packages/ocr_parser/test/corpus/` + su README | Corpus de regresión y protocolo para añadir tickets reales |
+| `packages/design_tokens/assets/brand.json` | ÚNICO lugar del branding (nombre, tagline, applicationId) |
+| `packages/design_tokens/bin/generate.dart` | Codegen tokens → Dart + CSS |
+| `apps/mobile/lib/features/review/application/review_draft.dart` | Estado editable de la revisión y su lógica de cuadre |
+| `apps/mobile/lib/features/scan/application/scan_service.dart` | Orquestación cámara/galería → OCR → parser |
+| `apps/mobile/lib/core/theme/app_theme.dart` | Tema M3 desde tokens + colores semánticos de estados |
+| `backend/firestore/firestore.rules` | Hoy deny-all; en M3, la matriz §13.2 |
+| `firebase.json` / `.firebaserc` | Emuladores, hosting, rutas de reglas; proyectos dev/prod |
+| `.github/workflows/ci.yml` | Qué verifica la CI (incluida la frescura de los `.g.`) |
 
-- **M0**: monorepo completo, tema M3 desde tokens, CI, emuladores config, web placeholder.
-- **M1**: `packages/domain` (Money/allocate, ShareCode, SplitEngine, BalanceEngine,
-  DomainException) + espejo TS en `backend/functions/src/domain/` + 29 vectores dorados
-  compartidos. 57 tests Dart (incluye propiedades sembradas) + 29 TS.
-- **M2**: contrato `ReceiptExtraction` en domain (JSON roundtrip probado);
-  `packages/ocr_parser` completo (geometría, normalización OCR, parser es con 10 perfiles
-  de cadena y 7+2 reglas); corpus 13 casos → **12/12 mustPass verdes; métricas: casos
-  completos 92 %, establecimiento/fecha/total/issues 100 %, líneas 92 %**; en la app:
-  adaptador ML Kit, ScanService, pantalla de revisión editable con cuadre en vivo,
-  hoja de edición con alternativas, banner DC-4, l10n ARB.
+## 11. Próximos pasos concretos (en orden)
 
-### A medias / pendiente de entorno
-
-- **Botón "Continuar" de ReviewScreen es un no-op** — se conecta en M3 con la creación
-  de sesión. `/review` sin draft cargado muestra spinner (deep link sin estado).
-- **Botón "Analizar con IA" deshabilitado** hasta M6.
-- **NUNCA probado en dispositivo real** (sin Android SDK): el OCR con fotos reales, la
-  cámara y los permisos están sin verificar. El corpus actual son recreaciones realistas;
-  debe crecer con tickets reales anonimizados (protocolo en test/corpus/README.md).
-- **Captura guiada propia** (detección de bordes, auto-disparo) sin hacer — decidido
-  hacerla cuando haya dispositivo.
-- **Importar PDF** (RF-21) no implementado aún (la vía `parsePlainText` para PDFs con
-  capa de texto ya existe en el parser). Hacerlo en M3-M5.
-- **Firebase real inexistente**: sin proyectos, sin `flutterfire configure`, functions
-  sin lógica, reglas deny-all.
-
-### Últimos commits (main)
-
-```
-3aca453 M2: pipeline OCR completo con parser extensible y corpus de regresion
-8ace6b4 M1: nucleo de dominio con motores validados por vectores dorados
-eebeca0 M0 completado: app Flutter + verificacion en verde
-e3804f3 M0: especificacion v2.0 congelada + cimientos del monorepo
-```
-
-La última sesión de trabajo (M2) tocó: `packages/domain` (receipt_extraction.dart nuevo +
-export + test), `packages/ocr_parser` entero (nuevo), `apps/mobile` (pubspec deps ML Kit/
-image_picker/intl/flutter_localizations, l10n.yaml + ARB + generated/, core/utils/
-money_format.dart, features/scan/** y features/review/** nuevos, router y home
-actualizados, review_screen_test.dart), y este CLAUDE.md.
-
-## 9. Próximos pasos concretos (en orden)
-
-1. **Preparar entorno para M3** (bloqueante): instalar Android Studio (trae JDK, que
-   necesita el emulador de Firestore y el build Android) y el SDK de Android. Verificar
-   `flutter doctor`. Probar la app en un dispositivo/emulador y el OCR con 3-4 tickets
-   reales; añadir al corpus lo que falle.
-2. **Crear proyectos Firebase** `salda-dev` y `salda-prod` (cuenta del usuario,
-   `firebase login`): región europe-west1, Blaze + presupuesto 5 € + alertas (spec §12.4),
-   `flutterfire configure` para la app (los json van gitignorados).
-3. **M3 — Sesiones** (spec §7, §12.2, §13.2):
-   a. Modelo Firestore (colecciones de spec §7) con `schemaVersion` desde el día 1.
-   b. Reglas de seguridad = matriz §13.2 + **tests por celda** con Emulator Suite
-      (`firebase emulators:exec`); añadir job `rules` a la CI.
-   c. Functions: `recompute` (usa los motores TS ya existentes en src/domain/),
-      `notify` (FCM), `cleanup`. Idempotentes, con `computeVersion`.
-   d. App: Auth (Google+Email), repositorios Firestore en `apps/mobile/lib/data/`,
-      flujo crear sesión (conectar el "Continuar" de la revisión), detalle de sesión
-      (resumen/cuentas/actividad), personas frecuentes, compartir enlace+QR.
-   e. Draft persistente del wizard (recuperar si la app muere a mitad).
+1. **Entorno para M3** (bloqueante): instalar Android Studio (trae el JDK que necesitan
+   el emulador de Firestore y el build Android) + SDK Android; `flutter doctor` limpio.
+   Probar la app en dispositivo/emulador; validar OCR con 3-4 tickets reales y
+   **alimentar el corpus** con lo que falle (protocolo en test/corpus/README.md).
+2. **Crear proyectos Firebase** `salda-dev`/`salda-prod` (cuenta del usuario,
+   `firebase login`): europe-west1, Blaze + presupuesto 5 € + alertas (spec §12.4);
+   `flutterfire configure` (los archivos generados van gitignorados).
+3. **M3 — Sesiones**: (a) modelo Firestore de spec §7 con `schemaVersion`; (b) reglas =
+   matriz §13.2 con test por celda vía `firebase emulators:exec` + job `rules` en CI;
+   (c) functions `recompute` (reutiliza `src/domain/` TS), `notify`, `cleanup`,
+   idempotentes con `computeVersion`; (d) app: Auth Google+Email, repositorios Firestore,
+   crear sesión (conectar el "Continuar" de la revisión), detalle de sesión, personas
+   frecuentes, compartir enlace+QR; (e) draft persistente del wizard.
 4. **M4 — Invitados**: web Svelte real (¿quién eres? → resumen → elegir productos →
-   ya he pagado), Auth anónimo + shareCode, tiempo real, botones de pago, App Check.
-5. **M5 — Pulido**: PDF import/export, imagen-resumen WhatsApp, recordatorios, cierre/
-   archivado, backup JSON (RF-90/91), estados vacíos/offline, haptics, beta.
-6. **M6 — IA**: contrato + adaptadores (Claude, Gemini, openai_compatible primero),
-   "Probar conexión", política de sugerencia por confianza < 0,75.
+   ya he pagado), Auth anónimo + shareCode, tiempo real, App Check enforced.
+5. **M5 — Pulido**: PDF import/export, imagen-resumen para WhatsApp, recordatorios,
+   cierre/archivado, backup JSON (RF-90/91), estados vacíos/offline, haptics, beta.
+6. **M6 — IA**: contrato + adaptadores (Claude, Gemini y openai_compatible primero),
+   "Probar conexión" obligatorio, sugerencia por confianza < 0,75 (DC-13).
 
-## 10. Cosas "raras" o no obvias (leer antes de romper algo)
+## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 
-- **Vectores dorados**: `packages/domain/test/golden/*.json` los ejecutan Dart Y TS.
-  El ORDEN de las liquidaciones esperadas es parte del contrato (determinismo). Si un
-  motor cambia, actualiza ambos lados; jamás "arregles" el JSON para que pase un test.
-- **Corpus**: si un caso `mustPass: false` empieza a pasar, el harness FALLA a propósito
-  (te obliga a promocionarlo a `true`). No es un bug.
-- **`dart run design_tokens:generate`** tras tocar brand.json/design_tokens.json; los
-  `.g.` van commiteados y la CI falla si no están al día (`git diff --exit-code`).
-- **Los archivos generados de l10n** (`apps/mobile/lib/l10n/generated/`) van commiteados.
-  Tras tocar el ARB: `flutter gen-l10n` en apps/mobile.
-- **`Extracted<T>`**: `confidence` 0..1 por campo; `Extracted.missing()` para ausentes.
-  `needsReview` = issues no vacíos O confianza global < 0,75 (umbral DC-13, calibrable).
-- **quantityMilli**: cantidades ×1000 (pesables: 0,466 kg → 466). 1000 = una unidad.
-- **ShareCode.toString() es opaco** a propósito (no filtrar secretos a logs). El código
-  va en el **fragment** de la URL (`#k=`), no en query string.
-- **Windows**: Flutter vive en `C:\dev\flutter` (PATH de usuario); primera ejecución
-  compila la herramienta (minutos). PowerShell 5.1: sin `&&`; los timeouts largos de
-  `flutter pub get`/`create` la primera vez son normales (descarga artefactos).
-- **La web de invitados tiene presupuesto de peso**: `chunkSizeWarningLimit: 300` en
-  vite.config.ts. Si un cambio lo dispara, replantear (lazy import de Firebase, etc.).
-- **Functions**: `maxInstances: 3` y región europe-west1 están en setGlobalOptions como
-  techo de coste (spec §12.4) — no subirlos sin consultar al usuario.
-- **El smoke test de la app** compara contra `Brand.appName`/`Brand.tagline`: si se
-  cambia el branding, el ARB `homeTagline` debe seguir en sincronía con brand.json.
-- **GitHub**: repo privado `DaoeZ/salda` (creado al cierre de la sesión M2). El token de
-  gh necesitó el scope `workflow` para poder subir `.github/workflows/ci.yml`.
+- **Vectores dorados**: los ejecutan Dart Y TS; el ORDEN de las liquidaciones esperadas
+  es parte del contrato. Nunca edites un JSON para "arreglar" un test: corrige la
+  implementación, o revisa conscientemente AMBOS lados si el contrato cambia.
+- **Corpus**: si un caso `mustPass:false` empieza a pasar, el harness FALLA a propósito
+  para obligarte a promocionarlo a `true`. No es un bug.
+- **Archivos generados commiteados**: `tokens.g.dart`/`tokens.g.css` (regenerar con
+  `dart run design_tokens:generate`; la CI hace diff) y `apps/mobile/lib/l10n/generated/`
+  (regenerar con `flutter gen-l10n` tras tocar el ARB).
+- **`quantityMilli`**: cantidades ×1000 (0,466 kg → 466; una unidad → 1000).
+- **`ShareCode.toString()` es opaco** a propósito (no filtrar secretos a logs).
+- **Umbral de revisión**: `needsReview` = issues no vacíos O confianza global < 0,75
+  (DC-13; calibrable con el corpus real).
+- **Functions**: `maxInstances: 3` y europe-west1 en `setGlobalOptions` son el techo de
+  coste (spec §12.4) — no subirlos sin consultar al usuario.
+- **Presupuesto de peso de la web**: `chunkSizeWarningLimit: 300` en vite.config.ts;
+  si un cambio lo dispara, replantear (lazy import de Firebase, etc.).
+- **El smoke test de la app** usa `Brand.appName`/`Brand.tagline`: si cambias el branding,
+  sincroniza también el ARB (`homeTagline`).
+- **Entorno Windows de esta máquina**: Flutter en `C:\dev\flutter` (PATH de usuario;
+  otra máquina deberá instalarlo). Node 26, Firebase CLI y gh (cuenta DaoeZ) globales.
+  PowerShell 5.1: sin `&&`; primeras ejecuciones de flutter lentas (compila su tool).
+  En otra máquina: clonar, instalar Flutter estable, `dart pub get` en la raíz,
+  `npm install` en apps/guest_web y backend/functions, y listo.
+- **Comandos de verificación por fase** (ejecutarlos TODOS antes de dar una fase por
+  cerrada): `dart analyze --fatal-infos` (raíz) · `dart test` en packages/domain y
+  packages/ocr_parser · `flutter test` en apps/mobile · `npm run build` en
+  apps/guest_web · `npm test` en backend/functions · (desde M3) tests de reglas con
+  `firebase emulators:exec`.
