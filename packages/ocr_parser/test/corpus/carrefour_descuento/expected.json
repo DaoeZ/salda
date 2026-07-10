@@ -1,0 +1,15 @@
+{
+  "mustPass": true,
+  "merchantName": "Carrefour",
+  "brandKey": "carrefour",
+  "date": "2026-07-02",
+  "time": "19:05",
+  "grandTotal": 590,
+  "discounts": [ { "label": "DESCUENTO SOCIO", "amount": 50 } ],
+  "issues": [],
+  "lines": [
+    { "name": "ATUN CLARO PACK-3", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 285 },
+    { "name": "PAN DE MOLDE", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 115 },
+    { "name": "QUESO LONCHAS", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 240 }
+  ]
+}

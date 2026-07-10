@@ -1,0 +1,14 @@
+{
+  "_comment": "OCR térmico degradado: nombre ilegible (NERCADONA), decimales con punto, O por 0. La marca se recupera por NIF; los importes por canonicalización.",
+  "mustPass": true,
+  "merchantName": "Mercadona",
+  "brandKey": "mercadona",
+  "date": "2026-07-09",
+  "time": "18:32",
+  "grandTotal": 376,
+  "issues": [],
+  "lines": [
+    { "name": "GAZPACHO HACENDADO", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 180 },
+    { "name": "LECHE ENTERA", "quantityMilli": 2000, "unitPrice": 98, "totalPrice": 196 }
+  ]
+}

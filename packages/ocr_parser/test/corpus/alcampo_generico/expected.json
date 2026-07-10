@@ -1,0 +1,13 @@
+{
+  "mustPass": true,
+  "merchantName": "Alcampo",
+  "brandKey": "alcampo",
+  "date": "2026-07-03",
+  "time": "17:55",
+  "grandTotal": 900,
+  "issues": [],
+  "lines": [
+    { "name": "DETERGENTE", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 795 },
+    { "name": "ARROZ REDONDO 1KG", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 105 }
+  ]
+}

@@ -1,7 +1,15 @@
-/// Parser de tickets españoles (ESPECIFICACION.md §10).
+/// Pipeline OCR de tickets (ESPECIFICACION.md §10).
 ///
-/// Entrada: líneas de texto + geometría procedentes de ML Kit.
-/// Salida: `ReceiptExtraction` (definido en `domain`) con confianza por campo.
-///
-/// Se implementa en M2 junto con su corpus de regresión (`test/corpus/`).
+/// Entrada agnóstica del motor OCR (`OcrDocument`) → reconstrucción
+/// geométrica de filas (`LineBuilder`) → parser por país con perfiles de
+/// establecimiento y reglas incrementales → `ReceiptExtraction` (contrato
+/// de `domain`, con confianza por campo e inconsistencias detectadas).
 library;
+
+export 'src/core/line_rule.dart';
+export 'src/core/receipt_parser.dart';
+export 'src/es/es_profiles.dart';
+export 'src/es/es_receipt_parser.dart';
+export 'src/geometry/line_builder.dart';
+export 'src/model/ocr_input.dart';
+export 'src/model/raw_line.dart';

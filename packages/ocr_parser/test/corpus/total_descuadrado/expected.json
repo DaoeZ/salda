@@ -1,0 +1,14 @@
+{
+  "_comment": "El OCR perdió una línea: la suma (1,99) no cuadra con el total (2,50). Debe detectarse automáticamente y marcarse para revisión.",
+  "mustPass": true,
+  "merchantName": "SUPERMERCADO EL AHORRO",
+  "category": "supermercado",
+  "date": "2026-07-10",
+  "grandTotal": 250,
+  "issues": ["sumMismatch"],
+  "needsReview": true,
+  "lines": [
+    { "name": "MACARRONES", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 89 },
+    { "name": "TOMATE FRITO", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 110 }
+  ]
+}

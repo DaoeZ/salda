@@ -1,0 +1,48 @@
+{
+  "@@locale": "es",
+
+  "homeTagline": "Escanea el ticket, reparte y salda cuentas.",
+  "homeEmptyHint": "Los cimientos están listos. El historial de sesiones llega en M3.",
+  "scanFab": "Escanear",
+  "scanFromCamera": "Hacer foto",
+  "scanFromGallery": "Elegir de la galería",
+  "scanProcessing": "Leyendo el ticket…",
+  "scanNothingRecognized": "No se pudo leer nada en la imagen",
+
+  "reviewTitle": "Revisar ticket",
+  "reviewBannerLowConfidence": "Hay datos dudosos o que no cuadran. Revísalos antes de continuar.",
+  "reviewRetake": "Repetir foto",
+  "reviewEditManually": "Editar a mano",
+  "reviewAnalyzeWithAi": "Analizar con IA",
+  "reviewAiUnavailable": "Disponible al configurar un proveedor de IA (Ajustes)",
+  "reviewMerchant": "Establecimiento",
+  "reviewDate": "Fecha",
+  "reviewTime": "Hora",
+  "reviewLines": "Productos",
+  "reviewAddLine": "Añadir producto",
+  "reviewComputedTotal": "Suma de productos",
+  "reviewGrandTotal": "Total del ticket",
+  "reviewBalanced": "El ticket cuadra",
+  "reviewMismatch": "Descuadre de {amount}",
+  "@reviewMismatch": {
+    "placeholders": { "amount": { "type": "String" } }
+  },
+  "reviewTip": "Propina",
+  "reviewDiscount": "Descuento",
+
+  "lineEditTitle": "Editar producto",
+  "lineName": "Nombre",
+  "lineQuantity": "Cantidad",
+  "lineUnitPrice": "Precio unitario",
+  "lineTotalPrice": "Importe",
+  "lineAlternatives": "¿Quizá era…?",
+  "lineDelete": "Eliminar producto",
+  "lineSource": "Texto original: {source}",
+  "@lineSource": {
+    "placeholders": { "source": { "type": "String" } }
+  },
+
+  "commonSave": "Guardar",
+  "commonCancel": "Cancelar",
+  "commonContinue": "Continuar"
+}

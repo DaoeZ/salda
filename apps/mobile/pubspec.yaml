@@ -10,9 +10,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   design_tokens:
+  domain:
+  ocr_parser:
   flutter_riverpod: ^3.0.0
   go_router: ^16.0.0
+  image_picker: ^1.2.3
+  google_mlkit_text_recognition: ^0.16.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -21,3 +28,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true

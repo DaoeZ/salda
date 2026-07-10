@@ -1,0 +1,14 @@
+{
+  "mustPass": true,
+  "merchantName": "Lidl",
+  "brandKey": "lidl",
+  "date": "2026-06-15",
+  "time": "11:47",
+  "grandTotal": 573,
+  "issues": [],
+  "lines": [
+    { "name": "YOGUR GRIEGO 4X", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 119 },
+    { "name": "MANZANA ROYAL", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 199 },
+    { "name": "CROISSANT", "quantityMilli": 3000, "unitPrice": 85, "totalPrice": 255 }
+  ]
+}

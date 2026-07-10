@@ -1,0 +1,13 @@
+{
+  "mustPass": true,
+  "merchantName": "Repsol",
+  "brandKey": "repsol",
+  "category": "gasolinera",
+  "date": "2026-06-20",
+  "time": "08:22",
+  "grandTotal": 6700,
+  "issues": [],
+  "lines": [
+    { "name": "GASOLEO A", "quantityMilli": 45300, "unitPrice": null, "totalPrice": 6700 }
+  ]
+}

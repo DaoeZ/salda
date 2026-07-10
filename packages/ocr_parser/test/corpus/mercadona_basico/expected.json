@@ -1,0 +1,19 @@
+{
+  "mustPass": true,
+  "merchantName": "Mercadona",
+  "brandKey": "mercadona",
+  "category": "supermercado",
+  "date": "2026-07-09",
+  "time": "18:32",
+  "grandTotal": 483,
+  "taxes": [
+    { "label": "IVA 4%", "amount": 12 },
+    { "label": "IVA 10%", "amount": 17 }
+  ],
+  "issues": [],
+  "lines": [
+    { "name": "GAZPACHO HACENDADO", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 180 },
+    { "name": "LECHE ENTERA", "quantityMilli": 2000, "unitPrice": 98, "totalPrice": 196 },
+    { "name": "PLATANO", "quantityMilli": 466, "unitPrice": 229, "totalPrice": 107 }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "mustPass": true,
+  "merchantName": "RESTAURANTE CASA PACO",
+  "brandKey": null,
+  "category": "restaurante",
+  "date": "2026-07-05",
+  "time": "22:10",
+  "grandTotal": 5190,
+  "subtotal": 5190,
+  "issues": [],
+  "lines": [
+    { "name": "CERVEZA CAÑA", "quantityMilli": 3000, "unitPrice": 250, "totalPrice": 750 },
+    { "name": "ENSALADA MIXTA", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 890 },
+    { "name": "SOLOMILLO IBERICO", "quantityMilli": 2000, "unitPrice": 1550, "totalPrice": 3100 },
+    { "name": "PAN Y APERITIVO", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 450 }
+  ]
+}

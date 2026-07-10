@@ -10,4 +10,5 @@ export 'src/engines/balance_engine.dart';
 export 'src/engines/split_engine.dart';
 export 'src/errors.dart';
 export 'src/money.dart';
+export 'src/receipt/receipt_extraction.dart';
 export 'src/share_code.dart';

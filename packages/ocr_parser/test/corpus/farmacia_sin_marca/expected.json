@@ -1,0 +1,14 @@
+{
+  "mustPass": true,
+  "merchantName": "FARMACIA LDA. M. GARCIA",
+  "brandKey": null,
+  "category": "farmacia",
+  "date": "2026-07-01",
+  "time": "10:02",
+  "grandTotal": 562,
+  "issues": [],
+  "lines": [
+    { "name": "IBUPROFENO 600MG 20 COMP", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 312 },
+    { "name": "GEL HIDROALCOHOLICO", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 250 }
+  ]
+}

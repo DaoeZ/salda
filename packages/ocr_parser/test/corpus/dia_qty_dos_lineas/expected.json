@@ -1,0 +1,13 @@
+{
+  "mustPass": true,
+  "merchantName": "DIA",
+  "brandKey": "dia",
+  "date": "2026-06-28",
+  "time": "09:15",
+  "grandTotal": 393,
+  "issues": [],
+  "lines": [
+    { "name": "LECHE DESNATADA", "quantityMilli": 2000, "unitPrice": 89, "totalPrice": 178 },
+    { "name": "HUEVOS L DOCENA", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 215 }
+  ]
+}

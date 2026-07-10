@@ -1,0 +1,13 @@
+{
+  "_comment": "Ticket sin línea de total: se sugiere la suma calculada con confianza baja y se marca para revisión.",
+  "mustPass": true,
+  "merchantName": "KIOSKO PRENSA",
+  "date": "2026-07-05",
+  "grandTotal": 300,
+  "issues": ["missingTotal"],
+  "needsReview": true,
+  "lines": [
+    { "name": "PERIODICO", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 180 },
+    { "name": "CHICLES", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 120 }
+  ]
+}

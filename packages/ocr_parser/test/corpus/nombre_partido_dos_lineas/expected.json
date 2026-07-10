@@ -1,0 +1,12 @@
+{
+  "_comment": "LIMITACIÓN CONOCIDA (mustPass=false): nombre de producto partido en dos filas sin marcador de cantidad. El parser recorta el nombre a la segunda fila. El total y el cuadre siguen siendo correctos, así que el reparto no se ve afectado; solo el nombre queda incompleto.",
+  "mustPass": false,
+  "merchantName": "TIENDA ECO BIO",
+  "date": "2026-07-04",
+  "time": "12:20",
+  "grandTotal": 295,
+  "issues": [],
+  "lines": [
+    { "name": "CHOCOLATE NEGRO 85% ECOLOGICO COMERCIO JUSTO", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 295 }
+  ]
+}

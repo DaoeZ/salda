@@ -1,0 +1,15 @@
+{
+  "mustPass": true,
+  "merchantName": "BAR LOS AMIGOS",
+  "category": "restaurante",
+  "date": "2026-07-12",
+  "time": "13:40",
+  "grandTotal": 1150,
+  "tip": 100,
+  "issues": [],
+  "lines": [
+    { "name": "CAFE CON LECHE", "quantityMilli": 2000, "unitPrice": 140, "totalPrice": 280 },
+    { "name": "TOSTADA TOMATE", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 220 },
+    { "name": "ZUMO NARANJA", "quantityMilli": 2000, "unitPrice": 275, "totalPrice": 550 }
+  ]
+}

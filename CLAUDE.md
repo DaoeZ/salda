@@ -45,7 +45,12 @@ registra como revisión del documento ANTES de implementarlo.
 - [x] M0 Cimientos (verificado: analyze limpio, tests app OK, build web 11 KB gzip, build functions OK)
 - [x] M1 Dominio (Money/allocate, ShareCode, SplitEngine, BalanceEngine; 54 tests Dart +
       29 TS; vectores dorados compartidos en packages/domain/test/golden/)
-- [ ] M2 OCR · [ ] M3 Sesiones · [ ] M4 Invitados · [ ] M5 Pulido · [ ] M6 IA
+- [x] M2 OCR (contrato ReceiptExtraction en domain; parser es-ES con perfiles por cadena y
+      reglas incrementales; corpus 13 casos → 12/12 mustPass, campos 100 % salvo lines 92 %;
+      adaptador ML Kit + flujo escaneo + pantalla de revisión + l10n ARB.
+      PENDIENTE dispositivo real: verificar OCR en fotos reales y captura guiada propia;
+      el corpus debe crecer con tickets reales anonimizados)
+- [ ] M3 Sesiones · [ ] M4 Invitados · [ ] M5 Pulido · [ ] M6 IA
 
 ## Entorno de esta máquina (Windows 11)
 
