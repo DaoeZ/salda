@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Ticket con borde dentado inferior, en el color de marca -->
+  <path fill="#0B6E5D" d="M14 6h36a2 2 0 0 1 2 2v46l-5-4-5 4-5-4-5 4-5-4-5 4-5-4-5 4V8a2 2 0 0 1 2-2z"/>
+  <g stroke="#fff" stroke-width="4" stroke-linecap="round">
+    <line x1="22" y1="20" x2="42" y2="20"/>
+    <line x1="22" y1="30" x2="42" y2="30"/>
+    <line x1="22" y1="40" x2="34" y2="40"/>
+  </g>
+</svg>

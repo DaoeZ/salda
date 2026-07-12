@@ -48,7 +48,10 @@ jobs:
           cache-dependency-path: apps/guest_web/package-lock.json
       - run: npm ci
       - run: npm run check
+      - run: npm test
       - run: npm run build
+      - name: Presupuesto de peso (gzip)
+        run: npm run check:size
 
   functions:
     name: Cloud Functions

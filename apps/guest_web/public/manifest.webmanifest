@@ -1,0 +1,17 @@
+{
+  "name": "Salda",
+  "short_name": "Salda",
+  "description": "Cuentas compartidas: mira lo que debes y márcalo pagado.",
+  "lang": "es",
+  "display": "browser",
+  "background_color": "#faf9f7",
+  "theme_color": "#0B6E5D",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

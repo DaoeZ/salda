@@ -27,7 +27,9 @@ reales y probar en dispositivo (sin SDK de Android en esta máquina). Las reglas
 son deny-all: implementan la matriz §13.2 con 48 tests. Las functions (recompute/notify/
 cleanup) están implementadas y testeadas.
 
-**Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ (entorno/dispositivo ⬜) · M4 Invitados ⬜ · M5 Pulido ⬜ · M6 IA ⬜
+**Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ · M4 código ✅ (E2E manual contra
+emulador VERIFICADO) · M5 Pulido ⬜ · M6 IA ⬜ · Pendiente de usuario: proyectos Firebase
+reales, Android Studio/dispositivo, App Check enforced (necesita proyecto real).
 
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
@@ -71,6 +73,26 @@ siguiente es preparar el entorno para M3 (ver §11).
   ShareScreen (QR + enlace #k=), detalle (Resumen balances+liquidaciones con
   confirmar/deshacer · Cuentas · Actividad placeholder), cerrar/reabrir/archivar/borrar,
   draft persistente con banner de recuperación (shared_preferences).
+
+**M4 realizado (web de invitados completa):**
+- `apps/guest_web` real: acceso por enlace `/s/{sid}#k=` (prueba de conocimiento →
+  guestAccess), "¿Quién eres?" con nombres ocupados, resumen con "te toca pagar",
+  botones de pago (PayPal/Revolut con importe; Bizum/IBAN copiar; solo los
+  configurados), "Ya he pagado" (pending→marked con auditoría), elegir productos en
+  vivo (toggle validado por reglas vía assignment.lastEditorPid), ticket completo,
+  cuenta cerrada = solo lectura, identidad recordada en localStorage.
+- La web NO calcula dinero: pinta `balances`/`totals` de la function; el pie de
+  "llevas marcado" lee balances.consumed (se actualiza al recalcular).
+- Estado con runas de Svelte 5 en `src/lib/session.svelte.ts` (clase GuestSession).
+- Meta/OG/favicon SVG/manifest; SIN service worker a propósito (datos vivos +
+  mantenimiento; decisión documentada). `robots: noindex`.
+- Presupuesto de peso REAL en CI: `scripts/check-size.mjs` falla si JS+CSS+HTML
+  gzip > 220 KB (hoy ~183 KB; el chunk `firebase` va separado y cachea entre deploys).
+- 14 tests vitest de lógica pura (link, assignment, money, payments) + svelte-check
+  a cero. **E2E manual completo contra emuladores** (flujo entero verificado, incluida
+  la escritura quirúrgica de líneas contra las reglas reales y el estado en servidor).
+- Herramienta dev: `backend/functions/tools/seed-emulator.mjs` siembra una sesión de
+  prueba (`/s/e2e1#k=E2E-SECRET-CODE-16CH`) para probar la web en local.
 
 **Qué quedó fuera de M3 a propósito:**
 - Botón **"Analizar con IA"** deshabilitado hasta M6.

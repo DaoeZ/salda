@@ -4,8 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <!-- El título se fija en runtime desde el branding (src/lib/brand.ts) -->
-    <title>Cargando…</title>
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#0B6E5D" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131312" />
+
+    <!-- El nombre comercial es provisional: se fija en runtime desde lib/brand.ts;
+         estos valores estáticos solo alimentan previews (WhatsApp/OG). -->
+    <title>Salda · cuenta compartida</title>
+    <meta
+      name="description"
+      content="Mira lo que te toca pagar, elige tus productos y marca que has pagado. Sin instalar nada."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Salda" />
+    <meta property="og:title" content="Te han compartido una cuenta" />
+    <meta
+      property="og:description"
+      content="Mira lo que te toca pagar y márcalo en un toque. Sin instalar nada."
+    />
+    <meta name="robots" content="noindex" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
     <div id="app"></div>

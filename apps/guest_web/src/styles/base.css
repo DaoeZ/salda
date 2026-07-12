@@ -1,5 +1,6 @@
-/* Estilos base de la web de invitados. Los tokens viven en tokens.g.css
-   (generado — no editar). Aquí solo reset y primitivas de layout. */
+/* Estilos base + utilidades de la web de invitados. Los tokens viven en
+   tokens.g.css (generado). Jerarquía por tono, radios y espaciados de la
+   guía de diseño (spec §3). */
 
 *,
 *::before,
@@ -7,27 +8,150 @@
   box-sizing: border-box;
 }
 
+:root {
+  --surface: #faf9f7;
+  --surface-container: #ffffff;
+  --surface-high: #efedea;
+  --on-surface: #1c1b1a;
+  --on-surface-variant: #5f6368;
+  --outline: #d5d3cf;
+  --primary: var(--color-seed);
+  --on-primary: #ffffff;
+  --primary-container: #d3ede4;
+  --on-primary-container: #06382f;
+  --error: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #131312;
+    --surface-container: #1e1e1c;
+    --surface-high: #2a2a27;
+    --on-surface: #e6e4e1;
+    --on-surface-variant: #9aa0a6;
+    --outline: #3c3c39;
+    --primary: #7fdac4;
+    --on-primary: #06382f;
+    --primary-container: #0f4a3e;
+    --on-primary-container: #b6e9d9;
+    --error: #f2b8b5;
+  }
+}
+
 html {
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
+  color-scheme: light dark;
 }
 
 body {
   margin: 0;
   min-height: 100dvh;
+  background: var(--surface);
+  color: var(--on-surface);
 }
 
 /* Cifras tabulares en cualquier importe (spec §3.2). */
 .money {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.card {
+  background: var(--surface-container);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--outline);
+  padding: var(--space-lg);
 }
 
 button {
   font: inherit;
-  min-height: 48px; /* target táctil mínimo (spec §3, RNF-06) */
+  color: inherit;
+  min-height: 48px; /* target táctil mínimo (RNF-06) */
+  padding: 0 var(--space-lg);
+  border: none;
   border-radius: var(--radius-button);
+  background: transparent;
   cursor: pointer;
+  transition: filter var(--duration-toggle) var(--easing-emphasized),
+    transform var(--duration-toggle) var(--easing-emphasized);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+}
+
+.btn-tonal {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-weight: 600;
+}
+
+.btn-text {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface-high);
+  color: var(--on-surface-variant);
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-weight: 600;
+  flex: none;
+}
+
+.muted {
+  color: var(--on-surface-variant);
+}
+
+.skeleton {
+  border-radius: var(--radius-card);
+  background: var(--surface-high);
+  animation: shimmer var(--duration-skeleton-shimmer, 1.2s) ease-in-out
+    infinite alternate;
+}
+
+@keyframes shimmer {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
