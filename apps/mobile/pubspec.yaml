@@ -20,11 +20,22 @@ dependencies:
   image_picker: ^1.2.3
   google_mlkit_text_recognition: ^0.16.0
   intl: ^0.20.2
+  firebase_core: ^4.11.0
+  firebase_auth: ^6.5.4
+  cloud_firestore: ^6.6.0
+  qr_flutter: ^4.1.0
+  share_plus: ^13.2.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # Solo para el tipo Override en los fakes de test (flutter_riverpod v3
+  # no lo re-exporta).
+  riverpod: ^3.3.0
+  fake_cloud_firestore: ^4.1.1
+  firebase_auth_mocks: ^0.15.2
 
 flutter:
   uses-material-design: true

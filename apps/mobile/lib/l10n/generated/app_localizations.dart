@@ -303,6 +303,396 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Continuar'**
   String get commonContinue;
+
+  /// No description provided for @commonDone.
+  ///
+  /// In es, this message translates to:
+  /// **'Listo'**
+  String get commonDone;
+
+  /// No description provided for @loginTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Divide gastos sin discusiones'**
+  String get loginTitle;
+
+  /// No description provided for @loginEmail.
+  ///
+  /// In es, this message translates to:
+  /// **'Email'**
+  String get loginEmail;
+
+  /// No description provided for @loginPassword.
+  ///
+  /// In es, this message translates to:
+  /// **'Contraseña'**
+  String get loginPassword;
+
+  /// No description provided for @loginDisplayName.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu nombre'**
+  String get loginDisplayName;
+
+  /// No description provided for @loginSignIn.
+  ///
+  /// In es, this message translates to:
+  /// **'Entrar'**
+  String get loginSignIn;
+
+  /// No description provided for @loginRegister.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear cuenta'**
+  String get loginRegister;
+
+  /// No description provided for @loginToRegister.
+  ///
+  /// In es, this message translates to:
+  /// **'¿No tienes cuenta? Regístrate'**
+  String get loginToRegister;
+
+  /// No description provided for @loginToSignIn.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Ya tienes cuenta? Entra'**
+  String get loginToSignIn;
+
+  /// No description provided for @loginForgot.
+  ///
+  /// In es, this message translates to:
+  /// **'He olvidado mi contraseña'**
+  String get loginForgot;
+
+  /// No description provided for @loginResetSent.
+  ///
+  /// In es, this message translates to:
+  /// **'Te hemos enviado un correo para restablecerla'**
+  String get loginResetSent;
+
+  /// No description provided for @authErrorInvalidCredential.
+  ///
+  /// In es, this message translates to:
+  /// **'Email o contraseña incorrectos'**
+  String get authErrorInvalidCredential;
+
+  /// No description provided for @authErrorEmailInUse.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya existe una cuenta con ese email'**
+  String get authErrorEmailInUse;
+
+  /// No description provided for @authErrorWeakPassword.
+  ///
+  /// In es, this message translates to:
+  /// **'La contraseña es demasiado corta'**
+  String get authErrorWeakPassword;
+
+  /// No description provided for @authErrorNetwork.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin conexión. Inténtalo de nuevo.'**
+  String get authErrorNetwork;
+
+  /// No description provided for @authErrorUnknown.
+  ///
+  /// In es, this message translates to:
+  /// **'Algo ha fallado. Inténtalo de nuevo.'**
+  String get authErrorUnknown;
+
+  /// No description provided for @signOut.
+  ///
+  /// In es, this message translates to:
+  /// **'Cerrar sesión'**
+  String get signOut;
+
+  /// No description provided for @sessionsEmptyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Escanea tu primer ticket'**
+  String get sessionsEmptyTitle;
+
+  /// No description provided for @sessionsEmptyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Haz una foto y reparte el gasto en segundos.'**
+  String get sessionsEmptyBody;
+
+  /// No description provided for @summaryOwedToMe.
+  ///
+  /// In es, this message translates to:
+  /// **'Te deben'**
+  String get summaryOwedToMe;
+
+  /// No description provided for @summaryIOwe.
+  ///
+  /// In es, this message translates to:
+  /// **'Debes'**
+  String get summaryIOwe;
+
+  /// No description provided for @statusClosed.
+  ///
+  /// In es, this message translates to:
+  /// **'Cerrada'**
+  String get statusClosed;
+
+  /// No description provided for @statusArchived.
+  ///
+  /// In es, this message translates to:
+  /// **'Archivada'**
+  String get statusArchived;
+
+  /// No description provided for @sessionPeople.
+  ///
+  /// In es, this message translates to:
+  /// **'{count} personas'**
+  String sessionPeople(int count);
+
+  /// No description provided for @peopleSheetTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Quién estuvo?'**
+  String get peopleSheetTitle;
+
+  /// No description provided for @peopleAddHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir persona…'**
+  String get peopleAddHint;
+
+  /// No description provided for @peopleYou.
+  ///
+  /// In es, this message translates to:
+  /// **'Tú'**
+  String get peopleYou;
+
+  /// No description provided for @peopleNeedTwo.
+  ///
+  /// In es, this message translates to:
+  /// **'Añade al menos otra persona'**
+  String get peopleNeedTwo;
+
+  /// No description provided for @splitEqual.
+  ///
+  /// In es, this message translates to:
+  /// **'Todo a medias'**
+  String get splitEqual;
+
+  /// No description provided for @splitByItem.
+  ///
+  /// In es, this message translates to:
+  /// **'Cada uno lo suyo'**
+  String get splitByItem;
+
+  /// No description provided for @payerQuestion.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Quién pagó?'**
+  String get payerQuestion;
+
+  /// No description provided for @sessionNameLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre de la cuenta'**
+  String get sessionNameLabel;
+
+  /// No description provided for @createAndShare.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear y compartir'**
+  String get createAndShare;
+
+  /// No description provided for @shareTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Invita a los demás'**
+  String get shareTitle;
+
+  /// No description provided for @shareHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Quien tenga el enlace puede ver la cuenta, elegir lo suyo y marcar que ha pagado. Sin instalar nada.'**
+  String get shareHint;
+
+  /// No description provided for @shareCopy.
+  ///
+  /// In es, this message translates to:
+  /// **'Copiar enlace'**
+  String get shareCopy;
+
+  /// No description provided for @shareCopied.
+  ///
+  /// In es, this message translates to:
+  /// **'Enlace copiado'**
+  String get shareCopied;
+
+  /// No description provided for @shareSystem.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartir…'**
+  String get shareSystem;
+
+  /// No description provided for @detailTabSummary.
+  ///
+  /// In es, this message translates to:
+  /// **'Resumen'**
+  String get detailTabSummary;
+
+  /// No description provided for @detailTabAccounts.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuentas'**
+  String get detailTabAccounts;
+
+  /// No description provided for @detailTabActivity.
+  ///
+  /// In es, this message translates to:
+  /// **'Actividad'**
+  String get detailTabActivity;
+
+  /// No description provided for @balancesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Balance'**
+  String get balancesTitle;
+
+  /// No description provided for @balancePaidLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'pagó {amount}'**
+  String balancePaidLabel(String amount);
+
+  /// No description provided for @balanceConsumedLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'consumió {amount}'**
+  String balanceConsumedLabel(String amount);
+
+  /// No description provided for @settlementsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Pagos pendientes'**
+  String get settlementsTitle;
+
+  /// No description provided for @settlementRow.
+  ///
+  /// In es, this message translates to:
+  /// **'{from} → {to}'**
+  String settlementRow(String from, String to);
+
+  /// No description provided for @statePending.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente'**
+  String get statePending;
+
+  /// No description provided for @stateMarked.
+  ///
+  /// In es, this message translates to:
+  /// **'Dice que pagó'**
+  String get stateMarked;
+
+  /// No description provided for @stateConfirmed.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmado'**
+  String get stateConfirmed;
+
+  /// No description provided for @actionConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmar'**
+  String get actionConfirm;
+
+  /// No description provided for @actionBackToPending.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver a pendiente'**
+  String get actionBackToPending;
+
+  /// No description provided for @allSettled.
+  ///
+  /// In es, this message translates to:
+  /// **'Todo saldado 🎉'**
+  String get allSettled;
+
+  /// No description provided for @activityEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin actividad todavía'**
+  String get activityEmpty;
+
+  /// No description provided for @accountsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin cuentas todavía'**
+  String get accountsEmpty;
+
+  /// No description provided for @menuShare.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartir'**
+  String get menuShare;
+
+  /// No description provided for @menuClose.
+  ///
+  /// In es, this message translates to:
+  /// **'Cerrar la cuenta'**
+  String get menuClose;
+
+  /// No description provided for @menuReopen.
+  ///
+  /// In es, this message translates to:
+  /// **'Reabrir'**
+  String get menuReopen;
+
+  /// No description provided for @menuArchive.
+  ///
+  /// In es, this message translates to:
+  /// **'Archivar'**
+  String get menuArchive;
+
+  /// No description provided for @menuDelete.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar'**
+  String get menuDelete;
+
+  /// No description provided for @closeConfirmBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Nadie podrá modificarla hasta que la reabras. ¿Cerrar?'**
+  String get closeConfirmBody;
+
+  /// No description provided for @deleteConfirmBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Se borrará todo: tickets, fotos y pagos. Esta acción no se puede deshacer.'**
+  String get deleteConfirmBody;
+
+  /// No description provided for @closedBanner.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuenta cerrada: solo lectura'**
+  String get closedBanner;
+
+  /// No description provided for @draftResumeTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tienes un ticket sin terminar'**
+  String get draftResumeTitle;
+
+  /// No description provided for @draftResume.
+  ///
+  /// In es, this message translates to:
+  /// **'Continuar'**
+  String get draftResume;
+
+  /// No description provided for @draftDiscard.
+  ///
+  /// In es, this message translates to:
+  /// **'Descartar'**
+  String get draftDiscard;
 }
 
 class _AppLocalizationsDelegate

@@ -20,12 +20,14 @@ multi-proveedor (con la API key del propio usuario, guardada solo en su disposit
 agrupa cuentas (Hotel, Gasolina…) con balance global multi-pagador y simplificación de
 deudas. Uso personal/amigos; coste objetivo 0–1 €/mes (techo 5 €).
 
-**Estado general:** M0 (cimientos), M1 (motores de dominio) y M2 (pipeline OCR) están
-**terminados, verificados y en verde** (112 tests; CI de GitHub pasando). No hay backend
-real todavía (reglas deny-all, functions vacías): eso es M3. La app **nunca se ha
-ejecutado en un dispositivo real** (falta el SDK de Android en la máquina de desarrollo).
+**Estado general:** M0–M2 terminados y **M3 (Sesiones) COMPLETO A NIVEL DE CÓDIGO y
+verificado** (~180 tests en verde: dominio, parser, reglas contra emulador, functions y
+app). Pendiente de M3 solo lo que requiere al usuario: crear los proyectos Firebase
+reales y probar en dispositivo (sin SDK de Android en esta máquina). Las reglas ya NO
+son deny-all: implementan la matriz §13.2 con 48 tests. Las functions (recompute/notify/
+cleanup) están implementadas y testeadas.
 
-**Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 Sesiones ⬜ · M4 Invitados ⬜ · M5 Pulido ⬜ · M6 IA ⬜
+**Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ (entorno/dispositivo ⬜) · M4 Invitados ⬜ · M5 Pulido ⬜ · M6 IA ⬜
 
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
@@ -54,13 +56,31 @@ siguiente es preparar el entorno para M3 (ver §11).
    setup-node@v5 y se reparó un estropicio de encoding causado por PowerShell (ver §9).
 8. CI verificada en verde en GitHub para el último commit.
 
-**Qué quedó a medias (deliberadamente, no por olvido):**
-- Botón **"Continuar"** de `ReviewScreen` es un no-op: se conecta en M3 al crear sesión.
-- Botón **"Analizar con IA"** deshabilitado hasta M6 (no hay proveedores aún).
-- **Captura guiada propia** (bordes/auto-disparo) pospuesta a tener dispositivo real;
-  hoy se usa la cámara del sistema vía image_picker (flujo completo funcional).
-- **Importar PDF** (RF-21) sin UI; el parser ya acepta texto plano (`parsePlainText`).
-- `/review` por deep link sin draft cargado muestra spinner (estado solo en memoria).
+**M3 realizado (código completo, ver commits M3):**
+- Reglas §13.2 + 48 tests contra emulador (backend/firestore/test/rules.test.mjs);
+  job `rules` en CI con setup-java y cache del jar del emulador.
+- Functions: recompute (núcleo puro `computeAggregates` + 3 triggers), notify (FCM),
+  cleanup (cascada). 37 tests TS. `order` en participantes fija el orden determinista
+  de los motores — la app lo escribe al crear (p0..pN) y DEBE mantenerse.
+- App: bootstrap Firebase (emuladores, opciones demo en
+  `core/firebase/firebase_options_stub.dart`), Auth email+contraseña (Google oculto
+  hasta proyecto real: `AuthRepository.googleSignInAvailable`), repositorio de sesiones
+  (creación en DOS pasos: doc sesión y luego batch — las reglas de subdocs hacen get()
+  de la sesión), providers autoDispose, LoginScreen, Home=historial con tarjeta
+  te-deben/debes + skeletons, hoja Gente-y-reparto (chips frecuentes, modo, pagador),
+  ShareScreen (QR + enlace #k=), detalle (Resumen balances+liquidaciones con
+  confirmar/deshacer · Cuentas · Actividad placeholder), cerrar/reabrir/archivar/borrar,
+  draft persistente con banner de recuperación (shared_preferences).
+
+**Qué quedó fuera de M3 a propósito:**
+- Botón **"Analizar con IA"** deshabilitado hasta M6.
+- **Captura guiada propia** y validación OCR real: pendientes de dispositivo.
+- **Importar PDF** (RF-21) sin UI; gasto manual sin ticket: M5.
+- Añadir ticket/cuenta a sesión EXISTENTE desde el detalle: pendiente (siguiente
+  bloque natural; el modelo y las reglas ya lo soportan).
+- Feed de actividad se escribe pero no se lista (M4).
+- `/review` por deep link sin draft muestra spinner (el draft persistente cubre el
+  caso real de recuperación).
 
 ## 3. Lógica seguida: el porqué de cada módulo
 
@@ -197,15 +217,18 @@ Storage: receipts/{sessionId}/{ticketId}/{original,thumb}.jpg
 Índices (ya en firestore.indexes.json): sessions(ownerUid,updatedAt) y (ownerUid,status,updatedAt)
 ```
 
-**Reglas de seguridad y por qué:** hoy **deny-all a propósito** (no hay backend en uso;
-la política del proyecto es denegación por defecto con `allow` explícitos). En M3 se
-implementa la matriz de spec §13.2: owner R/W si `open`; invitado anónimo presentando el
-shareCode: lectura de la sesión + tres escrituras quirúrgicas validadas campo a campo con
-`diff()` (autoasignarse/quitarse en líneas si `byItem` y abierta; `pending→marked` solo
-en liquidaciones donde él es `from`; su `claimedByDevice`). Los agregados son solo-lectura
-para todos los clientes. **Cada celda de la matriz lleva test positivo y negativo contra
-el Emulator Suite en CI** — es la pieza de seguridad más crítica. El shareCode viaja en
-el **fragment** (`#k=`) para no aparecer en logs de servidor.
+**Reglas de seguridad (IMPLEMENTADAS en M3, 48 tests por celda en CI):** matriz §13.2
+con denegación por defecto. Mecanismo de invitados = **prueba de conocimiento**: el
+invitado anónimo crea `sessions/{sid}/guestAccess/{su uid}` presentando el shareCode
+(la regla lo compara con el de la sesión); las lecturas posteriores se autorizan con
+`exists(guestAccess)`. Sus escrituras son quirúrgicas y validadas con `diff()`:
+reclamar/liberar nombre (`claimedByDevice`), autoasignarse en líneas (solo SU entrada
+del mapa, peso 1, modo byItem; el cliente declara `assignment.lastEditorPid` y la regla
+verifica que ese pid está reclamado por su uid; no puede poner `all`), y `pending→marked`
+solo donde él es `from`. Agregados solo-lectura; settlements solo los crea/borra la
+function; cerrada = inmutable salvo reapertura del owner; activity append-only.
+El shareCode viaja en el **fragment** (`#k=`). Revocación = regenerar código + borrar
+guestAccess (lo hace `regenerateShareCode` del repositorio).
 
 ## 7. Servidores: comunicación, endpoints y secretos
 
@@ -337,8 +360,9 @@ firebase CLI → keyring del SO del desarrollador.
   si un cambio lo dispara, replantear (lazy import de Firebase, etc.).
 - **El smoke test de la app** usa `Brand.appName`/`Brand.tagline`: si cambias el branding,
   sincroniza también el ARB (`homeTagline`).
-- **Entorno Windows de esta máquina**: Flutter en `C:\dev\flutter` (PATH de usuario;
-  otra máquina deberá instalarlo). Node 26, Firebase CLI y gh (cuenta DaoeZ) globales.
+- **Entorno Windows de esta máquina**: Flutter en `C:\dev\flutter` y JDK Temurin 21 en
+  `C:\dev\jdk-21.0.11+10` (ambos en PATH de usuario; JAVA_HOME persistido — lo necesita
+  el emulador de Firestore). Node 26, Firebase CLI y gh (cuenta DaoeZ) globales.
   PowerShell 5.1: sin `&&`; primeras ejecuciones de flutter lentas (compila su tool).
   En otra máquina: clonar, instalar Flutter estable, `dart pub get` en la raíz,
   `npm install` en apps/guest_web y backend/functions, y listo.

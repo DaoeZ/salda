@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../sessions/presentation/people_sheet.dart';
 import '../application/review_draft.dart';
 import 'line_edit_sheet.dart';
 
@@ -50,8 +51,10 @@ class ReviewScreen extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.all(TokenSpacing.lg),
           child: FilledButton(
-            // M3 conecta esto con la creación de la sesión.
-            onPressed: draft.lines.isEmpty ? null : () {},
+            onPressed: draft.lines.isEmpty
+                ? null
+                : () => showPeopleSheet(context,
+                    suggestedName: draft.merchantName),
             child: Text(l10n.commonContinue),
           ),
         ),

@@ -1,15 +1,20 @@
 import 'package:design_tokens/design_tokens.dart';
+import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
+import '../auth/data/auth_repository.dart';
+import '../review/application/draft_store.dart';
 import '../review/application/review_draft.dart';
 import '../scan/application/scan_service.dart';
+import '../sessions/application/session_providers.dart';
+import '../sessions/domain/session_models.dart';
 
-/// Placeholder del historial de sesiones (M3) con el flujo de escaneo
-/// ya operativo: FAB → cámara/galería → OCR → parser → revisión.
+/// Historial de sesiones (RF-80/82) + FAB de escaneo.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -24,8 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final l10n = AppLocalizations.of(context);
     setState(() => _scanning = true);
     try {
-      final extraction =
-          await ref.read(scanServiceProvider).scanFrom(source);
+      final extraction = await ref.read(scanServiceProvider).scanFrom(source);
       if (!mounted || extraction == null) return;
       if (extraction.lines.isEmpty && !extraction.grandTotal.isPresent) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -67,11 +71,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
+    final sessions = ref.watch(sessionsProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(Brand.appName),
+        actions: [
+          IconButton(
+            tooltip: l10n.signOut,
+            onPressed: () => ref.read(authRepositoryProvider).signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
         bottom: _scanning
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -79,34 +91,254 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               )
             : null,
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(TokenSpacing.lg),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.receipt_long_outlined,
-                size: 64,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(height: TokenSpacing.lg),
-              Text(
-                l10n.homeTagline,
-                style: theme.textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: TokenSpacing.sm),
-              Text(l10n.homeEmptyHint, style: theme.textTheme.bodySmall),
-            ],
+      body: Column(children: [
+        const _DraftBanner(),
+        Expanded(
+          child: sessions.when(
+            loading: () => const _SessionsSkeleton(),
+            error: (error, _) => Center(child: Text('$error')),
+            data: (list) => list.isEmpty
+                ? _EmptyState(l10n: l10n)
+                : _SessionsList(sessions: list),
           ),
         ),
-      ),
+      ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _scanning ? null : _showSourceSheet,
         icon: const Icon(Icons.document_scanner_outlined),
         label: Text(l10n.scanFab),
       ),
+    );
+  }
+}
+
+/// Banner de borrador recuperado (draft persistente del wizard, spec §4.3).
+class _DraftBanner extends ConsumerWidget {
+  const _DraftBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final saved = ref.watch(savedDraftProvider).value;
+    final alreadyEditing = ref.watch(reviewDraftProvider) != null;
+    if (saved == null || alreadyEditing) return const SizedBox.shrink();
+
+    return MaterialBanner(
+      leading: const Icon(Icons.receipt_long_outlined),
+      content: Text(l10n.draftResumeTitle),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await ref.read(draftStoreProvider).clear();
+            ref.invalidate(savedDraftProvider);
+          },
+          child: Text(l10n.draftDiscard),
+        ),
+        FilledButton.tonal(
+          onPressed: () {
+            ref.read(reviewDraftProvider.notifier).loadFrom(saved);
+            context.push('/review');
+          },
+          child: Text(l10n.draftResume),
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionsList extends StatelessWidget {
+  const _SessionsList({required this.sessions});
+
+  final List<SessionSummary> sessions;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    // Archivadas al final (spec §4.1).
+    final visible = [
+      ...sessions.where((s) => s.status != SessionStatus.archived),
+      ...sessions.where((s) => s.status == SessionStatus.archived),
+    ];
+    final owedToMe = sessions
+        .where((s) =>
+            s.status == SessionStatus.open && s.myOutstanding.cents > 0)
+        .fold(0, (a, s) => a + s.myOutstanding.cents);
+    final iOwe = sessions
+        .where((s) =>
+            s.status == SessionStatus.open && s.myOutstanding.cents < 0)
+        .fold(0, (a, s) => a - s.myOutstanding.cents);
+
+    return ListView(
+      padding: const EdgeInsets.all(TokenSpacing.lg),
+      children: [
+        if (owedToMe > 0 || iOwe > 0) ...[
+          _TotalsHeader(owedToMe: Money(owedToMe), iOwe: Money(iOwe)),
+          const SizedBox(height: TokenSpacing.md),
+        ],
+        for (final session in visible)
+          _SessionCard(session: session, l10n: l10n),
+        const SizedBox(height: 88), // aire para el FAB
+      ],
+    );
+  }
+}
+
+class _TotalsHeader extends StatelessWidget {
+  const _TotalsHeader({required this.owedToMe, required this.iOwe});
+
+  final Money owedToMe;
+  final Money iOwe;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    Widget cell(String label, Money amount) => Expanded(
+          child: Column(children: [
+            Text(label, style: theme.textTheme.labelMedium),
+            Text(
+              formatMoney(amount),
+              style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()]),
+            ),
+          ]),
+        );
+    return Card(
+      color: theme.colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(TokenSpacing.lg),
+        child: Row(children: [
+          cell(l10n.summaryOwedToMe, owedToMe),
+          Container(
+              width: 1, height: 36, color: theme.colorScheme.outlineVariant),
+          cell(l10n.summaryIOwe, iOwe),
+        ]),
+      ),
+    );
+  }
+}
+
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({required this.session, required this.l10n});
+
+  final SessionSummary session;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final archived = session.status == SessionStatus.archived;
+    return Opacity(
+      opacity: archived ? 0.6 : 1,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(TokenRadius.card),
+          onTap: () => context.push('/session/${session.id}'),
+          child: Padding(
+            padding: const EdgeInsets.all(TokenSpacing.lg),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Row(children: [
+                Expanded(
+                  child: Text(session.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium),
+                ),
+                Text(
+                  formatMoney(session.grandTotal),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+              ]),
+              const SizedBox(height: TokenSpacing.xs),
+              Row(children: [
+                Text(l10n.sessionPeople(session.participantsCount),
+                    style: theme.textTheme.bodySmall),
+                const SizedBox(width: TokenSpacing.sm),
+                if (session.status == SessionStatus.closed)
+                  _chip(theme, l10n.statusClosed, Icons.lock_outline),
+                if (archived)
+                  _chip(theme, l10n.statusArchived, Icons.archive_outlined),
+              ]),
+              const SizedBox(height: TokenSpacing.sm),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: session.settledFraction,
+                  minHeight: 6,
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(ThemeData theme, String label, IconData icon) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 2),
+          Text(label, style: theme.textTheme.labelSmall),
+        ],
+      );
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(TokenSpacing.xl),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.receipt_long_outlined,
+              size: 64, color: theme.colorScheme.primary),
+          const SizedBox(height: TokenSpacing.lg),
+          Text(l10n.sessionsEmptyTitle, style: theme.textTheme.titleMedium),
+          const SizedBox(height: TokenSpacing.xs),
+          Text(l10n.sessionsEmptyBody,
+              style: theme.textTheme.bodySmall,
+              textAlign: TextAlign.center),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Skeleton del historial (spec §3.8): tarjetas fantasma, nunca spinner.
+class _SessionsSkeleton extends StatelessWidget {
+  const _SessionsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.surfaceContainerHighest;
+    return ListView(
+      padding: const EdgeInsets.all(TokenSpacing.lg),
+      children: [
+        for (var i = 0; i < 4; i++)
+          Card(
+            margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
+            child: Padding(
+              padding: const EdgeInsets.all(TokenSpacing.lg),
+              child: Column(children: [
+                Container(height: 16, color: color),
+                const SizedBox(height: TokenSpacing.sm),
+                Container(height: 10, color: color),
+              ]),
+            ),
+          ),
+      ],
     );
   }
 }
