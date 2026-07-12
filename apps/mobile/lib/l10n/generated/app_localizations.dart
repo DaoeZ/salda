@@ -693,6 +693,144 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Descartar'**
   String get draftDiscard;
+
+  /// No description provided for @settingsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Ajustes'**
+  String get settingsTitle;
+
+  /// No description provided for @settingsAppearance.
+  ///
+  /// In es, this message translates to:
+  /// **'Apariencia'**
+  String get settingsAppearance;
+
+  /// No description provided for @themeSystem.
+  ///
+  /// In es, this message translates to:
+  /// **'Sistema'**
+  String get themeSystem;
+
+  /// No description provided for @themeLight.
+  ///
+  /// In es, this message translates to:
+  /// **'Claro'**
+  String get themeLight;
+
+  /// No description provided for @themeDark.
+  ///
+  /// In es, this message translates to:
+  /// **'Oscuro'**
+  String get themeDark;
+
+  /// No description provided for @settingsPayments.
+  ///
+  /// In es, this message translates to:
+  /// **'Métodos de pago'**
+  String get settingsPayments;
+
+  /// No description provided for @settingsPaymentsHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Aparecen como botones de pago para tus invitados. Deja en blanco los que no uses.'**
+  String get settingsPaymentsHint;
+
+  /// No description provided for @paymentBizum.
+  ///
+  /// In es, this message translates to:
+  /// **'Bizum (teléfono)'**
+  String get paymentBizum;
+
+  /// No description provided for @paymentPaypal.
+  ///
+  /// In es, this message translates to:
+  /// **'PayPal (enlace paypal.me)'**
+  String get paymentPaypal;
+
+  /// No description provided for @paymentRevolut.
+  ///
+  /// In es, this message translates to:
+  /// **'Revolut (revtag)'**
+  String get paymentRevolut;
+
+  /// No description provided for @paymentIban.
+  ///
+  /// In es, this message translates to:
+  /// **'IBAN'**
+  String get paymentIban;
+
+  /// No description provided for @paymentsSaved.
+  ///
+  /// In es, this message translates to:
+  /// **'Métodos de pago guardados'**
+  String get paymentsSaved;
+
+  /// No description provided for @settingsPeople.
+  ///
+  /// In es, this message translates to:
+  /// **'Personas frecuentes'**
+  String get settingsPeople;
+
+  /// No description provided for @settingsPeopleEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Aparecerán aquí las personas con las que compartas cuentas.'**
+  String get settingsPeopleEmpty;
+
+  /// No description provided for @settingsBackup.
+  ///
+  /// In es, this message translates to:
+  /// **'Copia de seguridad'**
+  String get settingsBackup;
+
+  /// No description provided for @backupExport.
+  ///
+  /// In es, this message translates to:
+  /// **'Exportar todos los datos (JSON)'**
+  String get backupExport;
+
+  /// No description provided for @backupImport.
+  ///
+  /// In es, this message translates to:
+  /// **'Importar copia'**
+  String get backupImport;
+
+  /// No description provided for @settingsAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuenta'**
+  String get settingsAccount;
+
+  /// No description provided for @scanManualEntry.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto sin ticket'**
+  String get scanManualEntry;
+
+  /// No description provided for @manualTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto sin ticket'**
+  String get manualTitle;
+
+  /// No description provided for @manualConcept.
+  ///
+  /// In es, this message translates to:
+  /// **'Concepto'**
+  String get manualConcept;
+
+  /// No description provided for @manualAmount.
+  ///
+  /// In es, this message translates to:
+  /// **'Importe'**
+  String get manualAmount;
+
+  /// No description provided for @manualConceptHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Taxi, entradas, gasolina…'**
+  String get manualConceptHint;
 }
 
 class _AppLocalizationsDelegate

@@ -120,5 +120,30 @@
 
   "draftResumeTitle": "Tienes un ticket sin terminar",
   "draftResume": "Continuar",
-  "draftDiscard": "Descartar"
+  "draftDiscard": "Descartar",
+
+  "settingsTitle": "Ajustes",
+  "settingsAppearance": "Apariencia",
+  "themeSystem": "Sistema",
+  "themeLight": "Claro",
+  "themeDark": "Oscuro",
+  "settingsPayments": "Métodos de pago",
+  "settingsPaymentsHint": "Aparecen como botones de pago para tus invitados. Deja en blanco los que no uses.",
+  "paymentBizum": "Bizum (teléfono)",
+  "paymentPaypal": "PayPal (enlace paypal.me)",
+  "paymentRevolut": "Revolut (revtag)",
+  "paymentIban": "IBAN",
+  "paymentsSaved": "Métodos de pago guardados",
+  "settingsPeople": "Personas frecuentes",
+  "settingsPeopleEmpty": "Aparecerán aquí las personas con las que compartas cuentas.",
+  "settingsBackup": "Copia de seguridad",
+  "backupExport": "Exportar todos los datos (JSON)",
+  "backupImport": "Importar copia",
+  "settingsAccount": "Cuenta",
+
+  "scanManualEntry": "Gasto sin ticket",
+  "manualTitle": "Gasto sin ticket",
+  "manualConcept": "Concepto",
+  "manualAmount": "Importe",
+  "manualConceptHint": "Taxi, entradas, gasolina…"
 }

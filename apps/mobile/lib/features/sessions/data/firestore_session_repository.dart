@@ -121,6 +121,7 @@ class FirestoreSessionRepository implements SessionRepository {
       'splitModeDefault': input.splitModeDefault.name,
       'shareCode': shareCodeFactory(),
       'ownerParticipantId': 'p0',
+      'paymentMethodsSnapshot': input.paymentMethodsSnapshot,
       'computeVersion': 0,
       'totals': {'grandTotal': 0, 'settledConfirmed': 0, 'settledMarked': 0},
       'balances': const <String, Object?>{},

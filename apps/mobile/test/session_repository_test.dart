@@ -20,6 +20,7 @@ void main() {
   NewSessionInput input() => const NewSessionInput(
         name: 'Cena Casa Paco',
         splitModeDefault: SplitMode.byItem,
+        paymentMethodsSnapshot: {'bizumPhone': '612345678'},
         participantNames: ['Edgar', 'Alba', 'Lucía'],
         payerIndex: 1,
         ticket: NewTicketInput(
@@ -51,6 +52,8 @@ void main() {
     expect(session['ownerParticipantId'], 'p0');
     expect(session['computeVersion'], 0);
     expect(session['schemaVersion'], 1);
+    // RF-72: los métodos de pago se congelan en la sesión al crearla.
+    expect(session['paymentMethodsSnapshot'], {'bizumPhone': '612345678'});
 
     final participants = await firestore
         .collection('sessions/$sid/participants')

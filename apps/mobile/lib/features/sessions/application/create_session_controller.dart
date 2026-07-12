@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../people/data/frequent_people_repository.dart';
 import '../../review/application/draft_store.dart';
+import '../../settings/data/user_profile_repository.dart';
 import '../../review/application/review_draft.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
@@ -24,7 +25,11 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
     if (draft == null || participantNames.length < 2) return null;
     state = const AsyncLoading();
     try {
+      // Snapshot de métodos de pago (RF-72): congelado al crear.
+      final profile =
+          await ref.read(userProfileRepositoryProvider).fetch();
       final input = NewSessionInput(
+        paymentMethodsSnapshot: profile.paymentMethods.toSnapshot(),
         name: sessionName,
         splitModeDefault: splitMode,
         participantNames: participantNames,

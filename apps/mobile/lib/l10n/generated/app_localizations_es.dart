@@ -326,4 +326,75 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get draftDiscard => 'Descartar';
+
+  @override
+  String get settingsTitle => 'Ajustes';
+
+  @override
+  String get settingsAppearance => 'Apariencia';
+
+  @override
+  String get themeSystem => 'Sistema';
+
+  @override
+  String get themeLight => 'Claro';
+
+  @override
+  String get themeDark => 'Oscuro';
+
+  @override
+  String get settingsPayments => 'Métodos de pago';
+
+  @override
+  String get settingsPaymentsHint =>
+      'Aparecen como botones de pago para tus invitados. Deja en blanco los que no uses.';
+
+  @override
+  String get paymentBizum => 'Bizum (teléfono)';
+
+  @override
+  String get paymentPaypal => 'PayPal (enlace paypal.me)';
+
+  @override
+  String get paymentRevolut => 'Revolut (revtag)';
+
+  @override
+  String get paymentIban => 'IBAN';
+
+  @override
+  String get paymentsSaved => 'Métodos de pago guardados';
+
+  @override
+  String get settingsPeople => 'Personas frecuentes';
+
+  @override
+  String get settingsPeopleEmpty =>
+      'Aparecerán aquí las personas con las que compartas cuentas.';
+
+  @override
+  String get settingsBackup => 'Copia de seguridad';
+
+  @override
+  String get backupExport => 'Exportar todos los datos (JSON)';
+
+  @override
+  String get backupImport => 'Importar copia';
+
+  @override
+  String get settingsAccount => 'Cuenta';
+
+  @override
+  String get scanManualEntry => 'Gasto sin ticket';
+
+  @override
+  String get manualTitle => 'Gasto sin ticket';
+
+  @override
+  String get manualConcept => 'Concepto';
+
+  @override
+  String get manualAmount => 'Importe';
+
+  @override
+  String get manualConceptHint => 'Taxi, entradas, gasolina…';
 }

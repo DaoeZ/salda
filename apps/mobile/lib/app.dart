@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/routing/router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
 import 'l10n/generated/app_localizations.dart';
 
 /// Raíz de la aplicación. El nombre visible procede del branding generado
@@ -17,7 +18,7 @@ class SaldaApp extends ConsumerWidget {
       title: Brand.appName,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system, // selector manual en Ajustes (M5)
+      themeMode: ref.watch(themeControllerProvider),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: ref.watch(appRouterProvider),

@@ -7,9 +7,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
-import '../auth/data/auth_repository.dart';
 import '../review/application/draft_store.dart';
 import '../review/application/review_draft.dart';
+import '../scan/application/manual_expense.dart';
 import '../scan/application/scan_service.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session_models.dart';
@@ -64,9 +64,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _scan(ImageSource.gallery);
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.edit_note_outlined),
+            title: Text(l10n.scanManualEntry),
+            onTap: () {
+              Navigator.pop(context);
+              _manualEntry();
+            },
+          ),
         ]),
       ),
     );
+  }
+
+  Future<void> _manualEntry() async {
+    final l10n = AppLocalizations.of(context);
+    final concept = TextEditingController();
+    final amount = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.manualTitle),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: concept,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              labelText: l10n.manualConcept,
+              hintText: l10n.manualConceptHint,
+            ),
+          ),
+          const SizedBox(height: TokenSpacing.md),
+          TextField(
+            controller: amount,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+                labelText: l10n.manualAmount, suffixText: '€'),
+          ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n.commonCancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l10n.commonContinue)),
+        ],
+      ),
+    );
+    final money = parseUserMoney(amount.text);
+    if (confirmed != true || concept.text.trim().isEmpty || money == null) {
+      return;
+    }
+    if (!mounted) return;
+    ref.read(reviewDraftProvider.notifier).loadFrom(manualExpenseExtraction(
+          concept: concept.text.trim(),
+          amount: money,
+          date: DateTime.now(),
+        ));
+    context.push('/review');
   }
 
   @override
@@ -79,9 +136,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: const Text(Brand.appName),
         actions: [
           IconButton(
-            tooltip: l10n.signOut,
-            onPressed: () => ref.read(authRepositoryProvider).signOut(),
-            icon: const Icon(Icons.logout),
+            tooltip: l10n.settingsTitle,
+            onPressed: () => context.push('/settings'),
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
         bottom: _scanning

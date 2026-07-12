@@ -179,6 +179,7 @@ class NewSessionInput {
     this.payerIndex = 0,
     required this.ticket,
     this.accountName,
+    this.paymentMethodsSnapshot = const {},
   });
 
   final String name;
@@ -190,4 +191,8 @@ class NewSessionInput {
   final int payerIndex;
   final NewTicketInput ticket;
   final String? accountName;
+
+  /// Snapshot de métodos de pago del anfitrión (RF-72): se congela al crear
+  /// para que cambios futuros del perfil no alteren cuentas ya compartidas.
+  final Map<String, String> paymentMethodsSnapshot;
 }

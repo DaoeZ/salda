@@ -7,6 +7,7 @@ import '../../features/home/home_screen.dart';
 import '../../features/review/presentation/review_screen.dart';
 import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 
 /// Rutas de la app (ESPECIFICACION.md §4.3) con guardia de autenticación.
 /// El router se reconstruye al cambiar el estado de auth (patrón Riverpod);
@@ -27,6 +28,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/review', builder: (_, _) => const ReviewScreen()),
+      GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(
         path: '/session/:sid',
         builder: (_, state) =>
