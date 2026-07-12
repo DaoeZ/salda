@@ -66,5 +66,28 @@ jobs:
       - run: npm ci
       - run: npm test # compila y ejecuta los vectores dorados (paridad con Dart)
 
-  # Los tests de reglas de Firestore contra la Emulator Suite se añaden en M3
-  # (job "rules" con firebase emulators:exec). Ver CLAUDE.md.
+  rules:
+    name: Reglas de Firestore (Emulator Suite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/firestore/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Cache del emulador de Firestore
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+      - run: npm install -g firebase-tools
+      - run: npm ci --prefix backend/firestore
+      - name: Tests de la matriz de autorización (spec §13.2)
+        run: >
+          firebase emulators:exec --only firestore --project demo-salda
+          "npm --prefix backend/firestore test"

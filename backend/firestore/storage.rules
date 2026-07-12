@@ -1,10 +1,22 @@
 rules_version = '2';
 
-// M0: denegación total por defecto. En M3/M4 se abre únicamente
-// receipts/{sessionId}/** para owner (R/W) e invitados con shareCode (R),
-// en espejo de las reglas de Firestore (spec §13.2).
+// Espejo de la política de Firestore para las fotos de tickets:
+// owner de la sesión = lectura/escritura; invitado con guestAccess = lectura.
+// Límites: JPEG, ≤ 2 MB (la app sube original ≤1600px q80 + thumb 300px).
 service firebase.storage {
   match /b/{bucket}/o {
+
+    match /receipts/{sid}/{tid}/{file} {
+      allow read: if request.auth != null && (
+        firestore.get(/databases/(default)/documents/sessions/$(sid)).data.ownerUid == request.auth.uid
+        || firestore.exists(/databases/(default)/documents/sessions/$(sid)/guestAccess/$(request.auth.uid))
+      );
+      allow write: if request.auth != null
+        && firestore.get(/databases/(default)/documents/sessions/$(sid)).data.ownerUid == request.auth.uid
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/jpeg');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

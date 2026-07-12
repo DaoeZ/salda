@@ -1,15 +1,15 @@
 /**
  * Cloud Functions v2 — región europe-west1, minInstances 0, maxInstances 3
- * (límites de coste de la spec §12.4).
+ * (techos de coste de la spec §12.4: NO subirlos sin consultar al usuario).
  *
- * Tres funciones y solo tres (spec §12.2), implementadas en M3:
- *  - recompute: calculadora autoritativa de totales/balances/liquidaciones.
- *    Motor TS validado contra los mismos vectores dorados que packages/domain.
- *  - notify:    FCM al anfitrión en pending→marked y "todos pagados".
- *  - cleanup:   borrado en cascada (subcolecciones + imágenes de Storage).
- *
- * M0: sin funciones desplegables todavía; este módulo compila vacío.
+ * Tres funciones conceptuales (spec §12.2):
+ *  - recompute: calculadora autoritativa (3 triggers → mismo recálculo).
+ *  - notify:    FCM al anfitrión.
+ *  - cleanup:   borrado en cascada de sesiones.
+ * Los agregados que escribe recompute son solo-lectura para los clientes
+ * (lo garantizan las reglas); el Admin SDK las ignora por diseño.
  */
+import { initializeApp } from 'firebase-admin/app';
 import { setGlobalOptions } from 'firebase-functions/v2';
 
 setGlobalOptions({
@@ -18,3 +18,13 @@ setGlobalOptions({
   minInstances: 0,
   maxInstances: 3,
 });
+
+initializeApp();
+
+export {
+  recomputeOnLine,
+  recomputeOnParticipant,
+  recomputeOnTicket,
+} from './recompute.js';
+export { notifyOnSettlement } from './notify.js';
+export { cleanupOnSessionDelete } from './cleanup.js';

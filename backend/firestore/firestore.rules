@@ -1,12 +1,206 @@
 rules_version = '2';
 
-// M0: denegación total por defecto. La matriz de autorización real
-// (ESPECIFICACION.md §13.2) se implementa y testea en M3 con la Emulator Suite.
-// Regla de oro del proyecto: solo `allow` explícitos, nunca aperturas amplias.
+// Matriz de autorización de ESPECIFICACION.md §13.2.
+// Política: denegación por defecto; SOLO allow explícitos.
+//
+// Mecanismo de invitados (conocimiento del shareCode, validable en reglas):
+//  1. El invitado (Auth anónimo) crea sessions/{sid}/guestAccess/{su uid}
+//     incluyendo el shareCode; la regla lo compara con el de la sesión.
+//  2. Todas sus lecturas posteriores se autorizan con exists(guestAccess).
+//  Regenerar el shareCode + borrar guestAccess (owner) revoca el acceso.
+//
+// Escrituras de invitado, quirúrgicas y validadas campo a campo:
+//  - participants: SOLO claimedByDevice (reclamar nombre libre / liberar el suyo).
+//  - lines: SOLO su propia entrada en assignment.participants (modo byItem,
+//    sesión abierta). El cliente declara assignment.lastEditorPid y la regla
+//    verifica que (a) solo cambió esa clave y (b) ese pid está reclamado por él.
+//  - settlements: SOLO pending→marked en liquidaciones donde él es `from`.
+//
+// Agregados (totals/balances/computeVersion) son SOLO-LECTURA para todos los
+// clientes: los escribe la function recompute vía Admin SDK (ignora reglas).
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function sessionData(sid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)).data;
+    }
+
+    function isOwner(sid) {
+      return signedIn() && sessionData(sid).ownerUid == request.auth.uid;
+    }
+
+    function isOpen(sid) {
+      return sessionData(sid).status == 'open';
+    }
+
+    function hasGuestAccess(sid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/sessions/$(sid)/guestAccess/$(request.auth.uid));
+    }
+
+    function canRead(sid) {
+      return isOwner(sid) || hasGuestAccess(sid);
+    }
+
+    function claimedBy(sid, pid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)/participants/$(pid))
+        .data.get('claimedByDevice', '');
+    }
+
+    // ── Perfil privado del anfitrión ────────────────────────────────────
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+
+      match /frequentPeople/{personId} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // ── Sesiones ────────────────────────────────────────────────────────
+    match /sessions/{sid} {
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.kind in ['single', 'multi']
+        && request.resource.data.status == 'open'
+        && request.resource.data.splitModeDefault in ['equal', 'byItem']
+        && request.resource.data.shareCode is string
+        && request.resource.data.shareCode.size() >= 16
+        // Agregados: o ausentes o a cero; a partir de aquí, solo la function.
+        && request.resource.data.get('computeVersion', 0) == 0;
+
+      // list del owner (query where ownerUid==uid) y get de invitados.
+      allow read: if (signedIn() && resource.data.ownerUid == request.auth.uid)
+        || hasGuestAccess(sid);
+
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['ownerUid', 'totals', 'balances', 'computeVersion'])
+        && (
+          // Abierta: cualquier edición de contenido.
+          resource.data.status == 'open'
+          // Cerrada/archivada: solo reabrir/archivar (cambio de estado).
+          || request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'closedAt', 'updatedAt'])
+        );
+
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      // ── Acceso de invitados (prueba de conocimiento del shareCode) ────
+      match /guestAccess/{uid} {
+        allow read: if isOwner(sid) || (signedIn() && request.auth.uid == uid);
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && isOpen(sid)
+          && request.resource.data.shareCode == sessionData(sid).shareCode;
+        // Owner revoca (liberar dispositivo); el invitado puede salirse.
+        allow delete: if isOwner(sid) || (signedIn() && request.auth.uid == uid);
+        allow update: if false;
+      }
+
+      // ── Participantes ──────────────────────────────────────────────────
+      match /participants/{pid} {
+        allow read: if canRead(sid);
+        allow create, delete: if isOwner(sid) && isOpen(sid);
+        allow update: if
+          (isOwner(sid) && isOpen(sid))
+          || (
+            hasGuestAccess(sid) && isOpen(sid)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['claimedByDevice'])
+            && (
+              // Reclamar un nombre libre (o re-reclamar el suyo).
+              (request.resource.data.get('claimedByDevice', '') == request.auth.uid
+                && resource.data.get('claimedByDevice', '') in ['', request.auth.uid])
+              // Liberar SU propio nombre.
+              || (resource.data.get('claimedByDevice', '') == request.auth.uid
+                && request.resource.data.get('claimedByDevice', '') == '')
+            )
+          );
+      }
+
+      // ── Cuentas ────────────────────────────────────────────────────────
+      match /accounts/{aid} {
+        allow read: if canRead(sid);
+        allow create: if isOwner(sid) && isOpen(sid)
+          && !('totals' in request.resource.data);
+        allow update: if isOwner(sid) && isOpen(sid)
+          && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['totals']);
+        allow delete: if isOwner(sid) && isOpen(sid);
+
+        match /tickets/{tid} {
+          allow read: if canRead(sid);
+          allow create, update: if isOwner(sid) && isOpen(sid)
+            && request.resource.data.grandTotal is int
+            && request.resource.data.paidByParticipantId is string;
+          allow delete: if isOwner(sid) && isOpen(sid);
+
+          match /lines/{lid} {
+            allow read: if canRead(sid);
+            allow create, delete: if isOwner(sid) && isOpen(sid);
+            allow update: if (isOwner(sid) && isOpen(sid))
+              || guestCanEditLine(sid, aid, tid);
+          }
+        }
+      }
+
+      // ── Liquidaciones: SOLO las crea/borra la function ────────────────
+      match /settlements/{stid} {
+        allow read: if canRead(sid);
+        allow create, delete: if false;
+        allow update: if isOpen(sid)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['state', 'stateHistory', 'updatedAt'])
+          && (
+            // Owner: cualquier transición entre estados válidos.
+            (isOwner(sid)
+              && request.resource.data.state in ['pending', 'marked', 'confirmed'])
+            // Invitado deudor: SOLO pending → marked en las suyas.
+            || (hasGuestAccess(sid)
+              && resource.data.state == 'pending'
+              && request.resource.data.state == 'marked'
+              && claimedBy(sid, resource.data.from) == request.auth.uid)
+          );
+      }
+
+      // ── Feed de actividad: append-only ─────────────────────────────────
+      match /activity/{eid} {
+        allow read: if canRead(sid);
+        allow create: if (isOwner(sid) || hasGuestAccess(sid))
+          && isOpen(sid)
+          && request.resource.data.keys().hasAll(['type', 'at']);
+        allow update, delete: if false;
+      }
+    }
+
+    // Autoasignación de línea por invitado (ver cabecera del archivo).
+    function guestCanEditLine(sid, aid, tid) {
+      let session = sessionData(sid);
+      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+      let editor = request.resource.data.assignment.get('lastEditorPid', '');
+      let oldParts = resource.data.assignment.get('participants', {});
+      let newParts = request.resource.data.assignment.get('participants', {});
+      return hasGuestAccess(sid)
+        && session.status == 'open'
+        && mode == 'byItem'
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['assignment'])
+        // Solo cambió SU entrada del mapa de participantes…
+        && editor != ''
+        && newParts.diff(oldParts).affectedKeys().hasOnly([editor])
+        // …con peso 1 si se añade (los pesos distintos los pone el owner)…
+        && newParts.get(editor, 1) == 1
+        // …el pid editado está reclamado por este dispositivo…
+        && claimedBy(sid, editor) == request.auth.uid
+        // …y un invitado no puede convertir la línea en "todos".
+        && request.resource.data.assignment.type in ['unassigned', 'one', 'shared'];
     }
   }
 }
