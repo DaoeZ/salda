@@ -29,7 +29,16 @@ cleanup) están implementadas y testeadas.
 
 **Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ · M4 código ✅ (E2E vs emulador) ·
 M5 código ✅ (salvo lo intrínsecamente de dispositivo: recordatorios con notificaciones,
-haptics reales, import de PDF con render nativo y captura guiada) · M6 IA ⬜ (en curso) ·
+haptics reales, import de PDF con render nativo y captura guiada) · M6 IA: paquete
+ai_providers COMPLETO (contrato+prompt canónico+parseAiResponse con validación de
+cuadre; adaptadores Claude/Gemini/OpenAI-compatible; OpenAI/DeepSeek/GLM/OpenRouter como
+PRESETS del genérico con base URL fija; registry; tests con Dio adapter falso).
+PENDIENTE del M6 (siguiente trabajo): lado app — flutter_secure_storage tras interfaz
+SecretStore (keys solo dispositivo, RF-32), pantalla Ajustes→Proveedores de IA (config
+por proveedor: key/baseURL/modelo + "Probar conexión" OBLIGATORIO antes de guardar
+RF-31), y conectar el botón "Analizar con IA" de la revisión (necesita conservar la
+ruta de la última imagen escaneada — ScanService hoy la descarta; guardarla en un
+provider al escanear) con reintento único citando el error si badResponse. ·
 Pendiente de usuario: proyectos Firebase reales, Android Studio/dispositivo, App Check.
 
 **M5 realizado:** Ajustes (tema persistido, métodos de pago en users/{uid} +

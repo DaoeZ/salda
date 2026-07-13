@@ -1,9 +1,11 @@
 /// Sistema modular de proveedores de IA (ESPECIFICACION.md §9).
 ///
-/// Contrato `AiReceiptProvider` + registro con orden de preferencia y
-/// fallback. Las API keys NUNCA pasan por este paquete en reposo: se
-/// inyectan por llamada desde el almacenamiento seguro del dispositivo.
-///
-/// Se implementa en M6 (el contrato de datos `ReceiptExtraction` queda
-/// fijado antes, en M2, dentro de `domain`).
+/// La IA es SIEMPRE el último recurso (DC-13): nunca se ejecuta sin acción
+/// explícita del usuario. Las API keys nunca pasan por este paquete en
+/// reposo: se inyectan por llamada desde el almacenamiento seguro.
 library;
+
+export 'src/contract.dart';
+export 'src/prompt.dart' show extractionPrompt, parseAiResponse;
+export 'src/providers.dart';
+export 'src/registry.dart';
