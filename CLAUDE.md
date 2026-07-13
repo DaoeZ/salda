@@ -4,6 +4,11 @@
 > retome el proyecto sin haber visto las conversaciones anteriores. Léelo entero antes
 > de tocar código. La especificación `docs/ESPECIFICACION.md` v2.0 es **definitiva y
 > congelada** y manda sobre este resumen.
+>
+> **Existe además `docs/BIBLIA_SALDA.md`** — la referencia estratégica y técnica
+> definitiva: visión de producto vigente (centrada en GRUPOS), ADRs, Contrato del
+> Proyecto, lista negra, checklists, métricas, roadmap R1–R4 y postmortems.
+> **Orden de lectura obligatorio: este archivo → ESPECIFICACION.md → BIBLIA_SALDA.md.**
 
 ---
 

@@ -3,6 +3,10 @@
 **Versión:** 2.0 — **DEFINITIVA Y CONGELADA** · **Fecha:** 2026-07-09
 **Estado:** Referencia oficial del proyecto. Todo el desarrollo posterior respeta este documento. Cambios futuros requieren una revisión de versión explícita (2.1, 3.0…).
 
+> **Ver también `docs/BIBLIA_SALDA.md`** — referencia estratégica y técnica definitiva
+> (visión de producto vigente, ADRs, contrato del proyecto, roadmap y el registro de
+> inconsistencias donde la implementación real matizó puntos de esta spec).
+
 > Historial: v1.0 (2026-07-09) especificación inicial de Fase 1. v2.0 incorpora: filosofía de coste 1–5 €/mes, **Sesiones** como concepto superior a las cuentas, multi-pagador y simplificación de deudas, web de invitados ligera (sustituye a Flutter Web), Cloud Functions como calculadora autoritativa, proveedor de IA genérico OpenAI-compatible, guía de diseño completa, backups JSON, y revisiones de UX, rendimiento y seguridad.
 
 ---
