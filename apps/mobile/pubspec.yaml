@@ -22,15 +22,20 @@ dependencies:
   image_picker: ^1.2.3
   google_mlkit_text_recognition: ^0.16.0
   intl: ^0.20.2
-  firebase_core: ^4.11.0
-  firebase_auth: ^6.5.4
-  cloud_firestore: ^6.6.0
+  # PINNED (2026-07-14): FlutterFire publicó un lote desincronizado —
+  # firestore 6.7.0 / auth 6.5.5 / storage 13.4.4 referencian FirebasePlugin,
+  # que no existe en ningún firebase_core publicado (último: 4.12.0).
+  # Conjunto alineado conocido-bueno; despinear cuando salga core 4.13+.
+  firebase_core: 4.11.0
+  firebase_auth: 6.5.4
+  cloud_firestore: 6.6.0
   qr_flutter: ^4.1.0
   share_plus: ^13.2.0
   shared_preferences: ^2.5.5
   file_selector: ^1.1.0
   pdf: ^3.13.0
   flutter_secure_storage: ^10.3.1
+  firebase_storage: 13.4.3
 
 dev_dependencies:
   flutter_test:

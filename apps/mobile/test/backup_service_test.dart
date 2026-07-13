@@ -26,7 +26,7 @@ void main() {
       uid: () => 'owner',
       shareCodeFactory: () => 'ORIGINAL-CODE-123456',
     );
-    final sid = await repo.createSession(const NewSessionInput(
+    final created = await repo.createSession(const NewSessionInput(
       name: 'Viaje',
       splitModeDefault: SplitMode.byItem,
       participantNames: ['Edgar', 'Alba'],
@@ -39,6 +39,7 @@ void main() {
         lines: [NewLineInput(name: 'Noche', totalPrice: Money(10000))],
       ),
     ));
+    final sid = created.sessionId;
     await firestore.doc('sessions/$sid/settlements/st1').set({
       'from': 'p1', 'to': 'p0', 'amount': 5000, 'state': 'confirmed',
     });

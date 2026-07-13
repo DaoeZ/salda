@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../ai/application/ai_analysis_controller.dart'
+    show lastScanImageProvider;
 import '../../review/application/draft_store.dart';
 import '../../review/application/review_draft.dart';
+import '../../scan/data/receipt_storage.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
 
@@ -56,11 +61,19 @@ class AddTicketController extends Notifier<AsyncValue<void>> {
     if (draft == null) return false;
     state = const AsyncLoading();
     try {
-      await ref.read(sessionRepositoryProvider).addTicket(
+      final ticketPath = await ref.read(sessionRepositoryProvider).addTicket(
             sessionId,
             ticketInputFromDraft(draft),
             payerPid: payerPid,
           );
+      final imagePath = ref.read(lastScanImageProvider);
+      if (imagePath != null && draft.engine != 'manual') {
+        unawaited(ref.read(receiptStorageProvider).uploadOriginal(
+              sessionId: sessionId,
+              ticketPath: ticketPath,
+              localImagePath: imagePath,
+            ));
+      }
       ref.read(reviewDraftProvider.notifier).discard();
       ref.invalidate(savedDraftProvider);
       ref.read(addTicketTargetProvider.notifier).set(null);

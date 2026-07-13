@@ -8,17 +8,18 @@ import '../../features/home/home_screen.dart';
 import '../../features/review/presentation/review_screen.dart';
 import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
+import '../../features/sessions/presentation/ticket_detail_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 
-/// Rutas de la app (ESPECIFICACION.md §4.3) con guardia de autenticación.
-/// El router se reconstruye al cambiar el estado de auth (patrón Riverpod);
-/// a esta escala es más simple y seguro que refreshListenable.
+/// Rutas ANIDADAS bajo /home: navegar con go() a cualquier destino construye
+/// la pila completa (home debajo), así SIEMPRE hay "atrás" y nunca se queda
+/// el flujo atrapado (bug 4 del MVP: go() a rutas planas vaciaba la pila).
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authStateProvider);
   return GoRouter(
     initialLocation: '/home',
     redirect: (context, state) {
-      if (auth.isLoading) return null; // aún restaurando la sesión
+      if (auth.isLoading) return null;
       final loggedIn = auth.value != null;
       final atLogin = state.matchedLocation == '/login';
       if (!loggedIn && !atLogin) return '/login';
@@ -27,21 +28,39 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
-      GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
-      GoRoute(path: '/review', builder: (_, _) => const ReviewScreen()),
-      GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(
-          path: '/settings/ai',
-          builder: (_, _) => const AiProvidersScreen()),
-      GoRoute(
-        path: '/session/:sid',
-        builder: (_, state) =>
-            SessionDetailScreen(sessionId: state.pathParameters['sid']!),
-      ),
-      GoRoute(
-        path: '/session/:sid/share',
-        builder: (_, state) =>
-            ShareScreen(sessionId: state.pathParameters['sid']!),
+        path: '/home',
+        builder: (_, _) => const HomeScreen(),
+        routes: [
+          GoRoute(
+              path: 'review', builder: (_, _) => const ReviewScreen()),
+          GoRoute(
+            path: 'settings',
+            builder: (_, _) => const SettingsScreen(),
+            routes: [
+              GoRoute(
+                  path: 'ai',
+                  builder: (_, _) => const AiProvidersScreen()),
+            ],
+          ),
+          GoRoute(
+            path: 'session/:sid',
+            builder: (_, state) =>
+                SessionDetailScreen(sessionId: state.pathParameters['sid']!),
+            routes: [
+              GoRoute(
+                path: 'share',
+                builder: (_, state) =>
+                    ShareScreen(sessionId: state.pathParameters['sid']!),
+              ),
+              GoRoute(
+                path: 'ticket',
+                builder: (_, state) => TicketDetailScreen(
+                    ticket: state.extra! as TicketRef),
+              ),
+            ],
+          ),
+        ],
       ),
     ],
   );

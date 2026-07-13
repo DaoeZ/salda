@@ -387,6 +387,22 @@ class AppLocalizationsEs extends AppLocalizations {
   String get menuAddTicket => 'Añadir ticket';
 
   @override
+  String ticketPaidBy(String name) {
+    return 'Pagó $name';
+  }
+
+  @override
+  String get ticketNoPhoto => 'Este ticket no tiene foto guardada.';
+
+  @override
+  String get ticketNoLines => 'Sin desglose de productos (gasto manual).';
+
+  @override
+  String historyConfirmedTitle(int count) {
+    return 'Pagos confirmados ($count)';
+  }
+
+  @override
   String get menuExportPdf => 'Exportar PDF';
 
   @override

@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
-import '../application/ai_analysis_controller.dart';
+import '../application/ai_analysis_controller.dart'
+    show aiAvailableProvider, aiRegistryProvider;
 import '../data/ai_config_store.dart';
 
 /// Ajustes → Proveedores de IA (RF-30/31/32): configurar clave/URL/modelo,
@@ -28,6 +29,8 @@ class _AiProvidersScreenState extends ConsumerState<AiProvidersScreen> {
   }
 
   Future<void> _refresh() async {
+    // El botón "Analizar con IA" de la revisión depende de este estado.
+    ref.invalidate(aiAvailableProvider);
     final store = ref.read(aiConfigStoreProvider);
     final registry = ref.read(aiRegistryProvider);
     final configured = <String, bool>{};

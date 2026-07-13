@@ -9,8 +9,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../review/application/review_draft.dart';
 import '../data/ai_config_store.dart';
 
-final aiRegistryProvider =
-    Provider<AiProviderRegistry>((ref) => AiProviderRegistry.standard(Dio()));
+final aiRegistryProvider = Provider<AiProviderRegistry>(
+  (ref) => AiProviderRegistry.standard(Dio(BaseOptions(
+    // Sin timeouts, una red caída dejaba el botón de IA colgado para siempre.
+    connectTimeout: const Duration(seconds: 15),
+    sendTimeout: const Duration(seconds: 60),
+    receiveTimeout: const Duration(seconds: 120),
+  ))),
+);
 
 /// Ruta de la última imagen escaneada: la IA la necesita como entrada.
 class LastScanImage extends Notifier<String?> {
@@ -24,7 +30,10 @@ final lastScanImageProvider =
     NotifierProvider<LastScanImage, String?>(LastScanImage.new);
 
 /// ¿Hay algún proveedor configurado? Habilita el botón de la revisión.
-final aiAvailableProvider = FutureProvider<bool>((ref) async {
+/// autoDispose + invalidación al guardar (bug del MVP: sin esto, un `false`
+/// calculado antes de configurar el proveedor quedaba cacheado para siempre
+/// y el botón de IA permanecía muerto).
+final aiAvailableProvider = FutureProvider.autoDispose<bool>((ref) async {
   final registry = ref.watch(aiRegistryProvider);
   final preferred = await ref
       .watch(aiConfigStoreProvider)

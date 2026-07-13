@@ -808,6 +808,30 @@ abstract class AppLocalizations {
   /// **'Añadir ticket'**
   String get menuAddTicket;
 
+  /// No description provided for @ticketPaidBy.
+  ///
+  /// In es, this message translates to:
+  /// **'Pagó {name}'**
+  String ticketPaidBy(String name);
+
+  /// No description provided for @ticketNoPhoto.
+  ///
+  /// In es, this message translates to:
+  /// **'Este ticket no tiene foto guardada.'**
+  String get ticketNoPhoto;
+
+  /// No description provided for @ticketNoLines.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin desglose de productos (gasto manual).'**
+  String get ticketNoLines;
+
+  /// No description provided for @historyConfirmedTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Pagos confirmados ({count})'**
+  String historyConfirmedTitle(int count);
+
   /// No description provided for @menuExportPdf.
   ///
   /// In es, this message translates to:

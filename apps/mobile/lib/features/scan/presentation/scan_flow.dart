@@ -77,7 +77,7 @@ Future<void> _scanToReview(
     }
     ref.read(lastScanImageProvider.notifier).set(result.imagePath);
     ref.read(reviewDraftProvider.notifier).loadFrom(result.extraction);
-    context.push('/review');
+    context.push('/home/review');
   } finally {
     onBusy?.call(false);
   }
@@ -130,5 +130,5 @@ Future<void> _manualToReview(BuildContext context, WidgetRef ref) async {
         amount: money,
         date: DateTime.now(),
       ));
-  context.push('/review');
+  context.push('/home/review');
 }

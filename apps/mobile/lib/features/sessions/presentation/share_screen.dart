@@ -83,7 +83,7 @@ class ShareScreen extends ConsumerWidget {
               ]),
               const SizedBox(height: TokenSpacing.md),
               TextButton(
-                onPressed: () => context.go('/session/$sessionId'),
+                onPressed: () => context.go('/home/session/$sessionId'),
                 child: Text(l10n.commonDone),
               ),
             ]),

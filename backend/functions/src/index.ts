@@ -24,6 +24,7 @@ initializeApp();
 export {
   recomputeOnLine,
   recomputeOnParticipant,
+  recomputeOnSettlement,
   recomputeOnTicket,
 } from './recompute.js';
 export { notifyOnSettlement } from './notify.js';

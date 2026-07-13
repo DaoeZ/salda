@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:domain/domain.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../ai/application/ai_analysis_controller.dart'
+    show lastScanImageProvider;
 import '../../auth/data/auth_repository.dart';
 import '../../people/data/frequent_people_repository.dart';
 import '../../review/application/draft_store.dart';
 import '../../review/application/review_draft.dart';
+import '../../scan/data/receipt_storage.dart';
 import '../../settings/data/user_profile_repository.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
@@ -37,8 +42,17 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
         payerIndex: payerIndex,
         ticket: ticketInputFromDraft(draft, fallbackName: sessionName),
       );
-      final sid =
+      final created =
           await ref.read(sessionRepositoryProvider).createSession(input);
+      // Foto del ticket a Storage (best-effort, no bloquea el flujo).
+      final imagePath = ref.read(lastScanImageProvider);
+      if (imagePath != null && draft.engine != 'manual') {
+        unawaited(ref.read(receiptStorageProvider).uploadOriginal(
+              sessionId: created.sessionId,
+              ticketPath: created.ticketPath,
+              localImagePath: imagePath,
+            ));
+      }
       // Personas frecuentes: todas menos el anfitrión (índice 0).
       await ref
           .read(frequentPeopleRepositoryProvider)
@@ -46,8 +60,8 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
       // El borrador ya está a salvo en Firestore: fuera de la persistencia.
       ref.read(reviewDraftProvider.notifier).discard();
       ref.invalidate(savedDraftProvider);
-      state = AsyncData(sid);
-      return sid;
+      state = AsyncData(created.sessionId);
+      return created.sessionId;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
       return null;

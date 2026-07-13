@@ -17,11 +17,19 @@ import 'line_edit_sheet.dart';
 /// Pantalla de revisión del ticket (ESPECIFICACION.md §2.1 paso 3):
 /// todo editable, validación de cuadre en vivo, banner con las tres
 /// opciones en orden cuando hay dudas (DC-4: la IA siempre la última).
-class ReviewScreen extends ConsumerWidget {
+class ReviewScreen extends ConsumerStatefulWidget {
   const ReviewScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReviewScreen> createState() => _ReviewScreenState();
+}
+
+class _ReviewScreenState extends ConsumerState<ReviewScreen> {
+  /// "Editar a mano" descarta el aviso: el usuario toma el control.
+  bool _bannerDismissed = false;
+
+  @override
+  Widget build(BuildContext context) {
     final draft = ref.watch(reviewDraftProvider);
     final l10n = AppLocalizations.of(context);
     if (draft == null) {
@@ -35,7 +43,11 @@ class ReviewScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(TokenSpacing.lg),
         children: [
-          if (draft.needsAttention) _AttentionBanner(l10n: l10n),
+          if (draft.needsAttention && !_bannerDismissed)
+            _AttentionBanner(
+              l10n: l10n,
+              onEditManually: () => setState(() => _bannerDismissed = true),
+            ),
           _HeaderCard(draft: draft),
           const SizedBox(height: TokenSpacing.lg),
           Text(l10n.reviewLines, style: theme.textTheme.titleMedium),
@@ -73,7 +85,7 @@ class ReviewScreen extends ConsumerWidget {
                         .read(addTicketControllerProvider.notifier)
                         .addToSession(target, payerPid: payer);
                     if (added && context.mounted) {
-                      context.go('/session/$target');
+                      context.go('/home/session/$target');
                     }
                   },
             child: Text(l10n.commonContinue),
@@ -85,9 +97,10 @@ class ReviewScreen extends ConsumerWidget {
 }
 
 class _AttentionBanner extends ConsumerWidget {
-  const _AttentionBanner({required this.l10n});
+  const _AttentionBanner({required this.l10n, required this.onEditManually});
 
   final AppLocalizations l10n;
+  final VoidCallback onEditManually;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -114,7 +127,7 @@ class _AttentionBanner extends ConsumerWidget {
                 label: Text(l10n.reviewRetake),
               ),
               FilledButton.tonalIcon(
-                onPressed: () {}, // editar = esta misma pantalla
+                onPressed: onEditManually, // descarta el aviso (bug 3 MVP)
                 icon: const Icon(Icons.edit_outlined, size: 18),
                 label: Text(l10n.reviewEditManually),
               ),

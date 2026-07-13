@@ -16,16 +16,26 @@ abstract interface class SessionRepository {
   Stream<List<Settlement>> watchSettlements(String sessionId);
 
   /// Crea la sesión completa desde la revisión de un ticket.
-  /// Devuelve el id de la sesión creada.
-  Future<String> createSession(NewSessionInput input);
+  /// Devuelve el id de la sesión y la ruta del ticket (para subir su foto).
+  Future<({String sessionId, String ticketPath})> createSession(
+      NewSessionInput input);
 
   /// Añade un ticket como cuenta nueva de una sesión existente.
   /// Con la segunda cuenta, la sesión pasa a `kind: multi`.
-  Future<void> addTicket(
+  /// Devuelve la ruta del ticket creado.
+  Future<String> addTicket(
     String sessionId,
     NewTicketInput ticket, {
     required String payerPid,
   });
+
+  Stream<List<SessionTicket>> watchTickets(String sessionId, String accountId);
+
+  /// Líneas de un ticket (lectura puntual para el detalle).
+  Future<List<LineExport>> fetchTicketLines(String ticketPath);
+
+  /// Registra la ruta de Storage de la foto del ticket.
+  Future<void> setTicketImage(String ticketPath, String storagePath);
 
   Future<void> updateSettlementState(
     String sessionId,

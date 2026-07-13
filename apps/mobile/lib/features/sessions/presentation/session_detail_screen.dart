@@ -13,6 +13,7 @@ import '../application/session_export.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
+import 'ticket_detail_screen.dart';
 
 /// Detalle de sesión: Resumen (balances + liquidaciones) · Cuentas · Actividad.
 /// Los importes vienen de los agregados autoritativos de la function; la app
@@ -100,7 +101,7 @@ class _Menu extends ConsumerWidget {
             await showScanEntrySheet(context, ref,
                 targetSessionId: sessionId);
           case 'share':
-            context.go('/session/$sessionId/share');
+            context.go('/home/session/$sessionId/share');
           case 'export_pdf':
             final bytes = await buildSessionPdf(
               detail: detail,
@@ -192,7 +193,11 @@ class _SummaryTab extends ConsumerWidget {
         const SizedBox(height: TokenSpacing.xl),
         Text(l10n.settlementsTitle, style: theme.textTheme.titleMedium),
         const SizedBox(height: TokenSpacing.sm),
-        if (settlements.isEmpty)
+        // Pendientes/avisados arriba; los confirmados son HISTORIAL y van
+        // aparte (bug 5 del MVP: mezclados parecían pagos duplicados).
+        if (settlements
+            .where((s) => s.state != SettlementState.confirmed)
+            .isEmpty)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(TokenSpacing.lg),
@@ -205,7 +210,8 @@ class _SummaryTab extends ConsumerWidget {
             ),
           )
         else
-          for (final settlement in settlements)
+          for (final settlement in settlements
+              .where((s) => s.state != SettlementState.confirmed))
             _SettlementCard(
               sessionId: sessionId,
               settlement: settlement,
@@ -213,6 +219,34 @@ class _SummaryTab extends ConsumerWidget {
               toName: names[settlement.to] ?? settlement.to,
               open: detail.summary.status == SessionStatus.open,
             ),
+        if (settlements
+            .any((s) => s.state == SettlementState.confirmed)) ...[
+          const SizedBox(height: TokenSpacing.md),
+          Card(
+            child: ExpansionTile(
+              leading: Icon(Icons.history,
+                  color: theme.colorScheme.settlementConfirmed),
+              title: Text(l10n.historyConfirmedTitle(settlements
+                  .where((s) => s.state == SettlementState.confirmed)
+                  .length)),
+              children: [
+                for (final settlement in settlements
+                    .where((s) => s.state == SettlementState.confirmed))
+                  ListTile(
+                    dense: true,
+                    title: Text(l10n.settlementRow(
+                        names[settlement.from] ?? settlement.from,
+                        names[settlement.to] ?? settlement.to)),
+                    trailing: Text(
+                      formatMoney(settlement.amount),
+                      style: const TextStyle(
+                          fontFeatures: [FontFeature.tabularFigures()]),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -330,6 +364,9 @@ class _AccountsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final accounts = ref.watch(accountsProvider(sessionId)).value ?? const [];
+    final participants =
+        ref.watch(participantsProvider(sessionId)).value ?? const [];
+    final names = {for (final p in participants) p.id: p.name};
     if (accounts.isEmpty) {
       return Center(child: Text(l10n.accountsEmpty));
     }
@@ -337,19 +374,70 @@ class _AccountsTab extends ConsumerWidget {
       padding: const EdgeInsets.all(TokenSpacing.lg),
       children: [
         for (final account in accounts)
-          Card(
-            margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
-            child: ListTile(
-              leading: const Icon(Icons.receipt_long_outlined),
-              title: Text(account.name),
+          _AccountCard(
+              sessionId: sessionId, account: account, names: names),
+      ],
+    );
+  }
+}
+
+class _AccountCard extends ConsumerWidget {
+  const _AccountCard({
+    required this.sessionId,
+    required this.account,
+    required this.names,
+  });
+
+  final String sessionId;
+  final SessionAccount account;
+  final Map<String, String> names;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final tickets = ref
+            .watch(accountTicketsProvider((sid: sessionId, aid: account.id)))
+            .value ??
+        const <SessionTicket>[];
+    return Card(
+      margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
+      child: ExpansionTile(
+        leading: const Icon(Icons.receipt_long_outlined),
+        initiallyExpanded: true,
+        title: Text(account.name),
+        trailing: Text(
+          formatMoney(account.grandTotal),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()]),
+        ),
+        children: [
+          for (final ticket in tickets)
+            ListTile(
+              dense: true,
+              leading: Icon(ticket.kind == 'manual'
+                  ? Icons.edit_note_outlined
+                  : Icons.photo_camera_outlined),
+              title: Text(ticket.merchantName),
+              subtitle: Text([
+                if (ticket.date != null) ticket.date!,
+                l10n.ticketPaidBy(names[ticket.paidBy] ?? '—'),
+              ].join(' · ')),
               trailing: Text(
-                formatMoney(account.grandTotal),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()]),
+                formatMoney(ticket.grandTotal),
+                style: const TextStyle(
+                    fontFeatures: [FontFeature.tabularFigures()]),
+              ),
+              onTap: () => context.push(
+                '/home/session/$sessionId/ticket',
+                extra: TicketRef(
+                  sessionId: sessionId,
+                  ticket: ticket,
+                  payerName: names[ticket.paidBy] ?? '—',
+                ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

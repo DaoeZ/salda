@@ -105,7 +105,8 @@ class FirestoreSessionRepository implements SessionRepository {
           ]..sort((a, b) => b.amount.cents.compareTo(a.amount.cents)));
 
   @override
-  Future<String> createSession(NewSessionInput input) async {
+  Future<({String sessionId, String ticketPath})> createSession(
+      NewSessionInput input) async {
     final owner = uid();
     final sessionRef = _sessions.doc();
 
@@ -143,7 +144,7 @@ class FirestoreSessionRepository implements SessionRepository {
       });
     }
 
-    _writeAccountWithTicket(
+    final ticketPath = _writeAccountWithTicket(
       batch,
       sessionRef: sessionRef,
       accountIndex: 0,
@@ -159,11 +160,11 @@ class FirestoreSessionRepository implements SessionRepository {
     });
 
     await batch.commit();
-    return sessionRef.id;
+    return (sessionId: sessionRef.id, ticketPath: ticketPath);
   }
 
   @override
-  Future<void> addTicket(
+  Future<String> addTicket(
     String sessionId,
     NewTicketInput ticket, {
     required String payerPid,
@@ -171,7 +172,7 @@ class FirestoreSessionRepository implements SessionRepository {
     final sessionRef = _sessions.doc(sessionId);
     final accounts = await sessionRef.collection('accounts').get();
     final batch = firestore.batch();
-    _writeAccountWithTicket(
+    final ticketPath = _writeAccountWithTicket(
       batch,
       sessionRef: sessionRef,
       accountIndex: accounts.size,
@@ -190,9 +191,11 @@ class FirestoreSessionRepository implements SessionRepository {
       'at': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+    return ticketPath;
   }
 
-  void _writeAccountWithTicket(
+  /// Devuelve la ruta del ticket creado.
+  String _writeAccountWithTicket(
     WriteBatch batch, {
     required DocumentReference<Map<String, dynamic>> sessionRef,
     required int accountIndex,
@@ -243,7 +246,55 @@ class FirestoreSessionRepository implements SessionRepository {
         },
       });
     }
+    return ticketRef.path;
   }
+
+  @override
+  Stream<List<SessionTicket>> watchTickets(
+          String sessionId, String accountId) =>
+      _sessions
+          .doc(sessionId)
+          .collection('accounts')
+          .doc(accountId)
+          .collection('tickets')
+          .snapshots()
+          .map((snap) => [
+                for (final d in snap.docs)
+                  SessionTicket(
+                    id: d.id,
+                    path: d.reference.path,
+                    merchantName:
+                        ((d.data()['merchant'] as Map?)?['name'] as String?) ??
+                            '',
+                    date: d.data()['date'] as String?,
+                    grandTotal:
+                        Money((d.data()['grandTotal'] as int?) ?? 0),
+                    paidBy:
+                        (d.data()['paidByParticipantId'] as String?) ?? '',
+                    kind: (d.data()['kind'] as String?) ?? 'scanned',
+                    imagePath: d.data()['imagePath'] as String?,
+                  ),
+              ]);
+
+  @override
+  Future<List<LineExport>> fetchTicketLines(String ticketPath) async {
+    final lines = await firestore
+        .collection('$ticketPath/lines')
+        .orderBy('order')
+        .get();
+    return [
+      for (final line in lines.docs)
+        LineExport(
+          name: (line.data()['name'] as String?) ?? '',
+          quantityMilli: (line.data()['quantityMilli'] as int?) ?? 1000,
+          totalPrice: Money((line.data()['totalPrice'] as int?) ?? 0),
+        ),
+    ];
+  }
+
+  @override
+  Future<void> setTicketImage(String ticketPath, String storagePath) =>
+      firestore.doc(ticketPath).update({'imagePath': storagePath});
 
   @override
   Future<void> updateSettlementState(

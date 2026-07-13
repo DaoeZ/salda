@@ -34,7 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           IconButton(
             tooltip: l10n.settingsTitle,
-            onPressed: () => context.push('/settings'),
+            onPressed: () => context.push('/home/settings'),
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
@@ -99,7 +99,7 @@ class _DraftBanner extends ConsumerWidget {
         FilledButton.tonal(
           onPressed: () {
             ref.read(reviewDraftProvider.notifier).loadFrom(saved);
-            context.push('/review');
+            context.push('/home/review');
           },
           child: Text(l10n.draftResume),
         ),
@@ -197,7 +197,7 @@ class _SessionCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
         child: InkWell(
           borderRadius: BorderRadius.circular(TokenRadius.card),
-          onTap: () => context.push('/session/${session.id}'),
+          onTap: () => context.push('/home/session/${session.id}'),
           child: Padding(
             padding: const EdgeInsets.all(TokenSpacing.lg),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,

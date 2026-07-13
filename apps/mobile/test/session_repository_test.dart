@@ -40,7 +40,7 @@ void main() {
 
   test('createSession escribe el árbol completo según el modelo (spec §7)',
       () async {
-    final sid = await repo.createSession(input());
+    final sid = (await repo.createSession(input())).sessionId;
 
     final session =
         (await firestore.doc('sessions/$sid').get()).data()!;
@@ -84,7 +84,7 @@ void main() {
 
   test('watchSessions mapea agregados y el outstanding del anfitrión',
       () async {
-    final sid = await repo.createSession(input());
+    final sid = (await repo.createSession(input())).sessionId;
     // Simula lo que escribiría la function recompute.
     await firestore.doc('sessions/$sid').update({
       'totals': {
@@ -107,7 +107,7 @@ void main() {
   });
 
   test('updateSettlementState cambia estado y apunta la auditoría', () async {
-    final sid = await repo.createSession(input());
+    final sid = (await repo.createSession(input())).sessionId;
     await firestore.doc('sessions/$sid/settlements/st1').set({
       'from': 'p0',
       'to': 'p1',
@@ -127,7 +127,7 @@ void main() {
 
   test('regenerateShareCode rota el código y revoca los guestAccess',
       () async {
-    final sid = await repo.createSession(input());
+    final sid = (await repo.createSession(input())).sessionId;
     await firestore
         .doc('sessions/$sid/guestAccess/guest1')
         .set({'shareCode': 'CODE-1234567890123456'});
@@ -151,7 +151,7 @@ void main() {
 
   test('addTicket crea cuenta nueva y convierte la sesión en multi',
       () async {
-    final sid = await repo.createSession(input());
+    final sid = (await repo.createSession(input())).sessionId;
     await repo.addTicket(
       sid,
       const NewTicketInput(
@@ -184,7 +184,7 @@ void main() {
 
   test('cerrar la sesión marca closedAt; el detalle refleja el estado',
       () async {
-    final sid = await repo.createSession(input());
+    final sid = (await repo.createSession(input())).sessionId;
     await repo.setStatus(sid, SessionStatus.closed);
 
     final detail = await repo.watchSession(sid).first;

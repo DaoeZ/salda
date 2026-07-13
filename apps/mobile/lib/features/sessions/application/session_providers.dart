@@ -23,3 +23,8 @@ final accountsProvider = StreamProvider.autoDispose
 final settlementsProvider = StreamProvider.autoDispose
     .family<List<Settlement>, String>((ref, sid) =>
         ref.watch(sessionRepositoryProvider).watchSettlements(sid));
+
+final accountTicketsProvider = StreamProvider.autoDispose
+    .family<List<SessionTicket>, ({String sid, String aid})>((ref, key) => ref
+        .watch(sessionRepositoryProvider)
+        .watchTickets(key.sid, key.aid));

@@ -68,7 +68,7 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
         );
     if (sid != null && mounted) {
       Navigator.pop(context);
-      context.go('/session/$sid/share');
+      context.go('/home/session/$sid/share');
     }
   }
 

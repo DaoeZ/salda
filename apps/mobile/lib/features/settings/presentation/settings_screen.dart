@@ -88,7 +88,7 @@ class SettingsScreen extends ConsumerWidget {
               leading: const Icon(Icons.auto_awesome_outlined),
               title: Text(l10n.aiTitle),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/settings/ai'),
+              onTap: () => context.push('/home/settings/ai'),
             ),
           ]),
           section(l10n.settingsBackup, [

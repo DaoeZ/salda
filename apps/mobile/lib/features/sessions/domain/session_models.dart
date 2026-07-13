@@ -122,6 +122,31 @@ class SessionDetail {
   final Map<String, ParticipantBalanceView> balances;
 }
 
+/// Ticket dentro de una cuenta (historial, RF-80/83).
+class SessionTicket {
+  const SessionTicket({
+    required this.id,
+    required this.path,
+    required this.merchantName,
+    this.date,
+    required this.grandTotal,
+    required this.paidBy,
+    required this.kind,
+    this.imagePath,
+  });
+
+  final String id;
+
+  /// Ruta completa del documento (para líneas, foto y navegación).
+  final String path;
+  final String merchantName;
+  final String? date;
+  final Money grandTotal;
+  final String paidBy; // pid
+  final String kind; // scanned | manual
+  final String? imagePath; // ruta en Storage (null hasta subir la foto)
+}
+
 // ── Export (PDF / imagen-resumen) ─────────────────────────────────────────
 
 class LineExport {
