@@ -293,6 +293,49 @@ class FirestoreSessionRepository implements SessionRepository {
     return code;
   }
 
+  @override
+  Future<List<AccountExport>> fetchFullTree(String sessionId) async {
+    final accounts = await _sessions
+        .doc(sessionId)
+        .collection('accounts')
+        .orderBy('order')
+        .get();
+    final result = <AccountExport>[];
+    for (final account in accounts.docs) {
+      final tickets = await account.reference.collection('tickets').get();
+      final exports = <TicketExport>[];
+      for (final ticket in tickets.docs) {
+        final lines = await ticket.reference
+            .collection('lines')
+            .orderBy('order')
+            .get();
+        exports.add(TicketExport(
+          merchantName: ((ticket.data()['merchant'] as Map?)?['name']
+                  as String?) ??
+              (account.data()['name'] as String? ?? ''),
+          date: ticket.data()['date'] as String?,
+          grandTotal: Money((ticket.data()['grandTotal'] as int?) ?? 0),
+          paidBy: (ticket.data()['paidByParticipantId'] as String?) ?? '',
+          lines: [
+            for (final line in lines.docs)
+              LineExport(
+                name: (line.data()['name'] as String?) ?? '',
+                quantityMilli:
+                    (line.data()['quantityMilli'] as int?) ?? 1000,
+                totalPrice:
+                    Money((line.data()['totalPrice'] as int?) ?? 0),
+              ),
+          ],
+        ));
+      }
+      result.add(AccountExport(
+        name: (account.data()['name'] as String?) ?? '',
+        tickets: exports,
+      ));
+    }
+    return result;
+  }
+
   // ── Mappers ────────────────────────────────────────────────────────────
 
   SessionSummary _summary(String id, Map<String, dynamic> data) {

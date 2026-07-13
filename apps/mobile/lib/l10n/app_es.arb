@@ -142,6 +142,8 @@
   "settingsAccount": "Cuenta",
 
   "menuAddTicket": "Añadir ticket",
+  "menuExportPdf": "Exportar PDF",
+  "menuShareImage": "Compartir resumen",
   "backupImportSummary": "La copia contiene {sessions} cuentas, {tickets} tickets y {lines} productos. ¿Cómo quieres importarla?",
   "@backupImportSummary": { "placeholders": { "sessions": { "type": "int" }, "tickets": { "type": "int" }, "lines": { "type": "int" } } },
   "backupModeMerge": "Añadir a lo que ya tengo",

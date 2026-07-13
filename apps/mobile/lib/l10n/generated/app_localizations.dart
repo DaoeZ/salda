@@ -808,6 +808,18 @@ abstract class AppLocalizations {
   /// **'Añadir ticket'**
   String get menuAddTicket;
 
+  /// No description provided for @menuExportPdf.
+  ///
+  /// In es, this message translates to:
+  /// **'Exportar PDF'**
+  String get menuExportPdf;
+
+  /// No description provided for @menuShareImage.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartir resumen'**
+  String get menuShareImage;
+
   /// No description provided for @backupImportSummary.
   ///
   /// In es, this message translates to:

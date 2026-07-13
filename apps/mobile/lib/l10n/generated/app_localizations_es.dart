@@ -387,6 +387,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get menuAddTicket => 'Añadir ticket';
 
   @override
+  String get menuExportPdf => 'Exportar PDF';
+
+  @override
+  String get menuShareImage => 'Compartir resumen';
+
+  @override
   String backupImportSummary(int sessions, int tickets, int lines) {
     return 'La copia contiene $sessions cuentas, $tickets tickets y $lines productos. ¿Cómo quieres importarla?';
   }

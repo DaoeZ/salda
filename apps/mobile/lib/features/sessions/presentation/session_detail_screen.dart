@@ -3,11 +3,13 @@ import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../scan/presentation/scan_flow.dart';
+import '../application/session_export.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
@@ -99,6 +101,31 @@ class _Menu extends ConsumerWidget {
                 targetSessionId: sessionId);
           case 'share':
             context.go('/session/$sessionId/share');
+          case 'export_pdf':
+            final bytes = await buildSessionPdf(
+              detail: detail,
+              participants:
+                  ref.read(participantsProvider(sessionId)).value ?? const [],
+              settlements:
+                  ref.read(settlementsProvider(sessionId)).value ?? const [],
+              accounts: await repo.fetchFullTree(sessionId),
+            );
+            await SharePlus.instance.share(ShareParams(files: [
+              XFile.fromData(bytes,
+                  mimeType: 'application/pdf',
+                  name: '${detail.summary.name}.pdf'),
+            ]));
+          case 'share_image':
+            final bytes = await buildSummaryImage(
+              detail: detail,
+              participants:
+                  ref.read(participantsProvider(sessionId)).value ?? const [],
+            );
+            await SharePlus.instance.share(ShareParams(files: [
+              XFile.fromData(bytes,
+                  mimeType: 'image/png',
+                  name: '${detail.summary.name}.png'),
+            ]));
           case 'close':
             if (await confirm(l10n.closeConfirmBody)) {
               await repo.setStatus(sessionId, SessionStatus.closed);
@@ -118,6 +145,9 @@ class _Menu extends ConsumerWidget {
         if (open)
           PopupMenuItem(value: 'add_ticket', child: Text(l10n.menuAddTicket)),
         PopupMenuItem(value: 'share', child: Text(l10n.menuShare)),
+        PopupMenuItem(value: 'export_pdf', child: Text(l10n.menuExportPdf)),
+        PopupMenuItem(
+            value: 'share_image', child: Text(l10n.menuShareImage)),
         if (open) PopupMenuItem(value: 'close', child: Text(l10n.menuClose)),
         if (!open)
           PopupMenuItem(value: 'reopen', child: Text(l10n.menuReopen)),

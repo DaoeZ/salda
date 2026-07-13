@@ -38,6 +38,9 @@ abstract interface class SessionRepository {
 
   /// Regenera el shareCode (invalida enlaces) y revoca los guestAccess.
   Future<String> regenerateShareCode(String sessionId);
+
+  /// Árbol completo de cuentas→tickets→líneas (para exportar PDF).
+  Future<List<AccountExport>> fetchFullTree(String sessionId);
 }
 
 final sessionRepositoryProvider = Provider<SessionRepository>((ref) {

@@ -122,6 +122,43 @@ class SessionDetail {
   final Map<String, ParticipantBalanceView> balances;
 }
 
+// ── Export (PDF / imagen-resumen) ─────────────────────────────────────────
+
+class LineExport {
+  const LineExport({
+    required this.name,
+    required this.quantityMilli,
+    required this.totalPrice,
+  });
+
+  final String name;
+  final int quantityMilli;
+  final Money totalPrice;
+}
+
+class TicketExport {
+  const TicketExport({
+    required this.merchantName,
+    this.date,
+    required this.grandTotal,
+    required this.paidBy,
+    this.lines = const [],
+  });
+
+  final String merchantName;
+  final String? date;
+  final Money grandTotal;
+  final String paidBy; // pid
+  final List<LineExport> lines;
+}
+
+class AccountExport {
+  const AccountExport({required this.name, this.tickets = const []});
+
+  final String name;
+  final List<TicketExport> tickets;
+}
+
 // ── Entrada de creación (la mapea la feature de revisión) ────────────────
 
 class NewLineInput {

@@ -27,9 +27,19 @@ reales y probar en dispositivo (sin SDK de Android en esta máquina). Las reglas
 son deny-all: implementan la matriz §13.2 con 48 tests. Las functions (recompute/notify/
 cleanup) están implementadas y testeadas.
 
-**Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ · M4 código ✅ (E2E manual contra
-emulador VERIFICADO) · M5 Pulido ⬜ · M6 IA ⬜ · Pendiente de usuario: proyectos Firebase
-reales, Android Studio/dispositivo, App Check enforced (necesita proyecto real).
+**Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ · M4 código ✅ (E2E vs emulador) ·
+M5 código ✅ (salvo lo intrínsecamente de dispositivo: recordatorios con notificaciones,
+haptics reales, import de PDF con render nativo y captura guiada) · M6 IA ⬜ (en curso) ·
+Pendiente de usuario: proyectos Firebase reales, Android Studio/dispositivo, App Check.
+
+**M5 realizado:** Ajustes (tema persistido, métodos de pago en users/{uid} +
+snapshot congelado al crear sesión RF-72, personas frecuentes, backup); gasto manual
+(RF-13, extracción `manual` de 1 línea); añadir ticket a sesión existente (nueva cuenta
+aN, sesión pasa a `multi`; entrada única de escaneo scan_flow + selector de pagador);
+backup JSON completo spec §14 (export/import fusionar/restaurar, shareCodes regenerados,
+ownerUid forzado → sirve para migrar de cuenta; reglas ampliadas: owner puede crear/
+borrar settlements para el import, test actualizado); exportar PDF (paquete pdf) e
+imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del detalle.
 
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
