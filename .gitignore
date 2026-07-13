@@ -53,6 +53,8 @@ Thumbs.db
 # --- Secrets (never commit) ---
 *.env
 .env.*
+# Config pública de cliente de la web (no es secreto): SÍ se commitea.
+!apps/guest_web/.env.production
 google-services.json
 GoogleService-Info.plist
 serviceAccount*.json
