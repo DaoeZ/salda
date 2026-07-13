@@ -1,12 +1,17 @@
+import 'dart:convert';
+
 import 'package:design_tokens/design_tokens.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/theme_controller.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../people/data/frequent_people_repository.dart';
 import '../../sessions/application/create_session_controller.dart';
+import '../data/backup_service.dart';
 import '../data/user_profile_repository.dart';
 
 /// Ajustes (spec §4.1): apariencia, métodos de pago, personas frecuentes,
@@ -77,6 +82,18 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
           ]),
+          section(l10n.settingsBackup, [
+            ListTile(
+              leading: const Icon(Icons.upload_outlined),
+              title: Text(l10n.backupExport),
+              onTap: () => _exportBackup(context, ref),
+            ),
+            ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: Text(l10n.backupImport),
+              onTap: () => _importBackup(context, ref),
+            ),
+          ]),
           section(l10n.settingsAccount, [
             ListTile(
               leading: const Icon(Icons.logout),
@@ -88,6 +105,69 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+Future<void> _exportBackup(BuildContext context, WidgetRef ref) async {
+  final backup = await ref.read(backupServiceProvider).exportAll();
+  final stamp = DateTime.now().toIso8601String().substring(0, 10);
+  await SharePlus.instance.share(ShareParams(files: [
+    XFile.fromData(
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(backup)),
+      mimeType: 'application/json',
+      name: 'salda-backup-$stamp.json',
+    ),
+  ]));
+}
+
+Future<void> _importBackup(BuildContext context, WidgetRef ref) async {
+  final l10n = AppLocalizations.of(context);
+  final file = await openFile(acceptedTypeGroups: [
+    const XTypeGroup(label: 'JSON', extensions: ['json']),
+  ]);
+  if (file == null || !context.mounted) return;
+
+  final service = ref.read(backupServiceProvider);
+  Map<String, Object?> backup;
+  try {
+    backup =
+        (jsonDecode(await file.readAsString()) as Map).cast<String, Object?>();
+    if (backup['format'] != BackupService.format) throw const FormatException();
+  } on Object {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.backupInvalid)));
+    }
+    return;
+  }
+  final summary = service.summarize(backup);
+  if (!context.mounted) return;
+
+  final replace = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(l10n.backupImport),
+      content: Text(l10n.backupImportSummary(
+          summary.sessions, summary.tickets, summary.lines)),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.commonCancel)),
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.backupModeReplace)),
+        FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.backupModeMerge)),
+      ],
+    ),
+  );
+  if (replace == null || !context.mounted) return;
+
+  await service.import(backup, replace: replace);
+  if (context.mounted) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(l10n.backupImported)));
   }
 }
 

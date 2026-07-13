@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../scan/presentation/scan_flow.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
@@ -93,6 +94,9 @@ class _Menu extends ConsumerWidget {
     return PopupMenuButton<String>(
       onSelected: (action) async {
         switch (action) {
+          case 'add_ticket':
+            await showScanEntrySheet(context, ref,
+                targetSessionId: sessionId);
           case 'share':
             context.go('/session/$sessionId/share');
           case 'close':
@@ -111,6 +115,8 @@ class _Menu extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
+        if (open)
+          PopupMenuItem(value: 'add_ticket', child: Text(l10n.menuAddTicket)),
         PopupMenuItem(value: 'share', child: Text(l10n.menuShare)),
         if (open) PopupMenuItem(value: 'close', child: Text(l10n.menuClose)),
         if (!open)

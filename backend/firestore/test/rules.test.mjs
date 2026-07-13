@@ -338,10 +338,18 @@ describe('lines: autoasignación', () => {
 
 // ─── Liquidaciones ───────────────────────────────────────────────────────
 describe('settlements', () => {
-  it('clientes no crean ni borran liquidaciones (solo la function)', async () => {
-    await assertFails(setDoc(doc(db(OWNER), `${S}/settlements/st9`),
+  it('el owner crea/borra liquidaciones (import de backup, RF-91); el invitado NO',
+      async () => {
+    await assertSucceeds(setDoc(doc(db(OWNER), `${S}/settlements/st9`),
       { from: 'p2', to: 'p1', amount: 1, state: 'pending' }));
-    await assertFails(deleteDoc(doc(db(OWNER), `${S}/settlements/st1`)));
+    await assertSucceeds(deleteDoc(doc(db(OWNER), `${S}/settlements/st9`)));
+    // Forma inválida: denegada.
+    await assertFails(setDoc(doc(db(OWNER), `${S}/settlements/st8`),
+      { from: 'p2', to: 'p1', amount: -5, state: 'pending' }));
+    // Invitados jamás.
+    await assertFails(setDoc(doc(db(GUEST), `${S}/settlements/st7`),
+      { from: 'p2', to: 'p1', amount: 1, state: 'pending' }));
+    await assertFails(deleteDoc(doc(db(GUEST), `${S}/settlements/st1`)));
   });
 
   it('el deudor marca la SUYA como pagada (pending→marked)', () =>

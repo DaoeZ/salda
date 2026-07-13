@@ -150,10 +150,20 @@ service cloud.firestore {
         }
       }
 
-      // ── Liquidaciones: SOLO las crea/borra la function ────────────────
+      // ── Liquidaciones ──────────────────────────────────────────────────
+      // Normalmente las crea/borra la function (recompute). El OWNER también
+      // puede crearlas/borrarlas (necesario para importar backups, RF-91):
+      // no rompe invariantes — el owner ya puede forzar cualquier estado en
+      // su sesión (RF-52) y recompute regenera las pendientes que no cuadren.
       match /settlements/{stid} {
         allow read: if canRead(sid);
-        allow create, delete: if false;
+        allow create: if isOwner(sid) && isOpen(sid)
+          && request.resource.data.from is string
+          && request.resource.data.to is string
+          && request.resource.data.amount is int
+          && request.resource.data.amount > 0
+          && request.resource.data.state in ['pending', 'marked', 'confirmed'];
+        allow delete: if isOwner(sid) && isOpen(sid);
         allow update: if isOpen(sid)
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['state', 'stateHistory', 'updatedAt'])

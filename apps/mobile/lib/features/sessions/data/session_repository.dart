@@ -19,6 +19,14 @@ abstract interface class SessionRepository {
   /// Devuelve el id de la sesión creada.
   Future<String> createSession(NewSessionInput input);
 
+  /// Añade un ticket como cuenta nueva de una sesión existente.
+  /// Con la segunda cuenta, la sesión pasa a `kind: multi`.
+  Future<void> addTicket(
+    String sessionId,
+    NewTicketInput ticket, {
+    required String payerPid,
+  });
+
   Future<void> updateSettlementState(
     String sessionId,
     String settlementId,

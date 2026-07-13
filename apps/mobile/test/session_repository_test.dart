@@ -149,6 +149,39 @@ void main() {
     expect(guests.docs, isEmpty);
   });
 
+  test('addTicket crea cuenta nueva y convierte la sesión en multi',
+      () async {
+    final sid = await repo.createSession(input());
+    await repo.addTicket(
+      sid,
+      const NewTicketInput(
+        kind: 'manual',
+        merchantName: 'Gasolinera',
+        engine: 'manual',
+        confidence: 1.0,
+        grandTotal: Money(4000),
+      ),
+      payerPid: 'p2',
+    );
+
+    final session = (await firestore.doc('sessions/$sid').get()).data()!;
+    expect(session['kind'], 'multi');
+
+    final accounts = await firestore
+        .collection('sessions/$sid/accounts')
+        .orderBy('order')
+        .get();
+    expect(accounts.docs.length, 2);
+    expect(accounts.docs.last.id, 'a1');
+    expect(accounts.docs.last.data()['name'], 'Gasolinera');
+
+    final tickets = await firestore
+        .collection('sessions/$sid/accounts/a1/tickets')
+        .get();
+    expect(tickets.docs.single.data()['paidByParticipantId'], 'p2');
+    expect(tickets.docs.single.data()['grandTotal'], 4000);
+  });
+
   test('cerrar la sesión marca closedAt; el detalle refleja el estado',
       () async {
     final sid = await repo.createSession(input());

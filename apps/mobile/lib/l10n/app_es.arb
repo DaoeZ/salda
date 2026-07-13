@@ -141,6 +141,14 @@
   "backupImport": "Importar copia",
   "settingsAccount": "Cuenta",
 
+  "menuAddTicket": "Añadir ticket",
+  "backupImportSummary": "La copia contiene {sessions} cuentas, {tickets} tickets y {lines} productos. ¿Cómo quieres importarla?",
+  "@backupImportSummary": { "placeholders": { "sessions": { "type": "int" }, "tickets": { "type": "int" }, "lines": { "type": "int" } } },
+  "backupModeMerge": "Añadir a lo que ya tengo",
+  "backupModeReplace": "Restaurar (borra lo que no esté en la copia)",
+  "backupImported": "Copia importada",
+  "backupInvalid": "El archivo no es una copia de seguridad válida",
+
   "scanManualEntry": "Gasto sin ticket",
   "manualTitle": "Gasto sin ticket",
   "manualConcept": "Concepto",

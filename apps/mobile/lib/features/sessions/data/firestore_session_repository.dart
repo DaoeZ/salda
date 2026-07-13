@@ -143,21 +143,78 @@ class FirestoreSessionRepository implements SessionRepository {
       });
     }
 
-    final accountRef = sessionRef.collection('accounts').doc('a0');
+    _writeAccountWithTicket(
+      batch,
+      sessionRef: sessionRef,
+      accountIndex: 0,
+      accountName: input.accountName ?? input.ticket.merchantName,
+      ticket: input.ticket,
+      payerPid: 'p${input.payerIndex}',
+    );
+
+    batch.set(sessionRef.collection('activity').doc(), {
+      'type': 'sessionCreated',
+      'actor': 'host',
+      'at': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+    return sessionRef.id;
+  }
+
+  @override
+  Future<void> addTicket(
+    String sessionId,
+    NewTicketInput ticket, {
+    required String payerPid,
+  }) async {
+    final sessionRef = _sessions.doc(sessionId);
+    final accounts = await sessionRef.collection('accounts').get();
+    final batch = firestore.batch();
+    _writeAccountWithTicket(
+      batch,
+      sessionRef: sessionRef,
+      accountIndex: accounts.size,
+      accountName: ticket.merchantName,
+      ticket: ticket,
+      payerPid: payerPid,
+    );
+    batch.update(sessionRef, {
+      // Con más de una cuenta la sesión es conceptualmente multi (DC-6).
+      if (accounts.size >= 1) 'kind': 'multi',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    batch.set(sessionRef.collection('activity').doc(), {
+      'type': 'ticketAdded',
+      'actor': 'host',
+      'at': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  }
+
+  void _writeAccountWithTicket(
+    WriteBatch batch, {
+    required DocumentReference<Map<String, dynamic>> sessionRef,
+    required int accountIndex,
+    required String accountName,
+    required NewTicketInput ticket,
+    required String payerPid,
+  }) {
+    final accountRef =
+        sessionRef.collection('accounts').doc('a$accountIndex');
     batch.set(accountRef, {
-      'name': input.accountName ?? input.ticket.merchantName,
-      'order': 0,
+      'name': accountName,
+      'order': accountIndex,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    final ticket = input.ticket;
     final ticketRef = accountRef.collection('tickets').doc();
     batch.set(ticketRef, {
       'kind': ticket.kind,
       'merchant': {'name': ticket.merchantName, 'brandKey': ticket.brandKey},
       'date': ticket.date,
       'time': ticket.time,
-      'paidByParticipantId': 'p${input.payerIndex}',
+      'paidByParticipantId': payerPid,
       'ocr': {'engine': ticket.engine, 'confidence': ticket.confidence},
       'taxes': [
         for (final t in ticket.taxes)
@@ -186,15 +243,6 @@ class FirestoreSessionRepository implements SessionRepository {
         },
       });
     }
-
-    batch.set(sessionRef.collection('activity').doc(), {
-      'type': 'sessionCreated',
-      'actor': 'host',
-      'at': FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
-    return sessionRef.id;
   }
 
   @override

@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../sessions/application/add_ticket_controller.dart';
+import '../../sessions/presentation/payer_picker.dart';
 import '../../sessions/presentation/people_sheet.dart';
 import '../application/review_draft.dart';
 import 'line_edit_sheet.dart';
@@ -53,8 +55,25 @@ class ReviewScreen extends ConsumerWidget {
           child: FilledButton(
             onPressed: draft.lines.isEmpty
                 ? null
-                : () => showPeopleSheet(context,
-                    suggestedName: draft.merchantName),
+                : () async {
+                    final target = ref.read(addTicketTargetProvider);
+                    if (target == null) {
+                      // Flujo normal: crear sesión nueva.
+                      await showPeopleSheet(context,
+                          suggestedName: draft.merchantName);
+                      return;
+                    }
+                    // Añadir a sesión existente: solo falta el pagador.
+                    final payer =
+                        await showPayerPicker(context, ref, target);
+                    if (payer == null || !context.mounted) return;
+                    final added = await ref
+                        .read(addTicketControllerProvider.notifier)
+                        .addToSession(target, payerPid: payer);
+                    if (added && context.mounted) {
+                      context.go('/session/$target');
+                    }
+                  },
             child: Text(l10n.commonContinue),
           ),
         ),

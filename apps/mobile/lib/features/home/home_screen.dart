@@ -3,14 +3,12 @@ import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../review/application/draft_store.dart';
 import '../review/application/review_draft.dart';
-import '../scan/application/manual_expense.dart';
-import '../scan/application/scan_service.dart';
+import '../scan/presentation/scan_flow.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session_models.dart';
 
@@ -24,107 +22,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _scanning = false;
-
-  Future<void> _scan(ImageSource source) async {
-    final l10n = AppLocalizations.of(context);
-    setState(() => _scanning = true);
-    try {
-      final extraction = await ref.read(scanServiceProvider).scanFrom(source);
-      if (!mounted || extraction == null) return;
-      if (extraction.lines.isEmpty && !extraction.grandTotal.isPresent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.scanNothingRecognized)));
-      }
-      ref.read(reviewDraftProvider.notifier).loadFrom(extraction);
-      context.push('/review');
-    } finally {
-      if (mounted) setState(() => _scanning = false);
-    }
-  }
-
-  void _showSourceSheet() {
-    final l10n = AppLocalizations.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.photo_camera_outlined),
-            title: Text(l10n.scanFromCamera),
-            onTap: () {
-              Navigator.pop(context);
-              _scan(ImageSource.camera);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
-            title: Text(l10n.scanFromGallery),
-            onTap: () {
-              Navigator.pop(context);
-              _scan(ImageSource.gallery);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.edit_note_outlined),
-            title: Text(l10n.scanManualEntry),
-            onTap: () {
-              Navigator.pop(context);
-              _manualEntry();
-            },
-          ),
-        ]),
-      ),
-    );
-  }
-
-  Future<void> _manualEntry() async {
-    final l10n = AppLocalizations.of(context);
-    final concept = TextEditingController();
-    final amount = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.manualTitle),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: concept,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(
-              labelText: l10n.manualConcept,
-              hintText: l10n.manualConceptHint,
-            ),
-          ),
-          const SizedBox(height: TokenSpacing.md),
-          TextField(
-            controller: amount,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-                labelText: l10n.manualAmount, suffixText: '€'),
-          ),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l10n.commonCancel)),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l10n.commonContinue)),
-        ],
-      ),
-    );
-    final money = parseUserMoney(amount.text);
-    if (confirmed != true || concept.text.trim().isEmpty || money == null) {
-      return;
-    }
-    if (!mounted) return;
-    ref.read(reviewDraftProvider.notifier).loadFrom(manualExpenseExtraction(
-          concept: concept.text.trim(),
-          amount: money,
-          date: DateTime.now(),
-        ));
-    context.push('/review');
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +58,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ]),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _scanning ? null : _showSourceSheet,
+        onPressed: _scanning
+            ? null
+            : () => showScanEntrySheet(
+                  context,
+                  ref,
+                  onBusy: (busy) {
+                    if (mounted) setState(() => _scanning = busy);
+                  },
+                ),
         icon: const Icon(Icons.document_scanner_outlined),
         label: Text(l10n.scanFab),
       ),

@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../people/data/frequent_people_repository.dart';
 import '../../review/application/draft_store.dart';
-import '../../settings/data/user_profile_repository.dart';
 import '../../review/application/review_draft.dart';
+import '../../settings/data/user_profile_repository.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
+import 'add_ticket_controller.dart';
 
 /// Crea la sesión a partir del draft de revisión + elección de gente/reparto.
 /// Devuelve el id de sesión; registra las personas como frecuentes.
@@ -34,29 +35,7 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
         splitModeDefault: splitMode,
         participantNames: participantNames,
         payerIndex: payerIndex,
-        ticket: NewTicketInput(
-          kind: draft.engine == 'manual' ? 'manual' : 'scanned',
-          merchantName: draft.merchantName ?? sessionName,
-          brandKey: draft.brandKey,
-          category: draft.category,
-          date: draft.date,
-          time: draft.time,
-          engine: draft.engine,
-          confidence: draft.sourceConfidence,
-          grandTotal: draft.grandTotal ?? draft.computedTotal,
-          tip: draft.tip,
-          discounts: draft.discounts,
-          taxes: draft.taxes,
-          lines: [
-            for (final line in draft.lines)
-              NewLineInput(
-                name: line.name,
-                quantityMilli: line.quantityMilli,
-                unitPrice: line.unitPrice,
-                totalPrice: line.totalPrice,
-              ),
-          ],
-        ),
+        ticket: ticketInputFromDraft(draft, fallbackName: sessionName),
       );
       final sid =
           await ref.read(sessionRepositoryProvider).createSession(input);

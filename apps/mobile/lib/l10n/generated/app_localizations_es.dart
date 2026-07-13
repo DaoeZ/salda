@@ -384,6 +384,27 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsAccount => 'Cuenta';
 
   @override
+  String get menuAddTicket => 'Añadir ticket';
+
+  @override
+  String backupImportSummary(int sessions, int tickets, int lines) {
+    return 'La copia contiene $sessions cuentas, $tickets tickets y $lines productos. ¿Cómo quieres importarla?';
+  }
+
+  @override
+  String get backupModeMerge => 'Añadir a lo que ya tengo';
+
+  @override
+  String get backupModeReplace =>
+      'Restaurar (borra lo que no esté en la copia)';
+
+  @override
+  String get backupImported => 'Copia importada';
+
+  @override
+  String get backupInvalid => 'El archivo no es una copia de seguridad válida';
+
+  @override
   String get scanManualEntry => 'Gasto sin ticket';
 
   @override

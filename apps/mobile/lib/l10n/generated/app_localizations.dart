@@ -802,6 +802,42 @@ abstract class AppLocalizations {
   /// **'Cuenta'**
   String get settingsAccount;
 
+  /// No description provided for @menuAddTicket.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir ticket'**
+  String get menuAddTicket;
+
+  /// No description provided for @backupImportSummary.
+  ///
+  /// In es, this message translates to:
+  /// **'La copia contiene {sessions} cuentas, {tickets} tickets y {lines} productos. ¿Cómo quieres importarla?'**
+  String backupImportSummary(int sessions, int tickets, int lines);
+
+  /// No description provided for @backupModeMerge.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir a lo que ya tengo'**
+  String get backupModeMerge;
+
+  /// No description provided for @backupModeReplace.
+  ///
+  /// In es, this message translates to:
+  /// **'Restaurar (borra lo que no esté en la copia)'**
+  String get backupModeReplace;
+
+  /// No description provided for @backupImported.
+  ///
+  /// In es, this message translates to:
+  /// **'Copia importada'**
+  String get backupImported;
+
+  /// No description provided for @backupInvalid.
+  ///
+  /// In es, this message translates to:
+  /// **'El archivo no es una copia de seguridad válida'**
+  String get backupInvalid;
+
   /// No description provided for @scanManualEntry.
   ///
   /// In es, this message translates to:
