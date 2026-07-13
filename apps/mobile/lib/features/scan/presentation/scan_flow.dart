@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../ai/application/ai_analysis_controller.dart';
 import '../../review/application/review_draft.dart';
 import '../../sessions/application/add_ticket_controller.dart';
 import '../application/manual_expense.dart';
@@ -67,13 +68,15 @@ Future<void> _scanToReview(
   final l10n = AppLocalizations.of(context);
   onBusy?.call(true);
   try {
-    final extraction = await ref.read(scanServiceProvider).scanFrom(source);
-    if (!context.mounted || extraction == null) return;
-    if (extraction.lines.isEmpty && !extraction.grandTotal.isPresent) {
+    final result = await ref.read(scanServiceProvider).scanFrom(source);
+    if (!context.mounted || result == null) return;
+    if (result.extraction.lines.isEmpty &&
+        !result.extraction.grandTotal.isPresent) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.scanNothingRecognized)));
     }
-    ref.read(reviewDraftProvider.notifier).loadFrom(extraction);
+    ref.read(lastScanImageProvider.notifier).set(result.imagePath);
+    ref.read(reviewDraftProvider.notifier).loadFrom(result.extraction);
     context.push('/review');
   } finally {
     onBusy?.call(false);
@@ -121,6 +124,7 @@ Future<void> _manualToReview(BuildContext context, WidgetRef ref) async {
     return;
   }
   if (!context.mounted) return;
+  ref.read(lastScanImageProvider.notifier).set(null); // no hay foto
   ref.read(reviewDraftProvider.notifier).loadFrom(manualExpenseExtraction(
         concept: concept.text.trim(),
         amount: money,

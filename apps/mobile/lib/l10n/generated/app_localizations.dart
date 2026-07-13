@@ -850,6 +850,108 @@ abstract class AppLocalizations {
   /// **'El archivo no es una copia de seguridad válida'**
   String get backupInvalid;
 
+  /// No description provided for @aiTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Proveedores de IA'**
+  String get aiTitle;
+
+  /// No description provided for @aiHint.
+  ///
+  /// In es, this message translates to:
+  /// **'La IA es el último recurso cuando el OCR falla, siempre bajo tu orden. Usas TU propia clave: se guarda cifrada solo en este dispositivo y el coste (céntimos) lo pagas a tu proveedor.'**
+  String get aiHint;
+
+  /// No description provided for @aiConfigured.
+  ///
+  /// In es, this message translates to:
+  /// **'Configurado'**
+  String get aiConfigured;
+
+  /// No description provided for @aiPreferred.
+  ///
+  /// In es, this message translates to:
+  /// **'Usar por defecto'**
+  String get aiPreferred;
+
+  /// No description provided for @aiKey.
+  ///
+  /// In es, this message translates to:
+  /// **'API key'**
+  String get aiKey;
+
+  /// No description provided for @aiKeyOptional.
+  ///
+  /// In es, this message translates to:
+  /// **'Opcional en servidores locales'**
+  String get aiKeyOptional;
+
+  /// No description provided for @aiBaseUrl.
+  ///
+  /// In es, this message translates to:
+  /// **'Base URL'**
+  String get aiBaseUrl;
+
+  /// No description provided for @aiModel.
+  ///
+  /// In es, this message translates to:
+  /// **'Modelo'**
+  String get aiModel;
+
+  /// No description provided for @aiTest.
+  ///
+  /// In es, this message translates to:
+  /// **'Probar conexión'**
+  String get aiTest;
+
+  /// No description provided for @aiTestOk.
+  ///
+  /// In es, this message translates to:
+  /// **'Conexión correcta ✓'**
+  String get aiTestOk;
+
+  /// No description provided for @aiErrInvalidKey.
+  ///
+  /// In es, this message translates to:
+  /// **'Clave inválida o sin permisos'**
+  String get aiErrInvalidKey;
+
+  /// No description provided for @aiErrNoCredit.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin crédito en el proveedor'**
+  String get aiErrNoCredit;
+
+  /// No description provided for @aiErrRateLimited.
+  ///
+  /// In es, this message translates to:
+  /// **'Límite de peticiones alcanzado; espera un momento'**
+  String get aiErrRateLimited;
+
+  /// No description provided for @aiErrModel.
+  ///
+  /// In es, this message translates to:
+  /// **'Ese modelo no está disponible'**
+  String get aiErrModel;
+
+  /// No description provided for @aiErrNetwork.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo conectar. Revisa la red o la URL.'**
+  String get aiErrNetwork;
+
+  /// No description provided for @aiErrBadResponse.
+  ///
+  /// In es, this message translates to:
+  /// **'La IA no devolvió un ticket válido'**
+  String get aiErrBadResponse;
+
+  /// No description provided for @aiAnalyzing.
+  ///
+  /// In es, this message translates to:
+  /// **'Analizando con {provider}…'**
+  String aiAnalyzing(String provider);
+
   /// No description provided for @scanManualEntry.
   ///
   /// In es, this message translates to:

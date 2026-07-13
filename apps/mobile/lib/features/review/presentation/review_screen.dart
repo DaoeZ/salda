@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../ai/application/ai_analysis_controller.dart';
+import '../../ai/presentation/ai_providers_screen.dart' show aiErrorText;
 import '../../sessions/application/add_ticket_controller.dart';
 import '../../sessions/presentation/payer_picker.dart';
 import '../../sessions/presentation/people_sheet.dart';
@@ -116,17 +118,50 @@ class _AttentionBanner extends ConsumerWidget {
                 icon: const Icon(Icons.edit_outlined, size: 18),
                 label: Text(l10n.reviewEditManually),
               ),
-              Tooltip(
-                message: l10n.reviewAiUnavailable,
-                child: FilledButton.tonalIcon(
-                  onPressed: null, // se habilita en M6 con proveedor
-                  icon: const Icon(Icons.auto_awesome, size: 18),
-                  label: Text(l10n.reviewAnalyzeWithAi),
-                ),
-              ),
+              _AiButton(l10n: l10n),
             ]),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Analizar con IA": último recurso, solo con proveedor configurado (DC-13).
+class _AiButton extends ConsumerWidget {
+  const _AiButton({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final available = ref.watch(aiAvailableProvider).value ?? false;
+    final analyzingWith = ref.watch(aiAnalysisControllerProvider).value;
+
+    return Tooltip(
+      message: available ? '' : l10n.reviewAiUnavailable,
+      child: FilledButton.tonalIcon(
+        onPressed: !available || analyzingWith != null
+            ? null
+            : () async {
+                final result = await ref
+                    .read(aiAnalysisControllerProvider.notifier)
+                    .analyze();
+                if (!context.mounted) return;
+                if (!result.ok && result.error != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(aiErrorText(l10n, result.error!))));
+                }
+              },
+        icon: analyzingWith != null
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.auto_awesome, size: 18),
+        label: Text(analyzingWith != null
+            ? l10n.aiAnalyzing(analyzingWith)
+            : l10n.reviewAnalyzeWithAi),
       ),
     );
   }

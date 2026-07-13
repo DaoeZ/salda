@@ -4,6 +4,7 @@ import 'package:design_tokens/design_tokens.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/theme_controller.dart';
@@ -81,6 +82,14 @@ class SettingsScreen extends ConsumerWidget {
                         .remove(person.id),
                   ),
                 ),
+          ]),
+          section(l10n.aiTitle, [
+            ListTile(
+              leading: const Icon(Icons.auto_awesome_outlined),
+              title: Text(l10n.aiTitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/settings/ai'),
+            ),
           ]),
           section(l10n.settingsBackup, [
             ListTile(

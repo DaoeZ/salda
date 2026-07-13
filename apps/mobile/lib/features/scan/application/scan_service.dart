@@ -31,7 +31,7 @@ class ScanService {
   final ReceiptParser parser;
   final ImagePicker _picker;
 
-  Future<ReceiptExtraction?> scanFrom(ImageSource source) async {
+  Future<ScanResult?> scanFrom(ImageSource source) async {
     final image = await _picker.pickImage(
       source: source,
       maxWidth: 1600, // presupuesto de la spec §7: ≤1600px
@@ -39,6 +39,18 @@ class ScanService {
     );
     if (image == null) return null;
     final document = await ocr.recognize(image.path);
-    return parser.parseDocument(document);
+    return ScanResult(
+      extraction: parser.parseDocument(document),
+      imagePath: image.path,
+    );
   }
+}
+
+/// La ruta de la imagen se conserva: la IA (M6) la usa como entrada y en
+/// M3+ se sube a Storage como foto del ticket.
+class ScanResult {
+  const ScanResult({required this.extraction, required this.imagePath});
+
+  final ReceiptExtraction extraction;
+  final String imagePath;
 }

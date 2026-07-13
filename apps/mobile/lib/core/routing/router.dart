@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/ai/presentation/ai_providers_screen.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/home/home_screen.dart';
@@ -29,6 +30,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/review', builder: (_, _) => const ReviewScreen()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+      GoRoute(
+          path: '/settings/ai',
+          builder: (_, _) => const AiProvidersScreen()),
       GoRoute(
         path: '/session/:sid',
         builder: (_, state) =>

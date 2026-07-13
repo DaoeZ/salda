@@ -411,6 +411,61 @@ class AppLocalizationsEs extends AppLocalizations {
   String get backupInvalid => 'El archivo no es una copia de seguridad válida';
 
   @override
+  String get aiTitle => 'Proveedores de IA';
+
+  @override
+  String get aiHint =>
+      'La IA es el último recurso cuando el OCR falla, siempre bajo tu orden. Usas TU propia clave: se guarda cifrada solo en este dispositivo y el coste (céntimos) lo pagas a tu proveedor.';
+
+  @override
+  String get aiConfigured => 'Configurado';
+
+  @override
+  String get aiPreferred => 'Usar por defecto';
+
+  @override
+  String get aiKey => 'API key';
+
+  @override
+  String get aiKeyOptional => 'Opcional en servidores locales';
+
+  @override
+  String get aiBaseUrl => 'Base URL';
+
+  @override
+  String get aiModel => 'Modelo';
+
+  @override
+  String get aiTest => 'Probar conexión';
+
+  @override
+  String get aiTestOk => 'Conexión correcta ✓';
+
+  @override
+  String get aiErrInvalidKey => 'Clave inválida o sin permisos';
+
+  @override
+  String get aiErrNoCredit => 'Sin crédito en el proveedor';
+
+  @override
+  String get aiErrRateLimited =>
+      'Límite de peticiones alcanzado; espera un momento';
+
+  @override
+  String get aiErrModel => 'Ese modelo no está disponible';
+
+  @override
+  String get aiErrNetwork => 'No se pudo conectar. Revisa la red o la URL.';
+
+  @override
+  String get aiErrBadResponse => 'La IA no devolvió un ticket válido';
+
+  @override
+  String aiAnalyzing(String provider) {
+    return 'Analizando con $provider…';
+  }
+
+  @override
   String get scanManualEntry => 'Gasto sin ticket';
 
   @override
