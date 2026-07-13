@@ -55,5 +55,6 @@ Thumbs.db
 .env.*
 google-services.json
 GoogleService-Info.plist
-firebase_options.dart
 serviceAccount*.json
+# firebase_options.dart SÍ se commitea: es config pública de cliente
+# (la seguridad la dan las reglas + App Check).

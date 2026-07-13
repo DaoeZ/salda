@@ -3,20 +3,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
-import 'firebase_options_stub.dart';
+import '../../firebase_options.dart';
 
-/// Arranque de Firebase.
+/// Arranque de Firebase contra el proyecto real (salda-dev).
 ///
-/// Hoy: SIEMPRE contra la Emulator Suite (proyecto demo-salda) porque los
-/// proyectos reales aún no existen. `flutterfire configure` (ver CLAUDE.md)
-/// generará las opciones reales; entonces este bootstrap usará emuladores
-/// solo en debug con --dart-define=USE_EMULATORS=true.
+/// Para desarrollar contra la Emulator Suite:
+///   flutter run --dart-define=USE_EMULATORS=true
+/// (con `firebase emulators:start` en marcha; en el emulador Android el
+/// host local es 10.0.2.2).
 Future<void> bootstrapFirebase() async {
-  await Firebase.initializeApp(options: demoFirebaseOptions);
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  const useEmulators = bool.fromEnvironment('USE_EMULATORS', defaultValue: true);
+  const useEmulators =
+      bool.fromEnvironment('USE_EMULATORS', defaultValue: false);
   if (useEmulators) {
-    // 10.0.2.2 = localhost visto desde el emulador Android.
     final host = defaultTargetPlatform == TargetPlatform.android
         ? const String.fromEnvironment('EMULATOR_HOST', defaultValue: '10.0.2.2')
         : 'localhost';
