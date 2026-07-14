@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.0 · **Fecha:** 2026-07-14 · **Changelog:** primera edición (no existe versión anterior).
+**Versión:** 1.1 · **Fecha:** 2026-07-14 · **Changelog:** v1.1 — blindado el modo "cada
+uno paga lo suyo": las líneas no reclamadas recaen en el pagador (ADR-021), fin de la
+"media previa"; refuerzo de tests (motor + recompute + web). v1.0 primera edición.
 
 > **Qué es este documento:** la referencia estratégica y técnica definitiva de Salda.
 > Complementa —no sustituye— a `docs/ESPECIFICACION.md` (spec funcional v2.0 congelada)
@@ -1010,6 +1012,14 @@ Incremental por construcción; térmico ilegible ≠ marca perdida; corpus como 
 
 ### ADR-020: Foto del ticket best-effort — **Fecha:** 2026-07-14 (`d5e6d55`). La subida jamás bloquea el flujo de creación; sin red = grupo creado sin foto.
 
+### ADR-021: En "cada uno paga lo suyo", lo no reclamado recae en el pagador
+**Estado:** Aceptada (reemplaza el uso de `splitAmongAll` en recompute) · **Fecha:** 2026-07-14
+**Contexto/Problema:** en la primera prueba real, seleccionar productos daba importes tipo "1/N de lo que nadie ha cogido + lo tuyo" (una "media previa"). Causa raíz: `recompute` invocaba el motor con `unassignedPolicy: 'splitAmongAll'`, repartiendo las líneas AÚN no seleccionadas entre todos en cada recálculo continuo (la spec RF-46 solo preveía repartir huérfanas entre todos AL FINALIZAR y CON CONFIRMACIÓN, no en vivo).
+**Alternativas:** (a) huérfanas → nadie (pending): rompe el invariante Σ consumo == grandTotal del BalanceEngine, más invasivo — rechazada; (b) mantener splitAmongAll: es el bug — rechazada.
+**Decisión:** las líneas sin consumidores se atribuyen al **pagador del ticket** (neto cero para él en esa parte: la pagó y la "consume"); a medida que la gente reclama, la parte del pagador se reduce hasta quedar solo lo suyo. La conversión vive en `recompute.sanitizeLine` (que conoce al pagador); el motor puro NO cambia (paridad y vectores dorados intactos) y se le pasa `unassignedPolicy: 'error'` como red de seguridad. `splitAmongAll` sigue siendo una capacidad pura del motor (tested) reservada al futuro "finalizar y repartir sobrantes con confirmación" (RF-46), pero NUNCA se usa en el cálculo continuo.
+**Consecuencias:** + fin de la media previa; Σ==grandTotal siempre; redondeo único preservado (ADR-007); + tests de regresión que blindan el caso exacto reportado y los límites (compartir 2/3/4, dejar de compartir, IVA/descuentos, tickets grandes, múltiples grupos). − el pagador ve una parte alta mientras el grupo no ha reclamado sus productos (correcto y transitorio; la UI puede indicarlo).
+**Revisión futura:** si se implementa el "finalizar ticket" explícito (RF-46), decidir allí si los sobrantes se dejan al pagador o se reparten con confirmación.
+
 ---
 
 <a name="parte-x"></a>
@@ -1230,6 +1240,7 @@ actualizada si toca un componente trazado.
 | I4 | spec RF-72 snapshot de pagos "al compartir"; el código lo congela al CREAR | Equivalente en la práctica (se comparte al crear). Documentado aquí |
 | I5 | spec `pendingCount`; el código escribe `pendingSettlements` | Ganan los nombres del código (contrato §63); anotar al revisar spec |
 | I6 | spec RF-95/96 y aiPolicy descritos como v1; no implementados | Deuda DT-1/DT-10/DT-11 con hueco en roadmap R1/R2 |
+| I9 (RESUELTA) | recompute repartía las líneas huérfanas entre todos EN VIVO; la spec RF-46 solo lo preveía al finalizar y con confirmación | Corregido en ADR-021: huérfanas → pagador en el cálculo continuo. Ya no divergen |
 | I7 | Formato de backup `appcuentas-backup` con marca provisional "Salda" | Valor CONGELADO de la spec §14 (compatibilidad); no renombrar |
 | I8 | CLAUDE.md §12 dice "smoke test usa Brand.tagline"; el test actual valida login/estado vacío | Detalle obsoleto de CLAUDE.md; corregir en su próxima edición |
 

@@ -29,3 +29,26 @@ export function toggleSelf(current: Assignment | undefined, pid: string): Assign
 export function isPickedBy(current: Assignment | undefined, pid: string): boolean {
   return Boolean(current?.participants?.[pid]);
 }
+
+/** Consumidores de la línea distintos de `pid`. */
+export function otherConsumers(
+  current: Assignment | undefined,
+  pid: string,
+): string[] {
+  return Object.keys(current?.participants ?? {}).filter((p) => p !== pid);
+}
+
+/**
+ * ¿Hay que pedir confirmación antes de sumarme a esta línea?
+ * Sí cuando ya la seleccionó OTRA persona y yo todavía no estoy en ella:
+ * entonces mostramos "X ya lo ha seleccionado, ¿compartir?" en vez de crear
+ * una línea duplicada (el producto sigue siendo UNO con varios consumidores).
+ * Quitarme de una línea que ya es mía nunca pregunta.
+ */
+export function needsShareConfirmation(
+  current: Assignment | undefined,
+  pid: string,
+): boolean {
+  if (isPickedBy(current, pid)) return false;
+  return otherConsumers(current, pid).length > 0;
+}

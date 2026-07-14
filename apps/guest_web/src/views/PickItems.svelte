@@ -1,10 +1,17 @@
 <script lang="ts">
+  import {
+    needsShareConfirmation,
+    otherConsumers,
+  } from '../lib/assignment';
   import { formatCents } from '../lib/money';
-  import { guest } from '../lib/session.svelte';
+  import { guest, type LineInfo } from '../lib/session.svelte';
 
   let { onback }: { onback: () => void } = $props();
 
   void guest.loadTickets();
+
+  // Diálogo "¿compartir?" cuando pulso un producto que ya cogió otra persona.
+  let sharePrompt = $state<{ line: LineInfo; names: string[] } | null>(null);
 
   const names = $derived(
     new Map(guest.participants.map((p) => [p.id, p.name])),
@@ -13,10 +20,33 @@
     guest.myPid ? (guest.session?.balances[guest.myPid]?.consumed ?? 0) : 0,
   );
 
-  function others(line: { assignment?: { participants?: Record<string, number> } }) {
-    return Object.keys(line.assignment?.participants ?? {})
-      .filter((pid) => pid !== guest.myPid)
-      .map((pid) => names.get(pid) ?? '?');
+  function others(line: LineInfo) {
+    return otherConsumers(line.assignment, guest.myPid ?? '').map(
+      (pid) => names.get(pid) ?? '?',
+    );
+  }
+
+  async function tap(line: LineInfo) {
+    if (!guest.open || !guest.myPid) return;
+    // Quitármela nunca pregunta; sumarme a algo que ya cogió otro, sí.
+    if (guest.isMine(line)) {
+      await guest.toggleLine(line);
+    } else if (needsShareConfirmation(line.assignment, guest.myPid)) {
+      sharePrompt = { line, names: others(line) };
+    } else {
+      await guest.toggleLine(line);
+    }
+  }
+
+  async function confirmShare() {
+    const prompt = sharePrompt;
+    sharePrompt = null;
+    if (prompt) await guest.toggleLine(prompt.line);
+  }
+
+  function shareNames(list: string[]): string {
+    if (list.length === 1) return list[0];
+    return `${list.slice(0, -1).join(', ')} y ${list[list.length - 1]}`;
   }
 </script>
 
@@ -36,18 +66,25 @@
       {#each ticket.lines as line (line.id)}
         {@const mine = guest.isMine(line)}
         {@const shared = others(line)}
+        {@const sharedCount = mine ? shared.length + 1 : shared.length}
         <button
           class="card line"
           class:mine
           aria-pressed={mine}
           disabled={!guest.open}
-          onclick={() => guest.toggleLine(line)}
+          onclick={() => tap(line)}
         >
           <span class="check" aria-hidden="true">{mine ? '✓' : ''}</span>
           <span class="info">
             <span class="name">{line.name}</span>
             {#if shared.length > 0}
-              <span class="muted small">con {shared.join(', ')}</span>
+              <span class="muted small">
+                {mine ? 'compartido con' : 'lo tiene'}
+                {shareNames(shared)}
+                {#if mine && sharedCount > 1}
+                  · {formatCents(Math.round(line.totalPrice / sharedCount))} c/u
+                {/if}
+              </span>
             {/if}
           </span>
           <span class="money">{formatCents(line.totalPrice)}</span>
@@ -56,6 +93,33 @@
     </div>
   </section>
 {/each}
+
+{#if sharePrompt}
+  <div
+    class="overlay"
+    role="button"
+    tabindex="-1"
+    onclick={() => (sharePrompt = null)}
+    onkeydown={(e) => e.key === 'Escape' && (sharePrompt = null)}
+  >
+    <div
+      class="card dialog"
+      role="dialog"
+      tabindex="-1"
+      aria-modal="true"
+      aria-labelledby="share-title"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={() => {}}
+    >
+      <h2 id="share-title">{shareNames(sharePrompt.names)} ya lo ha seleccionado</h2>
+      <p class="muted">¿Queréis compartirlo? El precio se dividirá entre vosotros.</p>
+      <div class="dialog-actions">
+        <button class="btn-text" onclick={() => (sharePrompt = null)}>Cancelar</button>
+        <button class="btn-primary" onclick={confirmShare}>Compartir</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <footer class="card total">
   <span>Llevas marcado</span>
@@ -145,5 +209,47 @@
   .total p {
     grid-column: 1 / -1;
     margin: 4px 0 0;
+  }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+    z-index: 10;
+    animation: fade var(--duration-enter) var(--easing-emphasized);
+  }
+  .dialog {
+    width: 100%;
+    max-width: 360px;
+    cursor: default;
+    animation: pop var(--duration-enter) var(--easing-emphasized);
+  }
+  .dialog h2 {
+    font-size: 19px;
+    margin: 0 0 var(--space-sm);
+  }
+  .dialog p {
+    margin: 0;
+    line-height: 1.4;
+  }
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
   }
 </style>

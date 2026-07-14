@@ -133,17 +133,10 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
     for (const ticket of account.tickets) {
       accountTotal += ticket.grandTotal;
       const mode = ticket.splitModeOverride ?? s.splitModeDefault;
-      const consumption = splitTicket({
-        participantIds: activeIds,
-        mode,
-        ticket: {
-          grandTotal: ticket.grandTotal,
-          lines: ticket.lines.map((l) => sanitizeLine(l, known)),
-        },
-        // Para agregados, las líneas sin asignar se reparten entre todos
-        // (RF-46); la UI avisa aparte de que existen huérfanas.
-        unassignedPolicy: 'splitAmongAll',
-      });
+
+      // El pagador efectivo se resuelve ANTES de repartir: en "cada uno paga
+      // lo suyo", las líneas aún NO reclamadas recaen sobre quien pagó (ver
+      // sanitizeLine), nunca se promedian entre todos.
       let paidBy = ticket.paidByParticipantId;
       if (!known.has(paidBy)) {
         logger.warn('Pagador desconocido; se reasigna al owner', {
@@ -152,6 +145,22 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         });
         paidBy = fallbackPayer;
       }
+
+      const consumption = splitTicket({
+        participantIds: activeIds,
+        mode,
+        ticket: {
+          grandTotal: ticket.grandTotal,
+          lines: ticket.lines.map((l) => sanitizeLine(l, known, paidBy)),
+        },
+        // 'error', JAMÁS 'splitAmongAll'. Repartir lo no seleccionado entre
+        // TODOS producía una "media previa" (cada persona pagando 1/N de lo
+        // que nadie ha cogido, SUMADO a lo suyo): el bug que este arreglo
+        // erradica. sanitizeLine ya reasigna las líneas sin dueño al pagador,
+        // así que aquí no debe quedar ninguna sin asignar; si quedara, es un
+        // bug y preferimos que salte a que se promedie en silencio.
+        unassignedPolicy: 'error',
+      });
       contributions.push({
         paidBy,
         grandTotal: ticket.grandTotal,
@@ -219,8 +228,31 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
   };
 }
 
-function sanitizeLine(line: LineDoc, known: ReadonlySet<string>): SplitLine {
+/**
+ * Normaliza una línea de Firestore al modelo del motor y RESUELVE las líneas
+ * sin dueño hacia el pagador:
+ *  - `all`: elección explícita del anfitrión → se respeta tal cual.
+ *  - con consumidores válidos: `one` (1 y venía como `one`) o `shared`.
+ *  - sin consumidores (sin reclamar): la cubre `payerId` como `one`. Esto es
+ *    lo que elimina la "media previa": lo que nadie ha cogido es de quien
+ *    pagó (neto cero para él en esa parte), y se reduce a medida que la gente
+ *    reclama sus productos.
+ */
+function sanitizeLine(
+  line: LineDoc,
+  known: ReadonlySet<string>,
+  payerId: string,
+): SplitLine {
   const rawType = line.assignment?.type ?? 'unassigned';
+
+  if (rawType === 'all') {
+    return {
+      id: line.id,
+      totalPrice: line.totalPrice,
+      assignment: { type: 'all', weights: {} },
+    };
+  }
+
   const weights: Record<string, number> = {};
   for (const [pid, weight] of Object.entries(
     line.assignment?.participants ?? {},
@@ -233,19 +265,18 @@ function sanitizeLine(line: LineDoc, known: ReadonlySet<string>): SplitLine {
       });
     }
   }
-  const type =
-    rawType === 'all'
-      ? 'all'
-      : Object.keys(weights).length === 0
-        ? 'unassigned'
-        : Object.keys(weights).length === 1 && rawType === 'one'
-          ? 'one'
-          : 'shared';
-  return {
-    id: line.id,
-    totalPrice: line.totalPrice,
-    assignment: { type, weights },
-  };
+
+  const consumers = Object.keys(weights);
+  if (consumers.length === 0) {
+    return {
+      id: line.id,
+      totalPrice: line.totalPrice,
+      assignment: { type: 'one', weights: { [payerId]: 1 } },
+    };
+  }
+
+  const type = consumers.length === 1 && rawType === 'one' ? 'one' : 'shared';
+  return { id: line.id, totalPrice: line.totalPrice, assignment: { type, weights } };
 }
 
 // ── Lectura de Firestore y escritura de agregados ─────────────────────────

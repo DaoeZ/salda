@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { isPickedBy, toggleSelf } from './assignment';
+import {
+  isPickedBy,
+  needsShareConfirmation,
+  otherConsumers,
+  toggleSelf,
+} from './assignment';
 
 describe('toggleSelf (contrato con las reglas de Firestore)', () => {
   it('marcarse en línea vacía → one con peso 1 y lastEditorPid', () => {
@@ -48,5 +53,48 @@ describe('toggleSelf (contrato con las reglas de Firestore)', () => {
       true,
     );
     expect(isPickedBy(undefined, 'p2')).toBe(false);
+  });
+});
+
+describe('flujo de compartir (nunca duplica líneas)', () => {
+  it('otherConsumers excluye al propio pid', () => {
+    expect(
+      otherConsumers({ type: 'shared', participants: { p2: 1, p3: 1 } }, 'p2'),
+    ).toEqual(['p3']);
+    expect(otherConsumers(undefined, 'p2')).toEqual([]);
+  });
+
+  it('pide confirmar SOLO si otro ya lo cogió y yo no estoy', () => {
+    // Otro (p3) ya lo tiene, yo (p2) no → preguntar.
+    expect(
+      needsShareConfirmation({ type: 'one', participants: { p3: 1 } }, 'p2'),
+    ).toBe(true);
+    // Línea libre → sumarme directo, sin preguntar.
+    expect(needsShareConfirmation(undefined, 'p2')).toBe(false);
+    expect(
+      needsShareConfirmation({ type: 'unassigned', participants: {} }, 'p2'),
+    ).toBe(false);
+    // Ya es mía (quitármela) → nunca preguntar.
+    expect(
+      needsShareConfirmation({ type: 'one', participants: { p2: 1 } }, 'p2'),
+    ).toBe(false);
+    // Ya compartida conmigo dentro → no preguntar.
+    expect(
+      needsShareConfirmation(
+        { type: 'shared', participants: { p2: 1, p3: 1 } },
+        'p2',
+      ),
+    ).toBe(false);
+  });
+
+  it('compartir = un único producto con varios consumidores (no duplica)', () => {
+    // p3 lo tenía; p2 confirma compartir → toggleSelf añade SOLO su entrada.
+    const before = { type: 'one' as const, participants: { p3: 1 } };
+    const after = toggleSelf(before, 'p2');
+    expect(after.type).toBe('shared');
+    expect(after.participants).toEqual({ p3: 1, p2: 1 });
+    expect(after.lastEditorPid).toBe('p2'); // exigido por las reglas
+    // Sigue siendo UNA línea: mismo objeto de asignación, dos consumidores.
+    expect(Object.keys(after.participants)).toHaveLength(2);
   });
 });

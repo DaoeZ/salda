@@ -246,3 +246,192 @@ test('determinismo: el orden de participantes lo fija `order`', () => {
   assert.deepEqual(r2.settlementSync.writes, r1.settlementSync.writes);
   assert.deepEqual(r2.balances, r1.balances);
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// "CADA UNO PAGA LO SUYO": jamás una media previa; lo no reclamado es del
+// pagador. Estos tests blindan el bug reportado en pruebas reales para que
+// no vuelva NUNCA.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Sesión de un solo ticket byItem, pagado por p1 (owner), 3 personas. */
+function byItem(
+  grandTotal: number,
+  lines: SessionSnapshot['accounts'][0]['tickets'][0]['lines'],
+  participantIds = ['p1', 'p2', 'p3'],
+): SessionSnapshot {
+  return {
+    splitModeDefault: 'byItem',
+    participants: participantIds.map((id, i) => ({
+      id,
+      isOwner: i === 0,
+      order: i,
+    })),
+    accounts: [
+      {
+        id: 'a',
+        tickets: [{ id: 't', grandTotal, paidByParticipantId: 'p1', lines }],
+      },
+    ],
+    settlements: [],
+  };
+}
+
+const one = (pid: string) => ({ type: 'one', participants: { [pid]: 1 } });
+const shared = (...pids: string[]) => ({
+  type: 'shared',
+  participants: Object.fromEntries(pids.map((p) => [p, 1])),
+});
+const unassigned = { type: 'unassigned', participants: {} };
+
+test('BUG REPORTADO: 30€/3, uno coge algo de 5€, el resto SIN reclamar → ' +
+    'NO hay media previa; lo no reclamado lo cubre el pagador', () => {
+  // Total 30€: coca 5€ (p2) + resto 25€ aún sin asignar. El bug daba
+  // ~13,33 a p2 (8,33 de media + 5 de la coca). Correcto: p2 paga SOLO 5€.
+  const r = computeAggregates(
+    byItem(3000, [
+      { id: 'coca', totalPrice: 500, assignment: one('p2') },
+      { id: 'resto', totalPrice: 2500, assignment: unassigned },
+    ]),
+  );
+  assert.equal(r.balances.p2.consumed, 500); // exactamente su coca, sin media
+  assert.equal(r.balances.p3.consumed, 0); // no cogió nada → 0, sin media
+  assert.equal(r.balances.p1.consumed, 2500); // el pagador cubre lo no reclamado
+  // Σ consumo == grandTotal, siempre.
+  assert.equal(
+    r.balances.p1.consumed + r.balances.p2.consumed + r.balances.p3.consumed,
+    3000,
+  );
+  // p2 debe 5€ a p1; p3 no debe nada.
+  assert.deepEqual(r.settlementSync.writes, [
+    { from: 'p2', to: 'p1', amount: 500 },
+  ]);
+});
+
+test('a medida que se reclama, la parte del pagador se reduce a lo suyo', () => {
+  // Todo reclamado: p1 su plato (10), p2 (10), p3 (10). Pagador solo lo suyo.
+  const r = computeAggregates(
+    byItem(3000, [
+      { id: 'l1', totalPrice: 1000, assignment: one('p1') },
+      { id: 'l2', totalPrice: 1000, assignment: one('p2') },
+      { id: 'l3', totalPrice: 1000, assignment: one('p3') },
+    ]),
+  );
+  assert.equal(r.balances.p1.consumed, 1000);
+  assert.equal(r.balances.p2.consumed, 1000);
+  assert.equal(r.balances.p3.consumed, 1000);
+  assert.equal(r.balances.p1.net, 3000 - 1000); // pagó 30, consumió 10
+});
+
+test('todos dejan de compartir (todo vuelve a sin asignar) → todo al pagador',
+    () => {
+  const r = computeAggregates(byItem(3000, [
+    { id: 'l1', totalPrice: 3000, assignment: unassigned },
+  ]));
+  assert.equal(r.balances.p1.consumed, 3000);
+  assert.equal(r.balances.p2.consumed, 0);
+  assert.equal(r.balances.p3.consumed, 0);
+  assert.deepEqual(r.settlementSync.writes, []); // nadie debe nada al pagador
+});
+
+test('compartido entre 2 / 3 / 4 se divide a partes iguales', () => {
+  // 2 comparten unas bravas de 6€ (el resto lo cubre el pagador p1).
+  let r = computeAggregates(byItem(600, [
+    { id: 'bravas', totalPrice: 600, assignment: shared('p2', 'p3') },
+  ]));
+  assert.equal(r.balances.p2.consumed, 300);
+  assert.equal(r.balances.p3.consumed, 300);
+
+  // 3 comparten (incluye al pagador): 900/3 = 300 cada uno.
+  r = computeAggregates(byItem(900, [
+    { id: 'l', totalPrice: 900, assignment: shared('p1', 'p2', 'p3') },
+  ]));
+  assert.equal(r.balances.p1.consumed, 300);
+  assert.equal(r.balances.p2.consumed, 300);
+  assert.equal(r.balances.p3.consumed, 300);
+
+  // 4 comparten: 1000/4 = 250 cada uno.
+  r = computeAggregates(byItem(
+    1000,
+    [{ id: 'l', totalPrice: 1000, assignment: shared('p1', 'p2', 'p3', 'p4') }],
+    ['p1', 'p2', 'p3', 'p4'],
+  ));
+  for (const p of ['p1', 'p2', 'p3', 'p4']) {
+    assert.equal(r.balances[p].consumed, 250);
+  }
+});
+
+test('una persona deja de compartir → los que quedan se reparten', () => {
+  // Antes p2+p3 compartían; p3 se sale → p2 solo (con lo no reclamado al pagador).
+  const r = computeAggregates(byItem(600, [
+    { id: 'bravas', totalPrice: 600, assignment: shared('p2') },
+  ]));
+  assert.equal(r.balances.p2.consumed, 600);
+  assert.equal(r.balances.p3.consumed, 0);
+});
+
+test('descuentos e IVA (grandTotal != subtotal) se prorratean, un solo redondeo',
+    () => {
+  // Subtotal líneas 1000, grandTotal 1100 (IVA 10%): cada consumo escala ×1,1.
+  const r = computeAggregates(byItem(1100, [
+    { id: 'l1', totalPrice: 500, assignment: one('p2') },
+    { id: 'l2', totalPrice: 500, assignment: one('p3') },
+  ]));
+  assert.equal(r.balances.p2.consumed, 550);
+  assert.equal(r.balances.p3.consumed, 660 - 110); // 550
+  assert.equal(r.balances.p1.consumed, 0);
+  assert.equal(
+    r.balances.p1.consumed + r.balances.p2.consumed + r.balances.p3.consumed,
+    1100,
+  );
+});
+
+test('ticket grande con resto: Σ consumo == grandTotal exacto', () => {
+  // 100,03 € entre 3 que comparten una línea: sin céntimos perdidos.
+  const r = computeAggregates(byItem(10003, [
+    { id: 'l', totalPrice: 10003, assignment: shared('p1', 'p2', 'p3') },
+  ]));
+  const sum =
+    r.balances.p1.consumed + r.balances.p2.consumed + r.balances.p3.consumed;
+  assert.equal(sum, 10003);
+});
+
+test('múltiples productos compartidos por grupos distintos + individual + ' +
+    'sin reclamar al pagador, todo a la vez', () => {
+  // 4 personas. bravas(6€) p2+p3; nachos(4€) p3+p4; cerveza(3€) p2;
+  // postre(2€) sin reclamar → pagador p1. grandTotal 15€ (= subtotal).
+  const r = computeAggregates(byItem(
+    1500,
+    [
+      { id: 'bravas', totalPrice: 600, assignment: shared('p2', 'p3') },
+      { id: 'nachos', totalPrice: 400, assignment: shared('p3', 'p4') },
+      { id: 'cerveza', totalPrice: 300, assignment: one('p2') },
+      { id: 'postre', totalPrice: 200, assignment: unassigned },
+    ],
+    ['p1', 'p2', 'p3', 'p4'],
+  ));
+  // p2: 300 (media bravas) + 300 (cerveza) = 600
+  assert.equal(r.balances.p2.consumed, 600);
+  // p3: 300 (media bravas) + 200 (media nachos) = 500
+  assert.equal(r.balances.p3.consumed, 500);
+  // p4: 200 (media nachos) = 200
+  assert.equal(r.balances.p4.consumed, 200);
+  // p1: postre sin reclamar = 200
+  assert.equal(r.balances.p1.consumed, 200);
+  assert.equal(
+    r.balances.p1.consumed +
+      r.balances.p2.consumed +
+      r.balances.p3.consumed +
+      r.balances.p4.consumed,
+    1500,
+  );
+});
+
+test('modo "a medias" (equal) es indiferente a las asignaciones de línea', () => {
+  const r = computeAggregates({
+    ...byItem(900, [{ id: 'l', totalPrice: 900, assignment: one('p2') }]),
+    splitModeDefault: 'equal',
+  });
+  assert.equal(r.balances.p1.consumed, 300);
+  assert.equal(r.balances.p2.consumed, 300);
+  assert.equal(r.balances.p3.consumed, 300);
+});

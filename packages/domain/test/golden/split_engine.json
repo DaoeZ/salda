@@ -133,6 +133,55 @@
       "expected": { "a": 450, "b": 150 }
     },
     {
+      "name": "byItem: compartida entre 3 a partes iguales (con resto)",
+      "participants": ["a", "b", "c"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 1000,
+        "lines": [
+          { "id": "l1", "totalPrice": 1000, "assignment": { "type": "shared", "weights": { "a": 1, "b": 1, "c": 1 } } }
+        ]
+      },
+      "expected": { "a": 334, "b": 333, "c": 333 }
+    },
+    {
+      "name": "byItem: compartida entre 4 a partes iguales",
+      "participants": ["a", "b", "c", "d"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 1000,
+        "lines": [
+          { "id": "l1", "totalPrice": 1000, "assignment": { "type": "shared", "weights": { "a": 1, "b": 1, "c": 1, "d": 1 } } }
+        ]
+      },
+      "expected": { "a": 250, "b": 250, "c": 250, "d": 250 }
+    },
+    {
+      "name": "byItem: dos grupos comparten productos distintos",
+      "participants": ["a", "b", "c", "d"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 1000,
+        "lines": [
+          { "id": "bravas", "totalPrice": 600, "assignment": { "type": "shared", "weights": { "a": 1, "b": 1 } } },
+          { "id": "nachos", "totalPrice": 400, "assignment": { "type": "shared", "weights": { "c": 1, "d": 1 } } }
+        ]
+      },
+      "expected": { "a": 300, "b": 300, "c": 200, "d": 200 }
+    },
+    {
+      "name": "byItem: una persona sola queda en una línea antes compartida",
+      "participants": ["a", "b"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 500,
+        "lines": [
+          { "id": "l1", "totalPrice": 500, "assignment": { "type": "shared", "weights": { "a": 1 } } }
+        ]
+      },
+      "expected": { "a": 500, "b": 0 }
+    },
+    {
       "name": "byItem: caso complejo (individual + compartida + todos + propina)",
       "participants": ["a", "b", "c"],
       "mode": "byItem",
