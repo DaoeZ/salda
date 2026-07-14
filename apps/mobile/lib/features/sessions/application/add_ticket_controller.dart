@@ -68,11 +68,11 @@ class AddTicketController extends Notifier<AsyncValue<void>> {
           );
       final imagePath = ref.read(lastScanImageProvider);
       if (imagePath != null && draft.engine != 'manual') {
-        unawaited(ref.read(receiptStorageProvider).uploadOriginal(
-              sessionId: sessionId,
-              ticketPath: ticketPath,
-              localImagePath: imagePath,
-            ));
+        // Copia local durable ANTES de perder el archivo del picker; luego
+        // subida con reintento en segundo plano (no bloquea el flujo).
+        final store = ref.read(receiptImageStoreProvider);
+        await store.cacheLocalOriginal(ticketPath, imagePath);
+        unawaited(store.upload(ticketPath));
       }
       ref.read(reviewDraftProvider.notifier).discard();
       ref.invalidate(savedDraftProvider);

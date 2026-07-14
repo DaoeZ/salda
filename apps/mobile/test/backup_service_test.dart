@@ -40,6 +40,14 @@ void main() {
       ),
     ));
     final sid = created.sessionId;
+    // Referencia de la foto del ticket (P0.2): debe sobrevivir al backup.
+    final ticket = (await firestore
+            .collection('sessions/$sid/accounts/a0/tickets')
+            .get())
+        .docs
+        .single;
+    await ticket.reference
+        .update({'imagePath': 'receipts/$sid/${ticket.id}/original.jpg'});
     await firestore.doc('sessions/$sid/settlements/st1').set({
       'from': 'p1', 'to': 'p0', 'amount': 5000, 'state': 'confirmed',
     });
@@ -71,13 +79,18 @@ void main() {
     expect(session['ownerUid'], 'nueva-cuenta'); // forzado al importador
     expect(session['shareCode'], 'NEW-SHARE-CODE-9999'); // quemado el viejo
 
+    final ticket = (await fresh
+            .collection('sessions/$sid/accounts/a0/tickets')
+            .get())
+        .docs
+        .single;
+    // La referencia de la foto sobrevive a la restauración (P0.2).
+    expect(ticket.data()['imagePath'],
+        'receipts/$sid/${ticket.id}/original.jpg');
     final lines = await fresh
-        .collection('sessions/$sid/accounts/a0/tickets')
-        .get()
-        .then((t) => fresh
-            .collection(
-                'sessions/$sid/accounts/a0/tickets/${t.docs.single.id}/lines')
-            .get());
+        .collection(
+            'sessions/$sid/accounts/a0/tickets/${ticket.id}/lines')
+        .get();
     expect(lines.docs.single.data()['totalPrice'], 10000);
 
     final settlement =

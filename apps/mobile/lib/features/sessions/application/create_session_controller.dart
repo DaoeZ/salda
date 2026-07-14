@@ -44,14 +44,13 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
       );
       final created =
           await ref.read(sessionRepositoryProvider).createSession(input);
-      // Foto del ticket a Storage (best-effort, no bloquea el flujo).
+      // Foto del ticket: copia local durable ANTES de perder el archivo del
+      // picker, y subida con reintento en segundo plano (no bloquea el flujo).
       final imagePath = ref.read(lastScanImageProvider);
       if (imagePath != null && draft.engine != 'manual') {
-        unawaited(ref.read(receiptStorageProvider).uploadOriginal(
-              sessionId: created.sessionId,
-              ticketPath: created.ticketPath,
-              localImagePath: imagePath,
-            ));
+        final store = ref.read(receiptImageStoreProvider);
+        await store.cacheLocalOriginal(created.ticketPath, imagePath);
+        unawaited(store.upload(created.ticketPath));
       }
       // Personas frecuentes: todas menos el anfitrión (índice 0).
       await ref

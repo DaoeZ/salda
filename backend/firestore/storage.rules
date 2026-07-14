@@ -2,7 +2,8 @@ rules_version = '2';
 
 // Espejo de la política de Firestore para las fotos de tickets:
 // owner de la sesión = lectura/escritura; invitado con guestAccess = lectura.
-// Límites: JPEG, ≤ 2 MB (la app sube original ≤1600px q80 + thumb 300px).
+// Límites: JPEG, < 2 MB (la app sube el original ≤1600px q85, holgadamente
+// por debajo del límite; ruta receipts/{sid}/{tid}/original.jpg).
 service firebase.storage {
   match /b/{bucket}/o {
 

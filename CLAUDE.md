@@ -32,6 +32,20 @@ reales y probar en dispositivo (sin SDK de Android en esta máquina). Las reglas
 son deny-all: implementan la matriz §13.2 con 48 tests. Las functions (recompute/notify/
 cleanup) están implementadas y testeadas.
 
+**Estabilización post-MVP (prueba en dispositivo real):** 6 bugs de la 1ª prueba
+corregidos con causa raíz (commit `d5e6d55`); "cada uno paga lo suyo" blindado — las
+líneas no reclamadas recaen en el pagador, sin media previa (ADR-021, `4c3ed98`); y
+**foto del ticket P0.2 COMPLETA**: `ReceiptImageStore` (apps/mobile/.../scan/data/
+receipt_storage.dart) con copia local DURABLE en app-documents ligada al ticket
+(sobrevive al cierre de la app y a la limpieza del picker; vale para cámara y galería),
+subida a Storage con reintento transparente (si falla, se reintenta al abrir el ticket),
+y lectura LOCAL-PRIMERO memoizada (`ticketImageProvider`, instantánea/offline). El
+detalle abre la foto a pantalla completa con zoom+pan. `imagePath` (referencia) viaja en
+el backup JSON; los BYTES no (backup solo-JSON, spec §14) → tras restaurar en otro
+dispositivo la referencia existe pero la imagen solo si el objeto de Storage sigue
+(degrada a "sin foto"). Captura a q85 (< 2 MB, regla de Storage). Deuda menor: limpiar
+las copias locales al borrar el grupo.
+
 **Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ · M4 código ✅ (E2E vs emulador) ·
 M5 código ✅ (salvo lo intrínsecamente de dispositivo: recordatorios con notificaciones,
 haptics reales, import de PDF con render nativo y captura guiada) · **M6 IA ✅ COMPLETO**:

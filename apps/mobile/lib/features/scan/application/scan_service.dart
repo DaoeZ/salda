@@ -35,7 +35,10 @@ class ScanService {
     final image = await _picker.pickImage(
       source: source,
       maxWidth: 1600, // presupuesto de la spec §7: ≤1600px
-      imageQuality: 92,
+      // q85: buena calidad de ticket y JPEG bien por debajo del límite de 2 MB
+      // de la regla de Storage (a q92 una foto detallada podía rozarlo y ser
+      // rechazada en silencio). image_picker recodifica a JPEG con esta opción.
+      imageQuality: 85,
     );
     if (image == null) return null;
     final document = await ocr.recognize(image.path);

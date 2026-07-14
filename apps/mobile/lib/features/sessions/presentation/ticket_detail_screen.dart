@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,37 +55,8 @@ class TicketDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: TokenSpacing.lg),
-          if (t.imagePath != null) ...[
-            FutureBuilder(
-              future: ref.read(receiptStorageProvider).download(t.imagePath!),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return Container(
-                    height: 220,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(TokenRadius.card),
-                    ),
-                    child: const Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final bytes = snapshot.data;
-                if (bytes == null) {
-                  return Text(l10n.ticketNoPhoto,
-                      style: theme.textTheme.bodySmall);
-                }
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(TokenRadius.card),
-                  child: InteractiveViewer(
-                    maxScale: 5,
-                    child: Image.memory(bytes, fit: BoxFit.contain),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: TokenSpacing.lg),
-          ] else if (t.kind == 'scanned') ...[
-            Text(l10n.ticketNoPhoto, style: theme.textTheme.bodySmall),
+          if (t.kind == 'scanned') ...[
+            _TicketPhoto(ticketPath: t.path, uploaded: t.imagePath != null),
             const SizedBox(height: TokenSpacing.lg),
           ],
           Text(l10n.reviewLines, style: theme.textTheme.titleMedium),
@@ -129,6 +102,81 @@ class TicketDetailScreen extends ConsumerWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Foto original del ticket: local-primero (instantánea/offline), memoizada.
+/// Toca para abrirla a pantalla completa con zoom y desplazamiento.
+class _TicketPhoto extends ConsumerWidget {
+  const _TicketPhoto({required this.ticketPath, required this.uploaded});
+
+  final String ticketPath;
+  final bool uploaded;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final image = ref.watch(
+      ticketImageProvider((ticketPath: ticketPath, uploaded: uploaded)),
+    );
+
+    return image.when(
+      loading: () => Container(
+        height: 220,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(TokenRadius.card),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, _) =>
+          Text(l10n.ticketNoPhoto, style: theme.textTheme.bodySmall),
+      data: (bytes) {
+        if (bytes == null) {
+          return Text(l10n.ticketNoPhoto, style: theme.textTheme.bodySmall);
+        }
+        return GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              fullscreenDialog: true,
+              builder: (_) => _FullscreenPhoto(bytes: bytes),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(TokenRadius.card),
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Foto a pantalla completa con zoom (pellizco) y desplazamiento.
+class _FullscreenPhoto extends StatelessWidget {
+  const _FullscreenPhoto({required this.bytes});
+
+  final Uint8List bytes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
+      body: InteractiveViewer(
+        minScale: 1,
+        maxScale: 6,
+        child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
       ),
     );
   }
