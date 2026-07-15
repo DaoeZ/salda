@@ -73,6 +73,9 @@ test('balances multi-pagador y objetivos con id determinista', () => {
   ]);
   assert.equal(settlementId(r.settlementSync.writes[0]), 'pending_p3_p1');
   assert.equal(r.pendingSettlements, 2);
+  // El denominador son las transferencias necesarias (12 € + 6 €), no los
+  // 36 € gastados.
+  assert.equal(r.sessionTotals.settlementRequired, 1800);
 });
 
 test('marked con el mismo importe NO se toca (se preserva el aviso de pago)',
@@ -88,6 +91,8 @@ test('marked con el mismo importe NO se toca (se preserva el aviso de pago)',
   ]);
   assert.deepEqual(r.settlementSync.removals, []);
   assert.equal(r.sessionTotals.settledMarked, 1200);
+  assert.equal(r.sessionTotals.settledConfirmed, 0);
+  assert.equal(r.sessionTotals.settlementRequired, 1800);
   assert.equal(r.pendingSettlements, 1);
 });
 
@@ -125,11 +130,66 @@ test('las confirmadas se congelan: reducen lo pendiente y jamás se tocan',
   ];
   const r = computeAggregates(s);
   assert.equal(r.sessionTotals.settledConfirmed, 1200);
+  assert.equal(r.sessionTotals.settlementRequired, 1800);
   assert.equal(r.balances.p3.outstanding, 0);
+  assert.equal(r.balances.p2.outstanding, -600);
   assert.ok(!r.settlementSync.removals.includes('x1'));
   assert.deepEqual(r.settlementSync.writes, [
     { from: 'p2', to: 'p1', amount: 600 },
   ]);
+});
+
+test('todas las obligaciones confirmadas dejan saldo cero y progreso 100 %',
+    () => {
+  const s = base();
+  s.settlements = [
+    { id: 'c1', from: 'p3', to: 'p1', amount: 1200, state: 'confirmed' },
+    { id: 'c2', from: 'p2', to: 'p1', amount: 600, state: 'confirmed' },
+  ];
+  const r = computeAggregates(s);
+
+  for (const balance of Object.values(r.balances)) {
+    assert.equal(balance.outstanding, 0);
+  }
+  assert.equal(r.sessionTotals.settledConfirmed, 1800);
+  assert.equal(r.sessionTotals.settlementRequired, 1800);
+  assert.equal(r.pendingSettlements, 0);
+  assert.deepEqual(r.settlementSync.writes, []);
+});
+
+test('si cada persona pagó lo suyo, 0/0 representa una sesión saldada', () => {
+  const s: SessionSnapshot = {
+    splitModeDefault: 'equal',
+    participants: [
+      { id: 'p1', isOwner: true, order: 0 },
+      { id: 'p2', order: 1 },
+    ],
+    accounts: [{
+      id: 'a',
+      tickets: [
+        {
+          id: 't1',
+          grandTotal: 1000,
+          paidByParticipantId: 'p1',
+          lines: [],
+        },
+        {
+          id: 't2',
+          grandTotal: 1000,
+          paidByParticipantId: 'p2',
+          lines: [],
+        },
+      ],
+    }],
+    settlements: [],
+  };
+  const r = computeAggregates(s);
+
+  assert.equal(r.sessionTotals.settlementRequired, 0);
+  assert.equal(r.sessionTotals.settledConfirmed, 0);
+  assert.equal(r.balances.p1.outstanding, 0);
+  assert.equal(r.balances.p2.outstanding, 0);
+  assert.deepEqual(r.settlementSync.writes, []);
 });
 
 test('REGRESIÓN caso real: Lidl confirmado + gasto manual de 55 €', () => {
@@ -185,6 +245,8 @@ test('REGRESIÓN caso real: Lidl confirmado + gasto manual de 55 €', () => {
   );
   assert.deepEqual(r.settlementSync.removals, []);
   assert.equal(r.sessionTotals.settledConfirmed, 1800);
+  // 18 € ya confirmados + 36,66 € residuales del gasto nuevo.
+  assert.equal(r.sessionTotals.settlementRequired, 5466);
   assert.equal(r.pendingSettlements, 2);
 });
 

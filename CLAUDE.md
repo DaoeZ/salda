@@ -46,6 +46,14 @@ dispositivo la referencia existe pero la imagen solo si el objeto de Storage sig
 (degrada a "sin foto"). Captura a q85 (< 2 MB, regla de Storage). Deuda menor: limpiar
 las copias locales al borrar el grupo.
 
+**P0.3 balance actual y progreso COMPLETA**: `recompute` publica
+`totals.settlementRequired` = confirmadas históricas + obligaciones residuales;
+el progreso compara confirmado/requerido (0/0 = saldado), nunca pagos/gasto total.
+La app separa "Estado actual" (`outstanding`) de "Histórico económico"
+(`paid/consumed/net` + transferencias confirmadas), con barra verde/ámbar/neutral y
+actualización por streams. La web usa el mismo agregado autoritativo y ya no estima
+importes "c/u" desde líneas. ADR-022 en la Biblia.
+
 **Hoja de ruta:** M0 ✅ · M1 ✅ · M2 ✅ · M3 código ✅ · M4 código ✅ (E2E vs emulador) ·
 M5 código ✅ (salvo lo intrínsecamente de dispositivo: recordatorios con notificaciones,
 haptics reales, import de PDF con render nativo y captura guiada) · **M6 IA ✅ COMPLETO**:

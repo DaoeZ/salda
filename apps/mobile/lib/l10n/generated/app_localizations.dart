@@ -556,6 +556,66 @@ abstract class AppLocalizations {
   /// **'Balance'**
   String get balancesTitle;
 
+  /// No description provided for @currentStateTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Estado actual'**
+  String get currentStateTitle;
+
+  /// No description provided for @economicHistoryTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Histórico económico'**
+  String get economicHistoryTitle;
+
+  /// No description provided for @settledState.
+  ///
+  /// In es, this message translates to:
+  /// **'Saldado'**
+  String get settledState;
+
+  /// No description provided for @currentToReceive.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente de cobrar'**
+  String get currentToReceive;
+
+  /// No description provided for @currentToPay.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente de pagar'**
+  String get currentToPay;
+
+  /// No description provided for @settlementRemaining.
+  ///
+  /// In es, this message translates to:
+  /// **'Quedan {amount} por liquidar'**
+  String settlementRemaining(String amount);
+
+  /// No description provided for @settlementProgressSemantics.
+  ///
+  /// In es, this message translates to:
+  /// **'Progreso de pagos confirmados'**
+  String get settlementProgressSemantics;
+
+  /// No description provided for @settlementProgressAmount.
+  ///
+  /// In es, this message translates to:
+  /// **'{confirmed} de {required} confirmados'**
+  String settlementProgressAmount(String confirmed, String required);
+
+  /// No description provided for @settlementMarkedAmount.
+  ///
+  /// In es, this message translates to:
+  /// **'{amount} marcado como pagado, pendiente de confirmación'**
+  String settlementMarkedAmount(String amount);
+
+  /// No description provided for @noSettlementsRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'No hacen falta transferencias'**
+  String get noSettlementsRequired;
+
   /// No description provided for @balancePaidLabel.
   ///
   /// In es, this message translates to:

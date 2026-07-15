@@ -13,6 +13,7 @@ class SessionSummary {
     required this.kind,
     required this.status,
     required this.grandTotal,
+    required this.settlementRequired,
     required this.settledConfirmed,
     required this.settledMarked,
     required this.participantsCount,
@@ -28,6 +29,10 @@ class SessionSummary {
   final String kind; // 'single' | 'multi'
   final SessionStatus status;
   final Money grandTotal;
+
+  /// Confirmado histórico + obligaciones residuales actuales.
+  /// Es el denominador autoritativo del progreso de liquidación.
+  final Money settlementRequired;
   final Money settledConfirmed;
   final Money settledMarked;
   final int participantsCount;
@@ -40,9 +45,42 @@ class SessionSummary {
   final String? category;
   final int? updatedAtMillis;
 
-  double get settledFraction => grandTotal.isZero
+  SettlementProgress get settlementProgress => SettlementProgress(
+        required: settlementRequired,
+        confirmed: settledConfirmed,
+        marked: settledMarked,
+      );
+}
+
+/// Estado derivado exclusivamente de agregados autoritativos de liquidación.
+///
+/// `required` no es el gasto total: suma lo confirmado y las transferencias
+/// residuales que todavía hacen falta. Por definición 0/0 está saldado.
+class SettlementProgress {
+  const SettlementProgress({
+    required this.required,
+    required this.confirmed,
+    required this.marked,
+  });
+
+  final Money required;
+  final Money confirmed;
+  final Money marked;
+
+  bool get isSettled => required.cents == confirmed.cents;
+
+  Money get remaining => Money(
+        (required.cents - confirmed.cents).clamp(0, required.cents),
+      );
+
+  double get confirmedFraction => required.isZero
+      ? 1
+      : (confirmed.cents / required.cents).clamp(0.0, 1.0);
+
+  double get markedFraction => required.isZero
       ? 0
-      : (settledConfirmed.cents / grandTotal.cents).clamp(0.0, 1.0);
+      : (marked.cents / required.cents)
+          .clamp(0.0, 1.0 - confirmedFraction);
 }
 
 class SessionParticipant {

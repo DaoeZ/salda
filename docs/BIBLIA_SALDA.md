@@ -1,8 +1,9 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.1 · **Fecha:** 2026-07-14 · **Changelog:** v1.1 — blindado el modo "cada
-uno paga lo suyo": las líneas no reclamadas recaen en el pagador (ADR-021), fin de la
-"media previa"; refuerzo de tests (motor + recompute + web). v1.0 primera edición.
+**Versión:** 1.2 · **Fecha:** 2026-07-15 · **Changelog:** v1.2 — P0.3 separa histórico
+económico de estado actual y define el progreso sobre obligaciones de liquidación
+(ADR-022). v1.1 — blindado el modo "cada uno paga lo suyo": las líneas no reclamadas
+recaen en el pagador (ADR-021), fin de la "media previa". v1.0 primera edición.
 
 > **Qué es este documento:** la referencia estratégica y técnica definitiva de Salda.
 > Complementa —no sustituye— a `docs/ESPECIFICACION.md` (spec funcional v2.0 congelada)
@@ -260,7 +261,9 @@ web** (validado campo a campo por reglas).
 Los balances NUNCA se calculan en cliente para persistir: la function `recompute`
 (triggers: líneas, tickets, participantes y liquidaciones) recalcula
 `balances{pid: pagó/consumió/neto/pendiente}` y los escribe en el doc del grupo;
-la app y la web solo pintan. El detalle del cálculo, en §26–§27.
+la app y la web solo pintan. La UI separa dos verdades: `paid/consumed/net` es el
+histórico económico del reparto; `outstanding` es el saldo pendiente actual tras
+descontar transferencias confirmadas. El detalle del cálculo, en §26–§27.
 
 ## §13. Flujo de pagos / liquidaciones
 
@@ -543,7 +546,8 @@ users/{uid}/frequentPeople/{slug}: name, usageCount, lastUsedAt
 sessions/{sid}: schemaVersion, ownerUid, kind single|multi, name, currency,
    category, status open|closed|archived, closedAt?, shareCode(128b),
    splitModeDefault, ownerParticipantId, paymentMethodsSnapshot,
-   AGREGADOS solo-función: totals{grandTotal,settledConfirmed,settledMarked},
+   AGREGADOS solo-función: totals{grandTotal,settlementRequired,
+   settledConfirmed,settledMarked},
    balances{pid:{paid,consumed,net,outstanding}}, pendingSettlements,
    participantsCount, computeVersion, createdAt, updatedAt
  /participants/{p0..pN}: name, isOwner, order, claimedByDevice, active
@@ -639,16 +643,16 @@ alertas de métricas recomendadas en spec §12.4.
 <a name="parte-vi"></a>
 # PARTE VI — CALIDAD, RENDIMIENTO Y SEGURIDAD
 
-## §36. Estrategia de testing [HECHO: ~215 tests]
+## §36. Estrategia de testing [HECHO: 251 tests]
 
 | Capa | Tipo | Qué cubre | Dónde |
 |---|---|---|---|
-| domain (57) | unitario + propiedades sembradas + **golden** | motores exactos, roundtrips, 29 vectores compartidos | packages/domain/test |
+| domain (61) | unitario + propiedades sembradas + **golden** | motores exactos, roundtrips, 33 vectores compartidos | packages/domain/test |
 | ocr_parser (22) | unitario + **corpus 13 casos** con harness de métricas | geometría, patrones, parser completo, regresión | packages/ocr_parser/test |
-| functions TS (40) | unitario + **golden (los MISMOS json)** + regresión bug real | paridad Dart↔TS, recompute idempotente/concurrente | backend/functions/src/test |
+| functions TS (55) | unitario + **golden (los MISMOS json)** + regresiones reales | paridad Dart↔TS, recompute idempotente/concurrente, progreso | backend/functions/src/test |
 | reglas (48) | integración contra Emulator Suite | cada celda de la matriz, positivo y negativo | backend/firestore/test |
-| app (25) | widget + repos con fake_cloud_firestore + controladores con fakes | flujos, drafts, backup roundtrip, IA con proveedor falso | apps/mobile/test |
-| web (14) | vitest de lógica pura + svelte-check + presupuesto de peso | enlace, assignment (contrato con reglas), dinero, pagos | apps/guest_web/src/lib |
+| app (34) | widget + repos con fake_cloud_firestore + controladores con fakes | flujos, drafts, backup, IA, progreso y reactividad | apps/mobile/test |
+| web (21) | vitest de lógica pura + svelte-check + presupuesto de peso | enlace, assignment, dinero, pagos, progreso y frontera económica | apps/guest_web/src/lib |
 
 **Deliberadamente sin cubrir (y por qué):** UI Svelte por componentes (4 vistas
 sencillas; la lógica que importa está extraída y testeada), E2E automatizado con
@@ -1019,6 +1023,24 @@ Incremental por construcción; térmico ilegible ≠ marca perdida; corpus como 
 **Decisión:** las líneas sin consumidores se atribuyen al **pagador del ticket** (neto cero para él en esa parte: la pagó y la "consume"); a medida que la gente reclama, la parte del pagador se reduce hasta quedar solo lo suyo. La conversión vive en `recompute.sanitizeLine` (que conoce al pagador); el motor puro NO cambia (paridad y vectores dorados intactos) y se le pasa `unassignedPolicy: 'error'` como red de seguridad. `splitAmongAll` sigue siendo una capacidad pura del motor (tested) reservada al futuro "finalizar y repartir sobrantes con confirmación" (RF-46), pero NUNCA se usa en el cálculo continuo.
 **Consecuencias:** + fin de la media previa; Σ==grandTotal siempre; redondeo único preservado (ADR-007); + tests de regresión que blindan el caso exacto reportado y los límites (compartir 2/3/4, dejar de compartir, IVA/descuentos, tickets grandes, múltiples grupos). − el pagador ve una parte alta mientras el grupo no ha reclamado sus productos (correcto y transitorio; la UI puede indicarlo).
 **Revisión futura:** si se implementa el "finalizar ticket" explícito (RF-46), decidir allí si los sobrantes se dejan al pagador o se reparten con confirmación.
+
+### ADR-022: Progreso sobre obligaciones y separación histórico/actual
+**Estado:** Aceptada · **Fecha:** 2026-07-15 (P0.3)
+**Contexto/Problema:** la UI mostraba `net` incluso después de confirmar todos los
+pagos y calculaba `settledConfirmed / grandTotal`. Las liquidaciones son transferencias
+netas, por lo que su suma no coincide con el gasto y una cuenta saldada podía no llegar
+al 100 %.
+**Decisión:** `recompute` publica `settlementRequired = Σ confirmadas + Σ obligaciones
+residuales actuales`. El progreso confirmado es `settledConfirmed /
+settlementRequired`; si ambos son cero se define como 100 % porque no hacen falta
+transferencias. `settledMarked` forma un tramo ámbar pero no cuenta como confirmado.
+La vista principal usa `outstanding`; `paid/consumed/net` y las confirmadas permanecen
+en un bloque histórico separado.
+**Consecuencias:** confirmar mueve importe de residual a confirmado sin cambiar el
+denominador; añadir gastos aumenta solo el residual nuevo; las congeladas permanecen;
+varios pagadores y redondeos heredan la exactitud del motor. Se añade un campo opcional
+al agregado raíz, sin migrar colecciones ni modificar los motores congelados.
+**Revisión:** solo si cambia el modelo de estados de liquidación.
 
 ---
 

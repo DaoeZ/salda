@@ -37,7 +37,12 @@ export interface SessionInfo {
   name: string;
   status: 'open' | 'closed' | 'archived';
   splitModeDefault: 'equal' | 'byItem';
-  totals: { grandTotal: number; settledConfirmed: number };
+  totals: {
+    grandTotal: number;
+    settlementRequired: number;
+    settledConfirmed: number;
+    settledMarked: number;
+  };
   balances: Record<
     string,
     { paid: number; consumed: number; net: number; outstanding: number }
@@ -130,8 +135,13 @@ class GuestSession {
               (data.splitModeDefault as 'equal' | 'byItem') ?? 'equal',
             totals: {
               grandTotal: (data.totals?.grandTotal as number) ?? 0,
+              settlementRequired:
+                (data.totals?.settlementRequired as number) ??
+                (data.totals?.settledConfirmed as number) ??
+                0,
               settledConfirmed:
                 (data.totals?.settledConfirmed as number) ?? 0,
+              settledMarked: (data.totals?.settledMarked as number) ?? 0,
             },
             balances:
               (data.balances as SessionInfo['balances']) ?? {},

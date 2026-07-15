@@ -124,7 +124,12 @@ class FirestoreSessionRepository implements SessionRepository {
       'ownerParticipantId': 'p0',
       'paymentMethodsSnapshot': input.paymentMethodsSnapshot,
       'computeVersion': 0,
-      'totals': {'grandTotal': 0, 'settledConfirmed': 0, 'settledMarked': 0},
+      'totals': {
+        'grandTotal': 0,
+        'settlementRequired': 0,
+        'settledConfirmed': 0,
+        'settledMarked': 0,
+      },
       'balances': const <String, Object?>{},
       'participantsCount': input.participantNames.length,
       'pendingSettlements': 0,
@@ -401,6 +406,11 @@ class FirestoreSessionRepository implements SessionRepository {
       status: SessionStatus.values
           .byName((data['status'] as String?) ?? 'open'),
       grandTotal: Money((totals['grandTotal'] as int?) ?? 0),
+      settlementRequired: Money(
+        (totals['settlementRequired'] as int?) ??
+            (totals['settledConfirmed'] as int?) ??
+            0,
+      ),
       settledConfirmed: Money((totals['settledConfirmed'] as int?) ?? 0),
       settledMarked: Money((totals['settledMarked'] as int?) ?? 0),
       participantsCount: (data['participantsCount'] as int?) ?? 0,

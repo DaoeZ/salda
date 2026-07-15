@@ -7,6 +7,7 @@
     revolutUrl,
   } from '../lib/payments';
   import { guest } from '../lib/session.svelte';
+  import { settlementProgress } from '../lib/settlement-progress';
 
   let { onpick, onticket }: { onpick: () => void; onticket: () => void } =
     $props();
@@ -24,19 +25,18 @@
       (s) => s.to === guest.myPid && s.state !== 'confirmed',
     ),
   );
-  const iOweCents = $derived(
-    mine
-      .filter((s) => s.state !== 'confirmed')
-      .reduce((a, s) => a + s.amount, 0),
+  const myOutstanding = $derived(
+    guest.myPid ? (guest.session?.balances[guest.myPid]?.outstanding ?? 0) : 0,
   );
   const progress = $derived(
-    guest.session && guest.session.totals.grandTotal > 0
-      ? Math.min(
-          1,
-          guest.session.totals.settledConfirmed /
-            guest.session.totals.grandTotal,
-        )
-      : 0,
+    settlementProgress(
+      guest.session?.totals ?? {
+        grandTotal: 0,
+        settlementRequired: 0,
+        settledConfirmed: 0,
+        settledMarked: 0,
+      },
+    ),
   );
   const anyPickable = $derived(guest.tickets.some((t) => t.pickable));
   const methods = $derived(guest.session?.paymentMethods ?? {});
@@ -62,12 +62,15 @@
 {/if}
 
 <section class="card hero" aria-live="polite">
-  {#if iOweCents === 0}
+  {#if myOutstanding === 0}
     <p class="big">Estás en paz 🎉</p>
-    <p class="muted">No debes nada en esta cuenta.</p>
+    <p class="muted">Tu saldo pendiente actual es 0,00 €.</p>
+  {:else if myOutstanding > 0}
+    <p class="muted">Te queda por cobrar</p>
+    <p class="big money">{formatCentsAbs(myOutstanding)}</p>
   {:else}
     <p class="muted">Te toca pagar</p>
-    <p class="big money">{formatCentsAbs(iOweCents)}</p>
+    <p class="big money">{formatCentsAbs(myOutstanding)}</p>
   {/if}
 </section>
 
@@ -155,15 +158,28 @@
     class="track"
     role="progressbar"
     aria-label="Progreso de pagos del grupo"
-    aria-valuenow={Math.round(progress * 100)}
+    aria-valuenow={Math.round(progress.confirmedFraction * 100)}
     aria-valuemin="0"
     aria-valuemax="100"
   >
-    <div class="fill" style="width: {progress * 100}%"></div>
+    <div
+      class="fill confirmed"
+      style="width: {progress.confirmedFraction * 100}%"
+    ></div>
+    <div
+      class="fill marked"
+      style="left: {progress.confirmedFraction * 100}%; width: {progress.markedFraction * 100}%"
+    ></div>
   </div>
   <p class="muted small">
-    {formatCents(guest.session?.totals.settledConfirmed ?? 0)} de
-    {formatCents(guest.session?.totals.grandTotal ?? 0)} saldados
+    {#if progress.required === 0}
+      No hacen falta transferencias · Saldado
+    {:else}
+      {formatCents(progress.confirmed)} de {formatCents(progress.required)} confirmados
+      {#if progress.marked > 0}
+        · {formatCents(progress.marked)} pendiente de confirmación
+      {/if}
+    {/if}
   </p>
 </section>
 
@@ -244,15 +260,25 @@
     margin-bottom: var(--space-md);
   }
   .track {
+    position: relative;
     height: 6px;
     border-radius: 3px;
     background: var(--surface-high);
     overflow: hidden;
   }
   .fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
     height: 100%;
-    background: var(--primary);
     transition: width var(--duration-enter) var(--easing-emphasized);
+  }
+  .fill.confirmed {
+    left: 0;
+    background: var(--color-settlement-confirmed);
+  }
+  .fill.marked {
+    background: var(--color-settlement-marked);
   }
   .small {
     font-size: 13px;

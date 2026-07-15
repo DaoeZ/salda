@@ -11,6 +11,7 @@ import '../review/application/review_draft.dart';
 import '../scan/presentation/scan_flow.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session_models.dart';
+import '../sessions/presentation/settlement_progress_bar.dart';
 
 /// Historial de sesiones (RF-80/82) + FAB de escaneo.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -227,13 +228,9 @@ class _SessionCard extends StatelessWidget {
                   _chip(theme, l10n.statusArchived, Icons.archive_outlined),
               ]),
               const SizedBox(height: TokenSpacing.sm),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: session.settledFraction,
-                  minHeight: 6,
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                ),
+              SettlementProgressBar(
+                progress: session.settlementProgress,
+                semanticLabel: l10n.settlementProgressSemantics,
               ),
             ]),
           ),

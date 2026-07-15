@@ -251,6 +251,42 @@ class AppLocalizationsEs extends AppLocalizations {
   String get balancesTitle => 'Balance';
 
   @override
+  String get currentStateTitle => 'Estado actual';
+
+  @override
+  String get economicHistoryTitle => 'Histórico económico';
+
+  @override
+  String get settledState => 'Saldado';
+
+  @override
+  String get currentToReceive => 'Pendiente de cobrar';
+
+  @override
+  String get currentToPay => 'Pendiente de pagar';
+
+  @override
+  String settlementRemaining(String amount) {
+    return 'Quedan $amount por liquidar';
+  }
+
+  @override
+  String get settlementProgressSemantics => 'Progreso de pagos confirmados';
+
+  @override
+  String settlementProgressAmount(String confirmed, String required) {
+    return '$confirmed de $required confirmados';
+  }
+
+  @override
+  String settlementMarkedAmount(String amount) {
+    return '$amount marcado como pagado, pendiente de confirmación';
+  }
+
+  @override
+  String get noSettlementsRequired => 'No hacen falta transferencias';
+
+  @override
   String balancePaidLabel(String amount) {
     return 'pagó $amount';
   }

@@ -66,7 +66,6 @@
       {#each ticket.lines as line (line.id)}
         {@const mine = guest.isMine(line)}
         {@const shared = others(line)}
-        {@const sharedCount = mine ? shared.length + 1 : shared.length}
         <button
           class="card line"
           class:mine
@@ -81,9 +80,6 @@
               <span class="muted small">
                 {mine ? 'compartido con' : 'lo tiene'}
                 {shareNames(shared)}
-                {#if mine && sharedCount > 1}
-                  · {formatCents(Math.round(line.totalPrice / sharedCount))} c/u
-                {/if}
               </span>
             {/if}
           </span>

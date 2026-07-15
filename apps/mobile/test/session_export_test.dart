@@ -13,6 +13,7 @@ void main() {
       kind: 'multi',
       status: SessionStatus.open,
       grandTotal: Money(5190),
+      settlementRequired: Money(2620),
       settledConfirmed: Money(890),
       settledMarked: Money.zero,
       participantsCount: 2,

@@ -79,6 +79,12 @@ export interface RecomputeResult {
   accountTotals: Record<string, { grandTotal: Cents }>;
   sessionTotals: {
     grandTotal: Cents;
+    /**
+     * Importe total del ciclo de liquidación: pagos ya confirmados más las
+     * obligaciones residuales que siguen siendo necesarias. Es el
+     * denominador autoritativo del progreso; nunca se compara contra el gasto.
+     */
+    settlementRequired: Cents;
     settledConfirmed: Cents;
     settledMarked: Cents;
   };
@@ -214,10 +220,18 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
       settledMarked += st.amount;
     }
   }
+  const settlementRequired =
+    settledConfirmed +
+    balance.settlements.reduce((total, st) => total + st.amount, 0);
 
   return {
     accountTotals,
-    sessionTotals: { grandTotal, settledConfirmed, settledMarked },
+    sessionTotals: {
+      grandTotal,
+      settlementRequired,
+      settledConfirmed,
+      settledMarked,
+    },
     balances: balance.balances,
     pendingSettlements:
       balance.settlements.length -

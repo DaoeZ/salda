@@ -89,6 +89,7 @@ void main() {
     await firestore.doc('sessions/$sid').update({
       'totals': {
         'grandTotal': 5190,
+        'settlementRequired': 2500,
         'settledConfirmed': 1000,
         'settledMarked': 500,
       },
@@ -103,7 +104,8 @@ void main() {
     expect(summary.grandTotal, const Money(5190));
     expect(summary.myOutstanding, const Money(-730));
     expect(summary.pendingSettlements, 2);
-    expect(summary.settledFraction, closeTo(1000 / 5190, 0.0001));
+    expect(summary.settlementProgress.confirmedFraction, closeTo(0.4, 0.0001));
+    expect(summary.settlementProgress.markedFraction, closeTo(0.2, 0.0001));
   });
 
   test('updateSettlementState cambia estado y apunta la auditoría', () async {

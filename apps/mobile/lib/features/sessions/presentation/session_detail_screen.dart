@@ -13,6 +13,7 @@ import '../application/session_export.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
+import 'settlement_progress_bar.dart';
 import 'ticket_detail_screen.dart';
 
 /// Detalle de sesión: Resumen (balances + liquidaciones) · Cuentas · Actividad.
@@ -39,27 +40,33 @@ class SessionDetailScreen extends ConsumerWidget {
         appBar: AppBar(
           title: Text(detail.summary.name),
           actions: [_Menu(sessionId: sessionId, detail: detail)],
-          bottom: TabBar(tabs: [
-            Tab(text: l10n.detailTabSummary),
-            Tab(text: l10n.detailTabAccounts),
-            Tab(text: l10n.detailTabActivity),
-          ]),
-        ),
-        body: Column(children: [
-          if (closed)
-            MaterialBanner(
-              content: Text(l10n.closedBanner),
-              leading: const Icon(Icons.lock_outline),
-              actions: const [SizedBox.shrink()],
-            ),
-          Expanded(
-            child: TabBarView(children: [
-              _SummaryTab(sessionId: sessionId, detail: detail),
-              _AccountsTab(sessionId: sessionId),
-              _ActivityTab(),
-            ]),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: l10n.detailTabSummary),
+              Tab(text: l10n.detailTabAccounts),
+              Tab(text: l10n.detailTabActivity),
+            ],
           ),
-        ]),
+        ),
+        body: Column(
+          children: [
+            if (closed)
+              MaterialBanner(
+                content: Text(l10n.closedBanner),
+                leading: const Icon(Icons.lock_outline),
+                actions: const [SizedBox.shrink()],
+              ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _SummaryTab(sessionId: sessionId, detail: detail),
+                  _AccountsTab(sessionId: sessionId),
+                  _ActivityTab(),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -84,11 +91,13 @@ class _Menu extends ConsumerWidget {
             content: Text(body),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: Text(l10n.commonCancel)),
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(l10n.commonCancel),
+              ),
               FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: Text(l10n.commonContinue)),
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(l10n.commonContinue),
+              ),
             ],
           ),
         ) ??
@@ -98,8 +107,7 @@ class _Menu extends ConsumerWidget {
       onSelected: (action) async {
         switch (action) {
           case 'add_ticket':
-            await showScanEntrySheet(context, ref,
-                targetSessionId: sessionId);
+            await showScanEntrySheet(context, ref, targetSessionId: sessionId);
           case 'share':
             context.go('/home/session/$sessionId/share');
           case 'export_pdf':
@@ -111,22 +119,34 @@ class _Menu extends ConsumerWidget {
                   ref.read(settlementsProvider(sessionId)).value ?? const [],
               accounts: await repo.fetchFullTree(sessionId),
             );
-            await SharePlus.instance.share(ShareParams(files: [
-              XFile.fromData(bytes,
-                  mimeType: 'application/pdf',
-                  name: '${detail.summary.name}.pdf'),
-            ]));
+            await SharePlus.instance.share(
+              ShareParams(
+                files: [
+                  XFile.fromData(
+                    bytes,
+                    mimeType: 'application/pdf',
+                    name: '${detail.summary.name}.pdf',
+                  ),
+                ],
+              ),
+            );
           case 'share_image':
             final bytes = await buildSummaryImage(
               detail: detail,
               participants:
                   ref.read(participantsProvider(sessionId)).value ?? const [],
             );
-            await SharePlus.instance.share(ShareParams(files: [
-              XFile.fromData(bytes,
-                  mimeType: 'image/png',
-                  name: '${detail.summary.name}.png'),
-            ]));
+            await SharePlus.instance.share(
+              ShareParams(
+                files: [
+                  XFile.fromData(
+                    bytes,
+                    mimeType: 'image/png',
+                    name: '${detail.summary.name}.png',
+                  ),
+                ],
+              ),
+            );
           case 'close':
             if (await confirm(l10n.closeConfirmBody)) {
               await repo.setStatus(sessionId, SessionStatus.closed);
@@ -147,11 +167,9 @@ class _Menu extends ConsumerWidget {
           PopupMenuItem(value: 'add_ticket', child: Text(l10n.menuAddTicket)),
         PopupMenuItem(value: 'share', child: Text(l10n.menuShare)),
         PopupMenuItem(value: 'export_pdf', child: Text(l10n.menuExportPdf)),
-        PopupMenuItem(
-            value: 'share_image', child: Text(l10n.menuShareImage)),
+        PopupMenuItem(value: 'share_image', child: Text(l10n.menuShareImage)),
         if (open) PopupMenuItem(value: 'close', child: Text(l10n.menuClose)),
-        if (!open)
-          PopupMenuItem(value: 'reopen', child: Text(l10n.menuReopen)),
+        if (!open) PopupMenuItem(value: 'reopen', child: Text(l10n.menuReopen)),
         if (!open)
           PopupMenuItem(value: 'archive', child: Text(l10n.menuArchive)),
         PopupMenuItem(value: 'delete', child: Text(l10n.menuDelete)),
@@ -175,20 +193,25 @@ class _SummaryTab extends ConsumerWidget {
     final settlements =
         ref.watch(settlementsProvider(sessionId)).value ?? const [];
     final names = {for (final p in participants) p.id: p.name};
+    final progress = detail.summary.settlementProgress;
 
     return ListView(
       padding: const EdgeInsets.all(TokenSpacing.lg),
       children: [
-        Text(l10n.balancesTitle, style: theme.textTheme.titleMedium),
+        Text(l10n.currentStateTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: TokenSpacing.sm),
+        _CurrentStateCard(progress: progress),
         const SizedBox(height: TokenSpacing.sm),
         Card(
-          child: Column(children: [
-            for (final p in participants)
-              _BalanceRow(
-                name: p.name,
-                balance: detail.balances[p.id],
-              ),
-          ]),
+          child: Column(
+            children: [
+              for (final p in participants)
+                _CurrentBalanceRow(
+                  name: p.name,
+                  balance: detail.balances[p.id],
+                ),
+            ],
+          ),
         ),
         const SizedBox(height: TokenSpacing.xl),
         Text(l10n.settlementsTitle, style: theme.textTheme.titleMedium),
@@ -201,17 +224,22 @@ class _SummaryTab extends ConsumerWidget {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(TokenSpacing.lg),
-              child: Row(children: [
-                Icon(Icons.check_circle_outline,
-                    color: theme.colorScheme.settlementConfirmed),
-                const SizedBox(width: TokenSpacing.sm),
-                Text(l10n.allSettled),
-              ]),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    color: theme.colorScheme.settlementConfirmed,
+                  ),
+                  const SizedBox(width: TokenSpacing.sm),
+                  Text(l10n.allSettled),
+                ],
+              ),
             ),
           )
         else
-          for (final settlement in settlements
-              .where((s) => s.state != SettlementState.confirmed))
+          for (final settlement in settlements.where(
+            (s) => s.state != SettlementState.confirmed,
+          ))
             _SettlementCard(
               sessionId: sessionId,
               settlement: settlement,
@@ -219,41 +247,204 @@ class _SummaryTab extends ConsumerWidget {
               toName: names[settlement.to] ?? settlement.to,
               open: detail.summary.status == SessionStatus.open,
             ),
-        if (settlements
-            .any((s) => s.state == SettlementState.confirmed)) ...[
+        if (settlements.any((s) => s.state == SettlementState.confirmed)) ...[
           const SizedBox(height: TokenSpacing.md),
           Card(
             child: ExpansionTile(
-              leading: Icon(Icons.history,
-                  color: theme.colorScheme.settlementConfirmed),
-              title: Text(l10n.historyConfirmedTitle(settlements
-                  .where((s) => s.state == SettlementState.confirmed)
-                  .length)),
+              leading: Icon(
+                Icons.history,
+                color: theme.colorScheme.settlementConfirmed,
+              ),
+              title: Text(
+                l10n.historyConfirmedTitle(
+                  settlements
+                      .where((s) => s.state == SettlementState.confirmed)
+                      .length,
+                ),
+              ),
               children: [
-                for (final settlement in settlements
-                    .where((s) => s.state == SettlementState.confirmed))
+                for (final settlement in settlements.where(
+                  (s) => s.state == SettlementState.confirmed,
+                ))
                   ListTile(
                     dense: true,
-                    title: Text(l10n.settlementRow(
+                    title: Text(
+                      l10n.settlementRow(
                         names[settlement.from] ?? settlement.from,
-                        names[settlement.to] ?? settlement.to)),
-                    trailing: Text(
-                      formatMoney(settlement.amount),
-                      style: const TextStyle(
-                          fontFeatures: [FontFeature.tabularFigures()]),
+                        names[settlement.to] ?? settlement.to,
+                      ),
+                    ),
+                    subtitle: Text(l10n.stateConfirmed),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          formatMoney(settlement.amount),
+                          style: const TextStyle(
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        if (detail.summary.status == SessionStatus.open)
+                          IconButton(
+                            tooltip: l10n.actionBackToPending,
+                            onPressed: () => ref
+                                .read(sessionRepositoryProvider)
+                                .updateSettlementState(
+                                  sessionId,
+                                  settlement.id,
+                                  SettlementState.pending,
+                                ),
+                            icon: const Icon(Icons.undo, size: 18),
+                          ),
+                      ],
                     ),
                   ),
               ],
             ),
           ),
         ],
+        const SizedBox(height: TokenSpacing.xl),
+        Text(l10n.economicHistoryTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: TokenSpacing.sm),
+        Card(
+          child: Column(
+            children: [
+              for (final p in participants)
+                _HistoricalBalanceRow(
+                  name: p.name,
+                  balance: detail.balances[p.id],
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-class _BalanceRow extends StatelessWidget {
-  const _BalanceRow({required this.name, required this.balance});
+class _CurrentStateCard extends StatelessWidget {
+  const _CurrentStateCard({required this.progress});
+
+  final SettlementProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final confirmed = formatMoney(progress.confirmed);
+    final required = formatMoney(progress.required);
+    return Card(
+      color: progress.isSettled
+          ? theme.colorScheme.primaryContainer
+          : theme.colorScheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.all(TokenSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  progress.isSettled
+                      ? Icons.check_circle
+                      : Icons.account_balance_wallet_outlined,
+                  color: progress.isSettled
+                      ? theme.colorScheme.settlementConfirmed
+                      : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: TokenSpacing.sm),
+                Expanded(
+                  child: Text(
+                    progress.isSettled
+                        ? l10n.settledState
+                        : l10n.settlementRemaining(
+                            formatMoney(progress.remaining),
+                          ),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: TokenSpacing.md),
+            SettlementProgressBar(
+              progress: progress,
+              semanticLabel: l10n.settlementProgressSemantics,
+              height: 8,
+            ),
+            const SizedBox(height: TokenSpacing.xs),
+            Text(
+              progress.required.isZero
+                  ? l10n.noSettlementsRequired
+                  : l10n.settlementProgressAmount(confirmed, required),
+              style: theme.textTheme.bodySmall,
+            ),
+            if (!progress.marked.isZero) ...[
+              const SizedBox(height: TokenSpacing.xs),
+              Row(
+                children: [
+                  Icon(
+                    Icons.circle,
+                    size: 10,
+                    color: theme.colorScheme.settlementMarked,
+                  ),
+                  const SizedBox(width: TokenSpacing.xs),
+                  Text(
+                    l10n.settlementMarkedAmount(formatMoney(progress.marked)),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CurrentBalanceRow extends StatelessWidget {
+  const _CurrentBalanceRow({required this.name, required this.balance});
+
+  final String name;
+  final ParticipantBalanceView? balance;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final outstanding = balance?.outstanding.cents ?? 0;
+    final label = outstanding == 0
+        ? l10n.settledState
+        : outstanding > 0
+        ? l10n.currentToReceive
+        : l10n.currentToPay;
+    return ListTile(
+      leading: CircleAvatar(
+        radius: 16,
+        child: Text(name.isEmpty ? '?' : name[0]),
+      ),
+      title: Text(name),
+      subtitle: Text(label),
+      trailing: Text(
+        '${outstanding > 0 ? '+' : ''}${formatMoney(Money(outstanding))}',
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontFeatures: const [FontFeature.tabularFigures()],
+          color: outstanding == 0
+              ? scheme.onSurfaceVariant
+              : outstanding > 0
+              ? scheme.balancePositive
+              : scheme.balanceNegative,
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoricalBalanceRow extends StatelessWidget {
+  const _HistoricalBalanceRow({required this.name, required this.balance});
 
   final String name;
   final ParticipantBalanceView? balance;
@@ -265,12 +456,16 @@ class _BalanceRow extends StatelessWidget {
     final net = balance?.net.cents ?? 0;
     return ListTile(
       leading: CircleAvatar(
-          radius: 16, child: Text(name.isEmpty ? '?' : name[0])),
+        radius: 16,
+        child: Text(name.isEmpty ? '?' : name[0]),
+      ),
       title: Text(name),
       subtitle: balance == null
           ? null
-          : Text('${l10n.balancePaidLabel(formatMoney(balance!.paid))} · '
-              '${l10n.balanceConsumedLabel(formatMoney(balance!.consumed))}'),
+          : Text(
+              '${l10n.balancePaidLabel(formatMoney(balance!.paid))} · '
+              '${l10n.balanceConsumedLabel(formatMoney(balance!.consumed))}',
+            ),
       trailing: Text(
         '${net > 0 ? '+' : ''}${formatMoney(Money(net))}',
         style: TextStyle(
@@ -279,8 +474,8 @@ class _BalanceRow extends StatelessWidget {
           color: net == 0
               ? scheme.onSurfaceVariant
               : net > 0
-                  ? scheme.balancePositive
-                  : scheme.balanceNegative,
+              ? scheme.balancePositive
+              : scheme.balanceNegative,
         ),
       ),
     );
@@ -311,43 +506,68 @@ class _SettlementCard extends ConsumerWidget {
     final (label, color) = switch (settlement.state) {
       SettlementState.pending => (l10n.statePending, scheme.settlementPending),
       SettlementState.marked => (l10n.stateMarked, scheme.settlementMarked),
-      SettlementState.confirmed =>
-        (l10n.stateConfirmed, scheme.settlementConfirmed),
+      SettlementState.confirmed => (
+        l10n.stateConfirmed,
+        scheme.settlementConfirmed,
+      ),
     };
 
     return Card(
       margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
-      child: ListTile(
-        title: Text(l10n.settlementRow(fromName, toName)),
-        subtitle: Row(children: [
-          Icon(Icons.circle, size: 10, color: color),
-          const SizedBox(width: TokenSpacing.xs),
-          Text(label),
-        ]),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.all(TokenSpacing.lg),
+        child: Column(
           children: [
-            Text(
-              formatMoney(settlement.amount),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()]),
+            Row(
+              children: [
+                Expanded(child: Text(l10n.settlementRow(fromName, toName))),
+                Text(
+                  formatMoney(settlement.amount),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ),
-            if (open && settlement.state != SettlementState.confirmed) ...[
-              const SizedBox(width: TokenSpacing.sm),
-              FilledButton.tonal(
-                onPressed: () => repo.updateSettlementState(
-                    sessionId, settlement.id, SettlementState.confirmed),
-                child: Text(l10n.actionConfirm),
-              ),
-            ] else if (open) ...[
-              const SizedBox(width: TokenSpacing.sm),
-              IconButton(
-                tooltip: l10n.actionBackToPending,
-                onPressed: () => repo.updateSettlementState(
-                    sessionId, settlement.id, SettlementState.pending),
-                icon: const Icon(Icons.undo, size: 18),
-              ),
-            ],
+            const SizedBox(height: TokenSpacing.sm),
+            Row(
+              children: [
+                Icon(Icons.circle, size: 10, color: color),
+                const SizedBox(width: TokenSpacing.xs),
+                Expanded(child: Text(label)),
+                if (open && settlement.state != SettlementState.confirmed) ...[
+                  if (settlement.state == SettlementState.marked)
+                    IconButton(
+                      tooltip: l10n.actionBackToPending,
+                      onPressed: () => repo.updateSettlementState(
+                        sessionId,
+                        settlement.id,
+                        SettlementState.pending,
+                      ),
+                      icon: const Icon(Icons.undo, size: 18),
+                    ),
+                  FilledButton.tonal(
+                    onPressed: () => repo.updateSettlementState(
+                      sessionId,
+                      settlement.id,
+                      SettlementState.confirmed,
+                    ),
+                    child: Text(l10n.actionConfirm),
+                  ),
+                ] else if (open) ...[
+                  const SizedBox(width: TokenSpacing.sm),
+                  IconButton(
+                    tooltip: l10n.actionBackToPending,
+                    onPressed: () => repo.updateSettlementState(
+                      sessionId,
+                      settlement.id,
+                      SettlementState.pending,
+                    ),
+                    icon: const Icon(Icons.undo, size: 18),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -374,8 +594,7 @@ class _AccountsTab extends ConsumerWidget {
       padding: const EdgeInsets.all(TokenSpacing.lg),
       children: [
         for (final account in accounts)
-          _AccountCard(
-              sessionId: sessionId, account: account, names: names),
+          _AccountCard(sessionId: sessionId, account: account, names: names),
       ],
     );
   }
@@ -395,7 +614,8 @@ class _AccountCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final tickets = ref
+    final tickets =
+        ref
             .watch(accountTicketsProvider((sid: sessionId, aid: account.id)))
             .value ??
         const <SessionTicket>[];
@@ -408,24 +628,30 @@ class _AccountCard extends ConsumerWidget {
         trailing: Text(
           formatMoney(account.grandTotal),
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()]),
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
         children: [
           for (final ticket in tickets)
             ListTile(
               dense: true,
-              leading: Icon(ticket.kind == 'manual'
-                  ? Icons.edit_note_outlined
-                  : Icons.photo_camera_outlined),
+              leading: Icon(
+                ticket.kind == 'manual'
+                    ? Icons.edit_note_outlined
+                    : Icons.photo_camera_outlined,
+              ),
               title: Text(ticket.merchantName),
-              subtitle: Text([
-                if (ticket.date != null) ticket.date!,
-                l10n.ticketPaidBy(names[ticket.paidBy] ?? '—'),
-              ].join(' · ')),
+              subtitle: Text(
+                [
+                  if (ticket.date != null) ticket.date!,
+                  l10n.ticketPaidBy(names[ticket.paidBy] ?? '—'),
+                ].join(' · '),
+              ),
               trailing: Text(
                 formatMoney(ticket.grandTotal),
                 style: const TextStyle(
-                    fontFeatures: [FontFeature.tabularFigures()]),
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               ),
               onTap: () => context.push(
                 '/home/session/$sessionId/ticket',
@@ -447,7 +673,6 @@ class _ActivityTab extends StatelessWidget {
   Widget build(BuildContext context) {
     // El feed detallado llega con la web de invitados (M4): de momento los
     // eventos existen en Firestore pero no se listan aquí.
-    return Center(
-        child: Text(AppLocalizations.of(context).activityEmpty));
+    return Center(child: Text(AppLocalizations.of(context).activityEmpty));
   }
 }
