@@ -15,7 +15,7 @@ class FakeAuthRepository implements AuthRepository {
   final _controller = StreamController<AppUser?>.broadcast();
 
   @override
-  Stream<AppUser?> authStateChanges() async* {
+  Stream<AppUser?> userChanges() async* {
     yield user;
     yield* _controller.stream;
   }
@@ -31,10 +31,45 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> register(
-      String email, String password, String displayName) async {
-    user = AppUser(uid: 'owner', email: email, displayName: displayName);
+    String email,
+    String password,
+    String displayName,
+  ) async {
+    user = AppUser(
+      uid: user?.isAnonymous ?? false ? user!.uid : 'owner',
+      email: email,
+      displayName: displayName,
+      emailVerified: false,
+    );
     _controller.add(user);
   }
+
+  @override
+  Future<void> signInWithGoogle() async {
+    user = AppUser(
+      uid: user?.isAnonymous ?? false ? user!.uid : 'google-owner',
+      email: 'google@salda.test',
+      displayName: 'Google User',
+      providerIds: const {'google.com'},
+    );
+    _controller.add(user);
+  }
+
+  @override
+  Future<void> signInAsGuest() async {
+    user = const AppUser(
+      uid: 'guest-owner',
+      isAnonymous: true,
+      emailVerified: false,
+    );
+    _controller.add(user);
+  }
+
+  @override
+  Future<void> sendEmailVerification() async {}
+
+  @override
+  Future<bool> refreshEmailVerification() async => user?.emailVerified ?? false;
 
   @override
   Future<void> sendPasswordReset(String email) async {}
@@ -51,14 +86,20 @@ class FakeAuthRepository implements AuthRepository {
 List<Override> loggedInOverrides({FakeFirebaseFirestore? firestore}) {
   final fake = firestore ?? FakeFirebaseFirestore();
   return [
-    authRepositoryProvider.overrideWithValue(FakeAuthRepository(
-        user: const AppUser(uid: 'owner', displayName: 'Edgar'))),
-    sessionRepositoryProvider.overrideWithValue(FirestoreSessionRepository(
-      firestore: fake,
-      uid: () => 'owner',
-      shareCodeFactory: () => 'TEST-CODE-1234567890',
-    )),
+    authRepositoryProvider.overrideWithValue(
+      FakeAuthRepository(
+        user: const AppUser(uid: 'owner', displayName: 'Edgar'),
+      ),
+    ),
+    sessionRepositoryProvider.overrideWithValue(
+      FirestoreSessionRepository(
+        firestore: fake,
+        uid: () => 'owner',
+        shareCodeFactory: () => 'TEST-CODE-1234567890',
+      ),
+    ),
     frequentPeopleRepositoryProvider.overrideWithValue(
-        FrequentPeopleRepository(firestore: fake, uid: () => 'owner')),
+      FrequentPeopleRepository(firestore: fake, uid: () => 'owner'),
+    ),
   ];
 }

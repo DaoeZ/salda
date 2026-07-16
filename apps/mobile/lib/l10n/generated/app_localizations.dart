@@ -310,11 +310,23 @@ abstract class AppLocalizations {
   /// **'Listo'**
   String get commonDone;
 
+  /// No description provided for @commonDelete.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar'**
+  String get commonDelete;
+
   /// No description provided for @loginTitle.
   ///
   /// In es, this message translates to:
   /// **'Divide gastos sin discusiones'**
   String get loginTitle;
+
+  /// No description provided for @loginWelcome.
+  ///
+  /// In es, this message translates to:
+  /// **'Qué bueno verte de nuevo'**
+  String get loginWelcome;
 
   /// No description provided for @loginEmail.
   ///
@@ -370,6 +382,216 @@ abstract class AppLocalizations {
   /// **'Te hemos enviado un correo para restablecerla'**
   String get loginResetSent;
 
+  /// No description provided for @registerTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea tu cuenta'**
+  String get registerTitle;
+
+  /// No description provided for @registerSubtitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Guarda tus cuentas y accede a ellas desde cualquier dispositivo.'**
+  String get registerSubtitle;
+
+  /// No description provided for @authNewPassword.
+  ///
+  /// In es, this message translates to:
+  /// **'Nueva contraseña'**
+  String get authNewPassword;
+
+  /// No description provided for @authConfirmPassword.
+  ///
+  /// In es, this message translates to:
+  /// **'Repite la contraseña'**
+  String get authConfirmPassword;
+
+  /// No description provided for @authPasswordHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Mínimo 8 caracteres'**
+  String get authPasswordHint;
+
+  /// No description provided for @authShowPassword.
+  ///
+  /// In es, this message translates to:
+  /// **'Mostrar contraseña'**
+  String get authShowPassword;
+
+  /// No description provided for @authHidePassword.
+  ///
+  /// In es, this message translates to:
+  /// **'Ocultar contraseña'**
+  String get authHidePassword;
+
+  /// No description provided for @authOr.
+  ///
+  /// In es, this message translates to:
+  /// **'o'**
+  String get authOr;
+
+  /// No description provided for @authContinueGoogle.
+  ///
+  /// In es, this message translates to:
+  /// **'Continuar con Google'**
+  String get authContinueGoogle;
+
+  /// No description provided for @authContinueGuest.
+  ///
+  /// In es, this message translates to:
+  /// **'Continuar como invitado'**
+  String get authContinueGuest;
+
+  /// No description provided for @authProtectGuestTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Protege tus cuentas'**
+  String get authProtectGuestTitle;
+
+  /// No description provided for @authProtectGuestBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Convierte tu acceso de invitado sin perder ninguna sesión.'**
+  String get authProtectGuestBody;
+
+  /// No description provided for @authProtectGuestAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear cuenta y conservar datos'**
+  String get authProtectGuestAction;
+
+  /// No description provided for @authProtectGuestGoogle.
+  ///
+  /// In es, this message translates to:
+  /// **'Vincular con Google'**
+  String get authProtectGuestGoogle;
+
+  /// No description provided for @authUseAnotherAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'Usar otra cuenta'**
+  String get authUseAnotherAccount;
+
+  /// No description provided for @authValidationEmailRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe tu email'**
+  String get authValidationEmailRequired;
+
+  /// No description provided for @authValidationEmailInvalid.
+  ///
+  /// In es, this message translates to:
+  /// **'Introduce un email válido'**
+  String get authValidationEmailInvalid;
+
+  /// No description provided for @authValidationPasswordRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe tu contraseña'**
+  String get authValidationPasswordRequired;
+
+  /// No description provided for @authValidationPasswordLength.
+  ///
+  /// In es, this message translates to:
+  /// **'Usa al menos 8 caracteres'**
+  String get authValidationPasswordLength;
+
+  /// No description provided for @authValidationPasswordMismatch.
+  ///
+  /// In es, this message translates to:
+  /// **'Las contraseñas no coinciden'**
+  String get authValidationPasswordMismatch;
+
+  /// No description provided for @authValidationName.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe un nombre de al menos 2 caracteres'**
+  String get authValidationName;
+
+  /// No description provided for @resetTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Recupera tu contraseña'**
+  String get resetTitle;
+
+  /// No description provided for @resetBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Te enviaremos el enlace oficial de Firebase para crear una nueva.'**
+  String get resetBody;
+
+  /// No description provided for @resetAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Enviar enlace'**
+  String get resetAction;
+
+  /// No description provided for @resetSentTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Revisa tu correo'**
+  String get resetSentTitle;
+
+  /// No description provided for @resetSentBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Si existe una cuenta con ese email, recibirás un enlace para restablecer la contraseña.'**
+  String get resetSentBody;
+
+  /// No description provided for @resetBackToLogin.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver a iniciar sesión'**
+  String get resetBackToLogin;
+
+  /// No description provided for @resetTryAnother.
+  ///
+  /// In es, this message translates to:
+  /// **'Probar otro email'**
+  String get resetTryAnother;
+
+  /// No description provided for @verifyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Verifica tu email'**
+  String get verifyTitle;
+
+  /// No description provided for @verifyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Verifica {email} desde el enlace del correo. Si no lo tienes, puedes reenviarlo.'**
+  String verifyBody(String email);
+
+  /// No description provided for @verifyCheck.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya lo he verificado'**
+  String get verifyCheck;
+
+  /// No description provided for @verifyResend.
+  ///
+  /// In es, this message translates to:
+  /// **'Reenviar correo'**
+  String get verifyResend;
+
+  /// No description provided for @verifyResendIn.
+  ///
+  /// In es, this message translates to:
+  /// **'Podrás reenviarlo en {seconds} s'**
+  String verifyResendIn(int seconds);
+
+  /// No description provided for @verifyResent.
+  ///
+  /// In es, this message translates to:
+  /// **'Correo de verificación enviado de nuevo.'**
+  String get verifyResent;
+
+  /// No description provided for @verifyNotYet.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no aparece como verificado. Abre el enlace del correo y vuelve a comprobar.'**
+  String get verifyNotYet;
+
   /// No description provided for @authErrorInvalidCredential.
   ///
   /// In es, this message translates to:
@@ -394,6 +616,36 @@ abstract class AppLocalizations {
   /// **'Sin conexión. Inténtalo de nuevo.'**
   String get authErrorNetwork;
 
+  /// No description provided for @authErrorTooManyRequests.
+  ///
+  /// In es, this message translates to:
+  /// **'Demasiados intentos. Espera unos minutos y vuelve a probar.'**
+  String get authErrorTooManyRequests;
+
+  /// No description provided for @authErrorUserDisabled.
+  ///
+  /// In es, this message translates to:
+  /// **'Esta cuenta está desactivada.'**
+  String get authErrorUserDisabled;
+
+  /// No description provided for @authErrorOperationNotAllowed.
+  ///
+  /// In es, this message translates to:
+  /// **'Este método de acceso aún no está habilitado.'**
+  String get authErrorOperationNotAllowed;
+
+  /// No description provided for @authErrorCredentialAlreadyInUse.
+  ///
+  /// In es, this message translates to:
+  /// **'Ese acceso ya pertenece a otra cuenta. Cierra esta sesión y entra con la cuenta existente; no hemos movido tus datos.'**
+  String get authErrorCredentialAlreadyInUse;
+
+  /// No description provided for @authErrorCancelled.
+  ///
+  /// In es, this message translates to:
+  /// **'Has cancelado el acceso.'**
+  String get authErrorCancelled;
+
   /// No description provided for @authErrorUnknown.
   ///
   /// In es, this message translates to:
@@ -405,6 +657,48 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Cerrar sesión'**
   String get signOut;
+
+  /// No description provided for @guestAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuenta de invitado'**
+  String get guestAccount;
+
+  /// No description provided for @guestAccountBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Tus sesiones solo están vinculadas a este acceso.'**
+  String get guestAccountBody;
+
+  /// No description provided for @accountVerified.
+  ///
+  /// In es, this message translates to:
+  /// **'Email verificado'**
+  String get accountVerified;
+
+  /// No description provided for @guestLeave.
+  ///
+  /// In es, this message translates to:
+  /// **'Salir del modo invitado'**
+  String get guestLeave;
+
+  /// No description provided for @guestSignOutTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Salir sin proteger tus cuentas?'**
+  String get guestSignOutTitle;
+
+  /// No description provided for @guestSignOutBody.
+  ///
+  /// In es, this message translates to:
+  /// **'No podrás recuperar las sesiones de este invitado después de salir. Crea una cuenta para conservarlas.'**
+  String get guestSignOutBody;
+
+  /// No description provided for @guestSignOutConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Salir de todos modos'**
+  String get guestSignOutConfirm;
 
   /// No description provided for @sessionsEmptyTitle.
   ///

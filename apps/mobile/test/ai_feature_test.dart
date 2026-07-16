@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/features/ai/application/ai_analysis_controller.dart';
 import 'package:salda_mobile/features/ai/data/ai_config_store.dart';
+import 'package:salda_mobile/features/auth/data/auth_repository.dart';
 import 'package:salda_mobile/features/review/application/review_draft.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,7 +45,9 @@ class FakeAiProvider implements AiReceiptProvider {
 
   @override
   Future<ReceiptExtraction> extractReceipt(
-      AiInput input, AiProviderConfig config) async {
+    AiInput input,
+    AiProviderConfig config,
+  ) async {
     calls++;
     if (calls <= failuresBeforeSuccess) {
       throw const AiProviderException(AiErrorCode.badResponse, 'mala');
@@ -54,7 +57,10 @@ class FakeAiProvider implements AiReceiptProvider {
       merchantName: const Extracted('IA Resuelto', 0.9),
       lines: [
         const ExtractedLine(
-            name: 'Linea IA', totalPrice: Money(500), confidence: 0.9),
+          name: 'Linea IA',
+          totalPrice: Money(500),
+          confidence: 0.9,
+        ),
       ],
       grandTotal: const Extracted(Money(500), 0.9),
     );
@@ -67,63 +73,106 @@ void main() {
   SharedPreferences.setMockInitialValues({});
 
   group('AiConfigStore', () {
-    test('roundtrip, preferido con fallback y remove limpia preferido',
-        () async {
-      final store = AiConfigStore(InMemoryVault());
-      expect(await store.load('claude'), isNull);
+    test(
+      'roundtrip, preferido con fallback y remove limpia preferido',
+      () async {
+        final store = AiConfigStore(InMemoryVault());
+        expect(await store.load('claude'), isNull);
 
-      await store.save('claude',
-          const AiProviderConfig(apiKey: 'sk', model: 'claude-haiku-4-5'));
-      final loaded = await store.load('claude');
-      expect(loaded!.apiKey, 'sk');
-      expect(loaded.model, 'claude-haiku-4-5');
+        await store.save(
+          'claude',
+          const AiProviderConfig(apiKey: 'sk', model: 'claude-haiku-4-5'),
+        );
+        final loaded = await store.load('claude');
+        expect(loaded!.apiKey, 'sk');
+        expect(loaded.model, 'claude-haiku-4-5');
 
-      // Sin preferido explícito: cae al primero configurado.
-      final preferred = await store.preferred(['gemini', 'claude']);
-      expect(preferred!.providerId, 'claude');
+        // Sin preferido explícito: cae al primero configurado.
+        final preferred = await store.preferred(['gemini', 'claude']);
+        expect(preferred!.providerId, 'claude');
 
-      await store.setPreferred('claude');
-      await store.remove('claude');
-      expect(await store.preferredProviderId(), isNull);
+        await store.setPreferred('claude');
+        await store.remove('claude');
+        expect(await store.preferredProviderId(), isNull);
+      },
+    );
+
+    test('las credenciales quedan aisladas al cambiar de usuario', () async {
+      final vault = InMemoryVault();
+      final first = AiConfigStore(vault, namespace: 'user-a');
+      final second = AiConfigStore(vault, namespace: 'user-b');
+      await first.save(
+        'fake',
+        const AiProviderConfig(apiKey: 'secret-a', model: 'm'),
+      );
+
+      expect((await first.load('fake'))?.apiKey, 'secret-a');
+      expect(await second.load('fake'), isNull);
     });
+
+    test(
+      'una cuenta completa migra la configuración antigua una sola vez',
+      () async {
+        final vault = InMemoryVault();
+        await AiConfigStore(
+          vault,
+        ).save('fake', const AiProviderConfig(apiKey: 'legacy', model: 'm'));
+        final migrated = AiConfigStore(
+          vault,
+          namespace: 'owner',
+          migrateLegacy: true,
+        );
+
+        expect((await migrated.load('fake'))?.apiKey, 'legacy');
+        expect(vault.data['ai.fake.config'], isNull);
+        expect(vault.data['owner.ai.fake.config'], isNotNull);
+      },
+    );
   });
 
   group('AiAnalysisController', () {
     ProviderContainer container(FakeAiProvider provider, InMemoryVault vault) {
-      final c = ProviderContainer(overrides: [
-        secretVaultProvider.overrideWithValue(vault),
-        aiRegistryProvider
-            .overrideWithValue(AiProviderRegistry([provider])),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          currentUserIdProvider.overrideWithValue('owner'),
+          currentAppUserProvider.overrideWithValue(const AppUser(uid: 'owner')),
+          secretVaultProvider.overrideWithValue(vault),
+          aiRegistryProvider.overrideWithValue(AiProviderRegistry([provider])),
+        ],
+      );
       addTearDown(c.dispose);
       return c;
     }
 
     Future<InMemoryVault> vaultWithFake() async {
       final vault = InMemoryVault();
-      await AiConfigStore(vault)
-          .save('fake', const AiProviderConfig(model: 'fake-1'));
+      await AiConfigStore(
+        vault,
+        namespace: 'owner',
+      ).save('fake', const AiProviderConfig(model: 'fake-1'));
       return vault;
     }
 
     ReceiptExtraction draft() => ReceiptExtraction(
-          engine: 'mlkit',
-          lines: [
-            const ExtractedLine(
-                name: 'X',
-                totalPrice: Money(100),
-                confidence: 0.4,
-                sourceText: 'X 1,00'),
-          ],
-          grandTotal: const Extracted(Money(999), 0.4),
-        );
+      engine: 'mlkit',
+      lines: [
+        const ExtractedLine(
+          name: 'X',
+          totalPrice: Money(100),
+          confidence: 0.4,
+          sourceText: 'X 1,00',
+        ),
+      ],
+      grandTotal: const Extracted(Money(999), 0.4),
+    );
 
     test('sustituye el draft por la extracción de la IA', () async {
       final c = container(FakeAiProvider(), await vaultWithFake());
       c.read(reviewDraftProvider.notifier).loadFrom(draft());
 
-      final result =
-          await c.read(aiAnalysisControllerProvider.notifier).analyze();
+      final result = await c
+          .read(aiAnalysisControllerProvider.notifier)
+          .analyze();
 
       expect(result.ok, isTrue);
       final newDraft = c.read(reviewDraftProvider)!;
@@ -136,15 +185,18 @@ void main() {
       final retryOk = FakeAiProvider(failuresBeforeSuccess: 1);
       var c = container(retryOk, await vaultWithFake());
       c.read(reviewDraftProvider.notifier).loadFrom(draft());
-      expect((await c.read(aiAnalysisControllerProvider.notifier).analyze()).ok,
-          isTrue);
+      expect(
+        (await c.read(aiAnalysisControllerProvider.notifier).analyze()).ok,
+        isTrue,
+      );
       expect(retryOk.calls, 2);
 
       final alwaysBad = FakeAiProvider(failuresBeforeSuccess: 99);
       c = container(alwaysBad, await vaultWithFake());
       c.read(reviewDraftProvider.notifier).loadFrom(draft());
-      final result =
-          await c.read(aiAnalysisControllerProvider.notifier).analyze();
+      final result = await c
+          .read(aiAnalysisControllerProvider.notifier)
+          .analyze();
       expect(result.ok, isFalse);
       expect(result.error, AiErrorCode.badResponse);
       expect(alwaysBad.calls, 2); // no bucles
@@ -152,8 +204,9 @@ void main() {
 
     test('sin proveedor configurado: no hace nada y lo dice', () async {
       final c = container(FakeAiProvider(), InMemoryVault());
-      final result =
-          await c.read(aiAnalysisControllerProvider.notifier).analyze();
+      final result = await c
+          .read(aiAnalysisControllerProvider.notifier)
+          .analyze();
       expect(result.ok, isFalse);
     });
   });

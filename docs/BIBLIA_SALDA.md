@@ -582,8 +582,8 @@ NO subir sin aprobación del usuario).
 Archivo [HECHO]: `backend/firestore/firestore.rules` (comentado en el propio
 archivo) + `storage.rules` espejo. Esencia:
 
-- `users/**`: solo su dueño.
-- `sessions` create: dueño autenticado, `status: open`, shareCode ≥16,
+- `users/**`: solo su dueño con email verificado; nunca anónimo o pendiente.
+- `sessions` create: cuenta verificada o invitado móvil, `status: open`, shareCode ≥16,
   agregados a cero (a partir de ahí solo la función los escribe — deny por diff).
 - lectura: owner por query (`ownerUid == uid`) o invitado con
   `exists(guestAccess/{uid})` — la **prueba de conocimiento**: crear guestAccess
@@ -600,7 +600,7 @@ archivo) + `storage.rules` espejo. Esencia:
 - `activity`: append-only para miembros.
 - Storage: owner RW (JPEG ≤2 MB), invitado R vía `firestore.exists(guestAccess)`.
 
-**48 tests, una celda positiva y negativa por regla**, contra el emulador en CI
+**54 tests, una celda positiva y negativa por regla**, contra el emulador en CI
 [HECHO: `backend/firestore/test/rules.test.mjs`].
 
 ## §33. Índices y por qué
@@ -650,8 +650,8 @@ alertas de métricas recomendadas en spec §12.4.
 | domain (61) | unitario + propiedades sembradas + **golden** | motores exactos, roundtrips, 33 vectores compartidos | packages/domain/test |
 | ocr_parser (22) | unitario + **corpus 13 casos** con harness de métricas | geometría, patrones, parser completo, regresión | packages/ocr_parser/test |
 | functions TS (55) | unitario + **golden (los MISMOS json)** + regresiones reales | paridad Dart↔TS, recompute idempotente/concurrente, progreso | backend/functions/src/test |
-| reglas (48) | integración contra Emulator Suite | cada celda de la matriz, positivo y negativo | backend/firestore/test |
-| app (34) | widget + repos con fake_cloud_firestore + controladores con fakes | flujos, drafts, backup, IA, progreso y reactividad | apps/mobile/test |
+| reglas (54) | integración contra Emulator Suite | cada celda de la matriz, positivo y negativo | backend/firestore/test |
+| app (56) | widget + repos con fake_cloud_firestore + controladores con fakes | flujos, identidad, drafts, backup, IA, progreso y reactividad | apps/mobile/test |
 | web (21) | vitest de lógica pura + svelte-check + presupuesto de peso | enlace, assignment, dinero, pagos, progreso y frontera económica | apps/guest_web/src/lib |
 
 **Deliberadamente sin cubrir (y por qué):** UI Svelte por componentes (4 vistas
@@ -1042,6 +1042,22 @@ varios pagadores y redondeos heredan la exactitud del motor. Se añade un campo 
 al agregado raíz, sin migrar colecciones ni modificar los motores congelados.
 **Revisión:** solo si cambia el modelo de estados de liquidación.
 
+### ADR-023: Identidad por capacidades y conversión conservando UID
+**Estado:** Aceptada · **Fecha:** 2026-07-16 (P1)
+**Contexto:** `request.auth != null` trataba igual una cuenta verificada, una
+cuenta de correo pendiente y un invitado anónimo. Crear otra cuenta al abandonar
+el modo invitado también separaría sus sesiones del propietario original.
+**Decisión:** invitado anónimo y cuenta verificada pueden usar el núcleo económico;
+solo la cuenta verificada accede a `users/**`. Una cuenta email pendiente conserva
+lectura de sesiones por UID, pero no escribe. La conversión usa
+`linkWithCredential`, conserva UID y nunca fusiona ni cambia de cuenta de forma
+silenciosa. Repositorios, borradores y secretos IA quedan aislados por UID.
+**Consecuencias:** las cuentas email históricas no pierden sesiones, pero deben
+verificar antes de editar; el invitado se puede proteger sin migración; perfiles,
+amigos, grupos permanentes y chat podrán exigir `isFullAccount` sin usar el perfil
+como fuente de autorización. App Check mantiene un rollout monitor-first para no
+romper móvil o web antes de instrumentar ambos clientes.
+
 ---
 
 <a name="parte-x"></a>
@@ -1079,8 +1095,8 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |
-| Contrato IA | spec §9, Biblia §29 | 011 | `packages/ai_providers/**` + `features/ai/**` | `ai_providers_test.dart` (10) + `ai_feature_test.dart` (4) |
-| Autenticación | spec §12, Biblia §9 | — | `features/auth/**` | `app_smoke_test.dart` |
+| Contrato IA | spec §9, Biblia §29 | 011 | `packages/ai_providers/**` + `features/ai/**` | `ai_providers_test.dart` (10) + `ai_feature_test.dart` (6) |
+| Autenticación | spec §12, Biblia §9, `docs/AUTENTICACION.md` | 023 | `features/auth/**` + claims en Rules | `auth_repository_test.dart`, `auth_screens_test.dart`, `app_smoke_test.dart`, reglas (54) |
 | Grupos (sesiones) | spec §7, Biblia §7/§30 | 003, 012 | `features/sessions/**` + `firestore.rules` | `session_repository_test.dart` (7) + reglas (48) |
 | Backup | spec §14 | 017 | `features/settings/data/backup_service.dart` | `backup_service_test.dart` (3) |
 | Tokens de diseño | spec §3, Biblia §20 | — | `packages/design_tokens/**` | frescura en CI (diff) |

@@ -2,6 +2,7 @@ import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salda_mobile/features/auth/data/auth_repository.dart';
 import 'package:salda_mobile/features/review/application/review_draft.dart';
 import 'package:salda_mobile/features/review/presentation/review_screen.dart';
 import 'package:salda_mobile/l10n/generated/app_localizations.dart';
@@ -29,13 +30,20 @@ ReceiptExtraction _extraction({int grandTotal = 500, double confidence = 0.9}) {
   );
 }
 
-Future<ProviderContainer> _pump(WidgetTester tester,
-    ReceiptExtraction extraction) async {
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  ReceiptExtraction extraction,
+) async {
   // Pantalla alta: la ListView es perezosa y el pie debe estar construido.
   tester.view.physicalSize = const Size(800, 2000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer();
+  final container = ProviderContainer(
+    overrides: [
+      currentUserIdProvider.overrideWithValue('test-user'),
+      currentAppUserProvider.overrideWithValue(const AppUser(uid: 'test-user')),
+    ],
+  );
   addTearDown(container.dispose);
   container.read(reviewDraftProvider.notifier).loadFrom(extraction);
   await tester.pumpWidget(
@@ -53,8 +61,9 @@ Future<ProviderContainer> _pump(WidgetTester tester,
 }
 
 void main() {
-  testWidgets('muestra líneas, totales y estado de cuadre correcto',
-      (tester) async {
+  testWidgets('muestra líneas, totales y estado de cuadre correcto', (
+    tester,
+  ) async {
     await _pump(tester, _extraction()); // 180+320 == 500: cuadra
     expect(find.text('GAZPACHO'), findsOneWidget);
     expect(find.text('LECHE'), findsOneWidget);
@@ -64,16 +73,19 @@ void main() {
     expect(find.text('Analizar con IA'), findsNothing);
   });
 
-  testWidgets('descuadre: banner con las 3 opciones en orden (IA la última)',
-      (tester) async {
+  testWidgets('descuadre: banner con las 3 opciones en orden (IA la última)', (
+    tester,
+  ) async {
     await _pump(tester, _extraction(grandTotal: 600)); // suma 500 ≠ 600
     expect(find.textContaining('Descuadre'), findsOneWidget);
     expect(find.text('Repetir foto'), findsOneWidget);
     expect(find.text('Editar a mano'), findsOneWidget);
-    final aiButton = tester.widget<FilledButton>(find.ancestor(
-      of: find.text('Analizar con IA'),
-      matching: find.byType(FilledButton),
-    ));
+    final aiButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Analizar con IA'),
+        matching: find.byType(FilledButton),
+      ),
+    );
     expect(aiButton.onPressed, isNull); // deshabilitada hasta M6
   });
 
@@ -82,7 +94,9 @@ void main() {
     expect(find.textContaining('Descuadre'), findsOneWidget);
 
     // El usuario corrige el importe de la primera línea: 1,80 → 2,80.
-    container.read(reviewDraftProvider.notifier).updateLine(
+    container
+        .read(reviewDraftProvider.notifier)
+        .updateLine(
           0,
           const DraftLine(name: 'GAZPACHO', totalPrice: Money(280)),
         );

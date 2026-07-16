@@ -31,9 +31,12 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
     if (draft == null || participantNames.length < 2) return null;
     state = const AsyncLoading();
     try {
-      // Snapshot de métodos de pago (RF-72): congelado al crear.
-      final profile =
-          await ref.read(userProfileRepositoryProvider).fetch();
+      final user = ref.read(authRepositoryProvider).currentUser;
+      // Un invitado no tiene users/{uid}; su snapshot y sus frecuentes son
+      // vacíos hasta que proteja la cuenta.
+      final profile = user?.isFullAccount ?? false
+          ? await ref.read(userProfileRepositoryProvider).fetch()
+          : const UserProfile();
       final input = NewSessionInput(
         paymentMethodsSnapshot: profile.paymentMethods.toSnapshot(),
         name: sessionName,
@@ -42,8 +45,9 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
         payerIndex: payerIndex,
         ticket: ticketInputFromDraft(draft, fallbackName: sessionName),
       );
-      final created =
-          await ref.read(sessionRepositoryProvider).createSession(input);
+      final created = await ref
+          .read(sessionRepositoryProvider)
+          .createSession(input);
       // Foto del ticket: copia local durable ANTES de perder el archivo del
       // picker, y subida con reintento en segundo plano (no bloquea el flujo).
       final imagePath = ref.read(lastScanImageProvider);
@@ -53,9 +57,11 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
         unawaited(store.upload(created.ticketPath));
       }
       // Personas frecuentes: todas menos el anfitrión (índice 0).
-      await ref
-          .read(frequentPeopleRepositoryProvider)
-          .recordUsage(participantNames.skip(1));
+      if (user?.isFullAccount ?? false) {
+        await ref
+            .read(frequentPeopleRepositoryProvider)
+            .recordUsage(participantNames.skip(1));
+      }
       // El borrador ya está a salvo en Firestore: fuera de la persistencia.
       ref.read(reviewDraftProvider.notifier).discard();
       ref.invalidate(savedDraftProvider);
@@ -70,11 +76,17 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
 
 final createSessionControllerProvider =
     NotifierProvider<CreateSessionController, AsyncValue<String?>>(
-        CreateSessionController.new);
+      CreateSessionController.new,
+    );
 
 /// Personas frecuentes para los chips del paso de gente.
-final frequentPeopleProvider = StreamProvider.autoDispose(
-    (ref) => ref.watch(frequentPeopleRepositoryProvider).watch());
+final frequentPeopleProvider = StreamProvider.autoDispose((ref) {
+  final user = ref.watch(authStateProvider).value;
+  if (!(user?.isFullAccount ?? false)) {
+    return Stream.value(const <FrequentPerson>[]);
+  }
+  return ref.watch(frequentPeopleRepositoryProvider).watch();
+});
 
 /// Nombre visible del anfitrión (primer participante).
 final hostDisplayNameProvider = Provider<String>((ref) {

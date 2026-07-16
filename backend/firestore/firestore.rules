@@ -25,12 +25,32 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAnonymous() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    function isVerifiedAccount() {
+      return signedIn()
+        && request.auth.token.get('email_verified', false) == true;
+    }
+
+    // Invitado móvil o cuenta verificada. Una cuenta de correo pendiente
+    // conserva lectura por UID, pero no puede realizar acciones de producto.
+    function canUseCore() {
+      return isAnonymous() || isVerifiedAccount();
+    }
+
     function sessionData(sid) {
       return get(/databases/$(database)/documents/sessions/$(sid)).data;
     }
 
-    function isOwner(sid) {
+    function ownsSession(sid) {
       return signedIn() && sessionData(sid).ownerUid == request.auth.uid;
+    }
+
+    function isOwner(sid) {
+      return canUseCore() && ownsSession(sid);
     }
 
     function isOpen(sid) {
@@ -38,12 +58,12 @@ service cloud.firestore {
     }
 
     function hasGuestAccess(sid) {
-      return signedIn()
+      return canUseCore()
         && exists(/databases/$(database)/documents/sessions/$(sid)/guestAccess/$(request.auth.uid));
     }
 
     function canRead(sid) {
-      return isOwner(sid) || hasGuestAccess(sid);
+      return ownsSession(sid) || hasGuestAccess(sid);
     }
 
     function claimedBy(sid, pid) {
@@ -53,17 +73,17 @@ service cloud.firestore {
 
     // ── Perfil privado del anfitrión ────────────────────────────────────
     match /users/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read, write: if isVerifiedAccount() && request.auth.uid == uid;
 
       match /frequentPeople/{personId} {
-        allow read, write: if signedIn() && request.auth.uid == uid;
+        allow read, write: if isVerifiedAccount() && request.auth.uid == uid;
       }
     }
 
     // ── Sesiones ────────────────────────────────────────────────────────
     match /sessions/{sid} {
 
-      allow create: if signedIn()
+      allow create: if canUseCore()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.kind in ['single', 'multi']
         && request.resource.data.status == 'open'
@@ -71,14 +91,22 @@ service cloud.firestore {
         && request.resource.data.shareCode is string
         && request.resource.data.shareCode.size() >= 16
         // Agregados: o ausentes o a cero; a partir de aquí, solo la function.
-        && request.resource.data.get('computeVersion', 0) == 0;
+        && request.resource.data.get('computeVersion', 0) == 0
+        && request.resource.data.get('pendingSettlements', 0) == 0
+        && request.resource.data.get('balances', {}).size() == 0
+        && request.resource.data.get('totals', {}).get('grandTotal', 0) == 0
+        && request.resource.data.get('totals', {})
+            .get('settlementRequired', 0) == 0
+        && request.resource.data.get('totals', {})
+            .get('settledConfirmed', 0) == 0
+        && request.resource.data.get('totals', {})
+            .get('settledMarked', 0) == 0;
 
       // list del owner (query where ownerUid==uid) y get de invitados.
       allow read: if (signedIn() && resource.data.ownerUid == request.auth.uid)
         || hasGuestAccess(sid);
 
-      allow update: if signedIn()
-        && resource.data.ownerUid == request.auth.uid
+      allow update: if isOwner(sid)
         && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['ownerUid', 'totals', 'balances', 'computeVersion'])
         && (
@@ -89,12 +117,12 @@ service cloud.firestore {
               .hasOnly(['status', 'closedAt', 'updatedAt'])
         );
 
-      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow delete: if isOwner(sid);
 
       // ── Acceso de invitados (prueba de conocimiento del shareCode) ────
       match /guestAccess/{uid} {
         allow read: if isOwner(sid) || (signedIn() && request.auth.uid == uid);
-        allow create: if signedIn()
+        allow create: if canUseCore()
           && request.auth.uid == uid
           && isOpen(sid)
           && request.resource.data.shareCode == sessionData(sid).shareCode;

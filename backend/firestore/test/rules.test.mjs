@@ -34,12 +34,22 @@ const OWNER = 'owner-uid';
 const GUEST = 'guest-uid'; // anónimo con guestAccess concedido
 const OTHER = 'other-guest-uid'; // anónimo que reclamó p3
 const STRANGER = 'stranger-uid'; // autenticado SIN guestAccess
+const UNVERIFIED = 'unverified-owner-uid';
 const CODE = 'SECRET-CODE-16CHARS';
+
+const authClaims = (uid) =>
+  [GUEST, OTHER].includes(uid)
+    ? { firebase: { sign_in_provider: 'anonymous' } }
+    : {
+        email: `${uid}@salda.test`,
+        email_verified: uid !== UNVERIFIED,
+        firebase: { sign_in_provider: 'password' },
+      };
 
 const db = (uid) =>
   uid === null
     ? env.unauthenticatedContext().firestore()
-    : env.authenticatedContext(uid).firestore();
+    : env.authenticatedContext(uid, authClaims(uid)).firestore();
 
 const S = 'sessions/s1';
 
@@ -105,6 +115,14 @@ async function seed() {
     await setDoc(doc(f, 'sessions/s2/participants/p1'), {
       name: 'Edgar', isOwner: true, claimedByDevice: '',
     });
+    await setDoc(doc(f, 'sessions/s3'), {
+      ownerUid: UNVERIFIED, kind: 'single', name: 'Cuenta anterior',
+      status: 'open', splitModeDefault: 'equal', shareCode: CODE,
+      currency: 'EUR', computeVersion: 1,
+    });
+    await setDoc(doc(f, 'sessions/s3/participants/p1'), {
+      name: 'Pendiente', isOwner: true, claimedByDevice: '',
+    });
     await setDoc(doc(f, 'users/owner-uid'), { displayName: 'Edgar' });
   });
 }
@@ -131,6 +149,14 @@ describe('sessions.create', () => {
   it('owner crea una sesión válida', () =>
     assertSucceeds(setDoc(doc(db(OWNER), 'sessions/nueva'), valid)));
 
+  it('invitado móvil crea una sesión propia', () =>
+    assertSucceeds(setDoc(doc(db(GUEST), 'sessions/nueva'),
+      { ...valid, ownerUid: GUEST })));
+
+  it('cuenta de correo sin verificar no crea sesiones', () =>
+    assertFails(setDoc(doc(db(UNVERIFIED), 'sessions/nueva'),
+      { ...valid, ownerUid: UNVERIFIED })));
+
   it('no se puede crear a nombre de otro', () =>
     assertFails(setDoc(doc(db(STRANGER), 'sessions/nueva'), valid)));
 
@@ -146,6 +172,15 @@ describe('sessions.create', () => {
     assertFails(setDoc(doc(db(OWNER), 'sessions/nueva'),
       { ...valid, computeVersion: 7 })));
 
+  it('agregados iniciales manipulados: denegado', async () => {
+    await assertFails(setDoc(doc(db(OWNER), 'sessions/nueva'),
+      { ...valid, totals: { grandTotal: 1 } }));
+    await assertFails(setDoc(doc(db(OWNER), 'sessions/nueva'),
+      { ...valid, balances: { p1: { net: 1 } } }));
+    await assertFails(setDoc(doc(db(OWNER), 'sessions/nueva'),
+      { ...valid, pendingSettlements: 1 }));
+  });
+
   it('sin autenticar: denegado', () =>
     assertFails(setDoc(doc(db(null), 'sessions/nueva'), valid)));
 });
@@ -156,6 +191,21 @@ describe('sessions.read/update/delete', () => {
     await assertSucceeds(getDoc(doc(db(OWNER), S)));
     await assertSucceeds(getDocs(query(
       collection(db(OWNER), 'sessions'), where('ownerUid', '==', OWNER))));
+  });
+
+  it('cuenta sin verificar conserva lectura de sus datos existentes', async () => {
+    await assertSucceeds(getDoc(doc(db(UNVERIFIED), 'sessions/s3')));
+    await assertSucceeds(getDoc(
+      doc(db(UNVERIFIED), 'sessions/s3/participants/p1')));
+  });
+
+  it('cuenta sin verificar no modifica ni borra sus sesiones', async () => {
+    await assertFails(updateDoc(doc(db(UNVERIFIED), 'sessions/s3'),
+      { name: 'Cambio bloqueado' }));
+    await assertFails(setDoc(
+      doc(db(UNVERIFIED), 'sessions/s3/participants/p2'),
+      { name: 'Bloqueado', isOwner: false }));
+    await assertFails(deleteDoc(doc(db(UNVERIFIED), 'sessions/s3')));
   });
 
   it('invitado con guestAccess lee la sesión', () =>
@@ -404,6 +454,15 @@ describe('users', () => {
     await assertFails(getDoc(doc(db(GUEST), 'users/owner-uid')));
     await assertFails(setDoc(doc(db(GUEST), 'users/owner-uid'), { a: 1 }));
     await assertFails(getDoc(doc(db(null), 'users/owner-uid')));
+  });
+
+  it('perfiles privados requieren una cuenta verificada', async () => {
+    await assertFails(setDoc(doc(db(GUEST), `users/${GUEST}`),
+      { displayName: 'Invitado' }));
+    await assertFails(setDoc(doc(db(UNVERIFIED), `users/${UNVERIFIED}`),
+      { displayName: 'Pendiente' }));
+    await assertSucceeds(setDoc(doc(db(STRANGER), `users/${STRANGER}`),
+      { displayName: 'Verificada' }));
   });
 });
 

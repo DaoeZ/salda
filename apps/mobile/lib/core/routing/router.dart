@@ -17,30 +17,63 @@ import '../../features/settings/presentation/settings_screen.dart';
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authStateProvider);
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/auth-loading',
     redirect: (context, state) {
-      if (auth.isLoading) return null;
-      final loggedIn = auth.value != null;
-      final atLogin = state.matchedLocation == '/login';
-      if (!loggedIn && !atLogin) return '/login';
-      if (loggedIn && atLogin) return '/home';
+      final location = state.matchedLocation;
+      if (auth.isLoading) {
+        return location == '/auth-loading' ? null : '/auth-loading';
+      }
+      final user = auth.value;
+      final isPublic =
+          location == '/login' ||
+          location == '/register' ||
+          location == '/forgot-password';
+      if (user == null) {
+        return isPublic ? null : '/login';
+      }
+      if (user.needsEmailVerification) {
+        return location == '/verify-email' ? null : '/verify-email';
+      }
+      if (user.isAnonymous) {
+        if (location == '/register' || location.startsWith('/home')) {
+          return null;
+        }
+        return '/home';
+      }
+      if (isPublic ||
+          location == '/verify-email' ||
+          location == '/auth-loading') {
+        return '/home';
+      }
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/auth-loading',
+        builder: (_, _) => const AuthLoadingScreen(),
+      ),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (_, state) => ForgotPasswordScreen(
+          initialEmail: state.extra is String ? state.extra! as String : '',
+        ),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (_, _) => const VerifyEmailScreen(),
+      ),
       GoRoute(
         path: '/home',
         builder: (_, _) => const HomeScreen(),
         routes: [
-          GoRoute(
-              path: 'review', builder: (_, _) => const ReviewScreen()),
+          GoRoute(path: 'review', builder: (_, _) => const ReviewScreen()),
           GoRoute(
             path: 'settings',
             builder: (_, _) => const SettingsScreen(),
             routes: [
-              GoRoute(
-                  path: 'ai',
-                  builder: (_, _) => const AiProvidersScreen()),
+              GoRoute(path: 'ai', builder: (_, _) => const AiProvidersScreen()),
             ],
           ),
           GoRoute(
@@ -55,8 +88,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: 'ticket',
-                builder: (_, state) => TicketDetailScreen(
-                    ticket: state.extra! as TicketRef),
+                builder: (_, state) =>
+                    TicketDetailScreen(ticket: state.extra! as TicketRef),
               ),
             ],
           ),

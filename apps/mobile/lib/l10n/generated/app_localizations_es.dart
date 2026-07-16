@@ -124,7 +124,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get commonDone => 'Listo';
 
   @override
+  String get commonDelete => 'Eliminar';
+
+  @override
   String get loginTitle => 'Divide gastos sin discusiones';
+
+  @override
+  String get loginWelcome => 'Qué bueno verte de nuevo';
 
   @override
   String get loginEmail => 'Email';
@@ -154,6 +160,120 @@ class AppLocalizationsEs extends AppLocalizations {
   String get loginResetSent => 'Te hemos enviado un correo para restablecerla';
 
   @override
+  String get registerTitle => 'Crea tu cuenta';
+
+  @override
+  String get registerSubtitle =>
+      'Guarda tus cuentas y accede a ellas desde cualquier dispositivo.';
+
+  @override
+  String get authNewPassword => 'Nueva contraseña';
+
+  @override
+  String get authConfirmPassword => 'Repite la contraseña';
+
+  @override
+  String get authPasswordHint => 'Mínimo 8 caracteres';
+
+  @override
+  String get authShowPassword => 'Mostrar contraseña';
+
+  @override
+  String get authHidePassword => 'Ocultar contraseña';
+
+  @override
+  String get authOr => 'o';
+
+  @override
+  String get authContinueGoogle => 'Continuar con Google';
+
+  @override
+  String get authContinueGuest => 'Continuar como invitado';
+
+  @override
+  String get authProtectGuestTitle => 'Protege tus cuentas';
+
+  @override
+  String get authProtectGuestBody =>
+      'Convierte tu acceso de invitado sin perder ninguna sesión.';
+
+  @override
+  String get authProtectGuestAction => 'Crear cuenta y conservar datos';
+
+  @override
+  String get authProtectGuestGoogle => 'Vincular con Google';
+
+  @override
+  String get authUseAnotherAccount => 'Usar otra cuenta';
+
+  @override
+  String get authValidationEmailRequired => 'Escribe tu email';
+
+  @override
+  String get authValidationEmailInvalid => 'Introduce un email válido';
+
+  @override
+  String get authValidationPasswordRequired => 'Escribe tu contraseña';
+
+  @override
+  String get authValidationPasswordLength => 'Usa al menos 8 caracteres';
+
+  @override
+  String get authValidationPasswordMismatch => 'Las contraseñas no coinciden';
+
+  @override
+  String get authValidationName => 'Escribe un nombre de al menos 2 caracteres';
+
+  @override
+  String get resetTitle => 'Recupera tu contraseña';
+
+  @override
+  String get resetBody =>
+      'Te enviaremos el enlace oficial de Firebase para crear una nueva.';
+
+  @override
+  String get resetAction => 'Enviar enlace';
+
+  @override
+  String get resetSentTitle => 'Revisa tu correo';
+
+  @override
+  String get resetSentBody =>
+      'Si existe una cuenta con ese email, recibirás un enlace para restablecer la contraseña.';
+
+  @override
+  String get resetBackToLogin => 'Volver a iniciar sesión';
+
+  @override
+  String get resetTryAnother => 'Probar otro email';
+
+  @override
+  String get verifyTitle => 'Verifica tu email';
+
+  @override
+  String verifyBody(String email) {
+    return 'Verifica $email desde el enlace del correo. Si no lo tienes, puedes reenviarlo.';
+  }
+
+  @override
+  String get verifyCheck => 'Ya lo he verificado';
+
+  @override
+  String get verifyResend => 'Reenviar correo';
+
+  @override
+  String verifyResendIn(int seconds) {
+    return 'Podrás reenviarlo en $seconds s';
+  }
+
+  @override
+  String get verifyResent => 'Correo de verificación enviado de nuevo.';
+
+  @override
+  String get verifyNotYet =>
+      'Todavía no aparece como verificado. Abre el enlace del correo y vuelve a comprobar.';
+
+  @override
   String get authErrorInvalidCredential => 'Email o contraseña incorrectos';
 
   @override
@@ -166,10 +286,51 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authErrorNetwork => 'Sin conexión. Inténtalo de nuevo.';
 
   @override
+  String get authErrorTooManyRequests =>
+      'Demasiados intentos. Espera unos minutos y vuelve a probar.';
+
+  @override
+  String get authErrorUserDisabled => 'Esta cuenta está desactivada.';
+
+  @override
+  String get authErrorOperationNotAllowed =>
+      'Este método de acceso aún no está habilitado.';
+
+  @override
+  String get authErrorCredentialAlreadyInUse =>
+      'Ese acceso ya pertenece a otra cuenta. Cierra esta sesión y entra con la cuenta existente; no hemos movido tus datos.';
+
+  @override
+  String get authErrorCancelled => 'Has cancelado el acceso.';
+
+  @override
   String get authErrorUnknown => 'Algo ha fallado. Inténtalo de nuevo.';
 
   @override
   String get signOut => 'Cerrar sesión';
+
+  @override
+  String get guestAccount => 'Cuenta de invitado';
+
+  @override
+  String get guestAccountBody =>
+      'Tus sesiones solo están vinculadas a este acceso.';
+
+  @override
+  String get accountVerified => 'Email verificado';
+
+  @override
+  String get guestLeave => 'Salir del modo invitado';
+
+  @override
+  String get guestSignOutTitle => '¿Salir sin proteger tus cuentas?';
+
+  @override
+  String get guestSignOutBody =>
+      'No podrás recuperar las sesiones de este invitado después de salir. Crea una cuenta para conservarlas.';
+
+  @override
+  String get guestSignOutConfirm => 'Salir de todos modos';
 
   @override
   String get sessionsEmptyTitle => 'Escanea tu primer ticket';

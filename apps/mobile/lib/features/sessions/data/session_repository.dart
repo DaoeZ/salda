@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:domain/domain.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../auth/data/auth_repository.dart';
 import '../domain/session_models.dart';
 import 'firestore_session_repository.dart';
 
@@ -18,7 +18,8 @@ abstract interface class SessionRepository {
   /// Crea la sesión completa desde la revisión de un ticket.
   /// Devuelve el id de la sesión y la ruta del ticket (para subir su foto).
   Future<({String sessionId, String ticketPath})> createSession(
-      NewSessionInput input);
+    NewSessionInput input,
+  );
 
   /// Añade un ticket como cuenta nueva de una sesión existente.
   /// Con la segunda cuenta, la sesión pasa a `kind: multi`.
@@ -54,9 +55,10 @@ abstract interface class SessionRepository {
 }
 
 final sessionRepositoryProvider = Provider<SessionRepository>((ref) {
+  final uid = ref.watch(currentUserIdProvider);
   return FirestoreSessionRepository(
     firestore: FirebaseFirestore.instance,
-    uid: () => FirebaseAuth.instance.currentUser!.uid,
+    uid: () => uid,
     shareCodeFactory: () => ShareCode.generate().value,
   );
 });

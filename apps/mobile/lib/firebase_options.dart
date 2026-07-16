@@ -11,7 +11,7 @@ abstract final class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAKqTQES5A4CjhSRqvQVq_zncaXSXp93mY',
-    appId: '1:923355592259:android:7e525bf8fd1252b9bac6f6',
+    appId: '1:923355592259:android:024e3c6d1eab95bfbac6f6',
     messagingSenderId: '923355592259',
     projectId: 'salda-dev',
     storageBucket: 'salda-dev.firebasestorage.app',

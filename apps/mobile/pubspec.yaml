@@ -28,6 +28,7 @@ dependencies:
   # Conjunto alineado conocido-bueno; despinear cuando salga core 4.13+.
   firebase_core: 4.11.0
   firebase_auth: 6.5.4
+  google_sign_in: ^7.2.0
   cloud_firestore: 6.6.0
   qr_flutter: ^4.1.0
   share_plus: ^13.2.0

@@ -81,8 +81,9 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
-**Punto exacto:** M2 cerrado y subido (commit `3aca453` + docs/CI posteriores). Lo
-siguiente es preparar el entorno para M3 (ver §11).
+**Punto exacto:** M0–M6 y estabilización P0 están completos a nivel de código. P1
+evoluciona la identidad: email verificado, Google, invitado móvil, recuperación y
+conversión conservando UID. El contrato vigente está en `docs/AUTENTICACION.md`.
 
 **Qué se hizo en la última sesión de trabajo, en orden:**
 1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
@@ -113,8 +114,8 @@ siguiente es preparar el entorno para M3 (ver §11).
   cleanup (cascada). 37 tests TS. `order` en participantes fija el orden determinista
   de los motores — la app lo escribe al crear (p0..pN) y DEBE mantenerse.
 - App: bootstrap Firebase (emuladores, opciones demo en
-  `core/firebase/firebase_options_stub.dart`), Auth email+contraseña (Google oculto
-  hasta proyecto real: `AuthRepository.googleSignInAvailable`), repositorio de sesiones
+  `core/firebase/firebase_options_stub.dart`), Auth email+contraseña, Google e invitado
+  móvil con verificación y conversión, repositorio de sesiones
   (creación en DOS pasos: doc sesión y luego batch — las reglas de subdocs hacen get()
   de la sesión), providers autoDispose, LoginScreen, Home=historial con tarjeta
   te-deben/debes + skeletons, hoja Gente-y-reparto (chips frecuentes, modo, pagador),
@@ -259,10 +260,11 @@ invitados, Apple cuando haya iOS) · Firestore (datos + tiempo real + offline, r
 `europe-west1`) · Storage (fotos de tickets: original ≤1600px + thumb 300px generados
 on-device) · Functions v2 (SOLO 3: `recompute` autoritativa, `notify` FCM, `cleanup`
 borrado en cascada) · Hosting (web invitados + deep links) · App Check (enforced, M3/M4)
-· FCM · Emulator Suite. **Los proyectos reales (`salda-dev`, `salda-prod`) NO existen
-todavía**: crearlos en M3 con la cuenta del usuario, activar Blaze con presupuesto 5 €/mes
-y alertas 50/90/100 % + alertas de métricas (spec §12.4). `.firebaserc` ya los referencia;
-`default` es `demo-salda` (emuladores, sin credenciales).
+· FCM · Emulator Suite. Los proyectos reales `salda-dev` y `salda-prod` existen y
+pertenecen al usuario; `default` continúa siendo `demo-salda` para emuladores. Firebase
+registra tanto `dev.salda.app` como el paquete compatible del APK existente
+`dev.salda.salda_mobile`, que se conserva para no perder identidades locales; ver
+`docs/AUTENTICACION.md`. Presupuesto y alertas se gestionan en GCP.
 
 **Modelo de datos (implantar en M3 EXACTAMENTE como spec §7):** raíz = **sesión**
 (cuenta suelta = sesión `kind:"single"`, la UI oculta la capa):
@@ -311,8 +313,8 @@ API del proveedor sin tocar Firebase.
 **Ubicación de secretos (nunca valores):** API keys de IA → `flutter_secure_storage`
 (Keystore/Keychain) del dispositivo del usuario, excluidas de logs/crashes/backup JSON ·
 config Firebase de la app (`google-services.json`, `GoogleService-Info.plist`,
-`firebase_options.dart`) → **gitignorados**, se generarán con `flutterfire configure` en
-M3 (hoy NO existen) · **no hay `.env` en el repo ni secretos en CI todavía**; cuando
+`firebase_options.dart`) → configuración pública commiteada según ADR-016; los archivos
+nativos `google-services.json`/plist siguen gitignorados · **no hay secretos en CI**; cuando
 haya despliegue automático usar Workload Identity Federation · credenciales de gh y
 firebase CLI → keyring del SO del desarrollador.
 
@@ -390,25 +392,14 @@ firebase CLI → keyring del SO del desarrollador.
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. **Entorno para M3** (bloqueante): instalar Android Studio (trae el JDK que necesitan
-   el emulador de Firestore y el build Android) + SDK Android; `flutter doctor` limpio.
-   Probar la app en dispositivo/emulador; validar OCR con 3-4 tickets reales y
-   **alimentar el corpus** con lo que falle (protocolo en test/corpus/README.md).
-2. **Crear proyectos Firebase** `salda-dev`/`salda-prod` (cuenta del usuario,
-   `firebase login`): europe-west1, Blaze + presupuesto 5 € + alertas (spec §12.4);
-   `flutterfire configure` (los archivos generados van gitignorados).
-3. **M3 — Sesiones**: (a) modelo Firestore de spec §7 con `schemaVersion`; (b) reglas =
-   matriz §13.2 con test por celda vía `firebase emulators:exec` + job `rules` en CI;
-   (c) functions `recompute` (reutiliza `src/domain/` TS), `notify`, `cleanup`,
-   idempotentes con `computeVersion`; (d) app: Auth Google+Email, repositorios Firestore,
-   crear sesión (conectar el "Continuar" de la revisión), detalle de sesión, personas
-   frecuentes, compartir enlace+QR; (e) draft persistente del wizard.
-4. **M4 — Invitados**: web Svelte real (¿quién eres? → resumen → elegir productos →
-   ya he pagado), Auth anónimo + shareCode, tiempo real, App Check enforced.
-5. **M5 — Pulido**: PDF import/export, imagen-resumen para WhatsApp, recordatorios,
-   cierre/archivado, backup JSON (RF-90/91), estados vacíos/offline, haptics, beta.
-6. **M6 — IA**: contrato + adaptadores (Claude, Gemini y openai_compatible primero),
-   "Probar conexión" obligatorio, sugerencia por confianza < 0,75 (DC-13).
+1. Validar P1 en un dispositivo Android: email real, deep link de verificación,
+   recuperación, Google y conversión de invitado sin cambio de UID.
+2. Replicar en producción los proveedores Email/Password, Anonymous y Google ya
+   verificados en `salda-dev`; registrar también las huellas de firma release/Play.
+3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
+   activar enforcement únicamente para un cliente.
+4. Preparar la siguiente fase de usuarios/nombres de usuario sin implementar todavía
+   perfiles públicos, amigos, grupos permanentes, chat ni actividad social.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 

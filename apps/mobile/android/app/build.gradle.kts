@@ -15,7 +15,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Conservado para no convertir una actualización en una app distinta:
+        // cambiarlo perdería el almacenamiento local de invitados existentes.
         applicationId = "dev.salda.salda_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.

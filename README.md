@@ -39,3 +39,6 @@ firebase emulators:start             # backend local completo (proyecto demo-sal
 
 Dos proyectos: `salda-dev` y `salda-prod` (ver `.firebaserc`). El desarrollo local usa
 la Emulator Suite con el proyecto `demo-salda` (no requiere proyecto real ni credenciales).
+
+La política de identidad, conversión de invitados, configuración de Google y rollout
+de App Check se documentan en [docs/AUTENTICACION.md](docs/AUTENTICACION.md).

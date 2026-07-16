@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:domain/domain.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../auth/data/auth_repository.dart';
 
 /// Copia de seguridad completa en JSON (spec §14, RF-90/91).
 ///
@@ -31,8 +32,9 @@ class BackupService {
   Future<Map<String, Object?>> exportAll() async {
     final owner = uid();
     final user = await firestore.doc('users/$owner').get();
-    final frequentPeople =
-        await firestore.collection('users/$owner/frequentPeople').get();
+    final frequentPeople = await firestore
+        .collection('users/$owner/frequentPeople')
+        .get();
     final sessions = await firestore
         .collection('sessions')
         .where('ownerUid', isEqualTo: owner)
@@ -56,12 +58,12 @@ class BackupService {
   }
 
   Future<Map<String, Object?>> _exportSession(
-      QueryDocumentSnapshot<Map<String, dynamic>> session) async {
+    QueryDocumentSnapshot<Map<String, dynamic>> session,
+  ) async {
     Future<List<Map<String, Object?>>> docsOf(String path) async => [
-          for (final d
-              in (await session.reference.collection(path).get()).docs)
-            {'id': d.id, 'data': _encode(d.data())},
-        ];
+      for (final d in (await session.reference.collection(path).get()).docs)
+        {'id': d.id, 'data': _encode(d.data())},
+    ];
 
     final accounts = <Map<String, Object?>>[];
     for (final account
@@ -79,8 +81,11 @@ class BackupService {
           ],
         });
       }
-      accounts.add(
-          {'id': account.id, 'data': _encode(account.data()), 'tickets': tickets});
+      accounts.add({
+        'id': account.id,
+        'data': _encode(account.data()),
+        'tickets': tickets,
+      });
     }
 
     return {
@@ -96,13 +101,15 @@ class BackupService {
   // ── Resumen previo al import (RF-91) ───────────────────────────────────
 
   ({int sessions, int tickets, int lines}) summarize(
-      Map<String, Object?> backup) {
+    Map<String, Object?> backup,
+  ) {
     var tickets = 0;
     var lines = 0;
     final sessions = (backup['sessions'] as List?) ?? const [];
     for (final s in sessions.cast<Map<String, Object?>>()) {
       for (final a
-          in ((s['accounts'] as List?) ?? const []).cast<Map<String, Object?>>()) {
+          in ((s['accounts'] as List?) ?? const [])
+              .cast<Map<String, Object?>>()) {
         final ts = ((a['tickets'] as List?) ?? const []);
         tickets += ts.length;
         for (final t in ts.cast<Map<String, Object?>>()) {
@@ -115,14 +122,16 @@ class BackupService {
 
   // ── Importar ───────────────────────────────────────────────────────────
 
-  Future<void> import(Map<String, Object?> backup,
-      {required bool replace}) async {
+  Future<void> import(
+    Map<String, Object?> backup, {
+    required bool replace,
+  }) async {
     if (backup['format'] != format || backup['schemaVersion'] != 1) {
       throw const DomainException('invalidBackup', 'Formato no reconocido');
     }
     final owner = uid();
-    final sessions =
-        ((backup['sessions'] as List?) ?? const []).cast<Map<String, Object?>>();
+    final sessions = ((backup['sessions'] as List?) ?? const [])
+        .cast<Map<String, Object?>>();
     final importedIds = {for (final s in sessions) s['id'] as String};
 
     if (replace) {
@@ -139,12 +148,15 @@ class BackupService {
 
     final user = (backup['user'] as Map?)?.cast<String, Object?>();
     if (user != null) {
-      await firestore.doc('users/$owner').set(
+      await firestore
+          .doc('users/$owner')
+          .set(
             _decode((user['profile'] as Map?)?.cast<String, Object?>() ?? {}),
             SetOptions(merge: true),
           );
-      for (final person in ((user['frequentPeople'] as List?) ?? const [])
-          .cast<Map<String, Object?>>()) {
+      for (final person
+          in ((user['frequentPeople'] as List?) ?? const [])
+              .cast<Map<String, Object?>>()) {
         await firestore
             .doc('users/$owner/frequentPeople/${person['id']}')
             .set(_decode((person['data'] as Map).cast<String, Object?>()));
@@ -157,7 +169,9 @@ class BackupService {
   }
 
   Future<void> _importSession(
-      Map<String, Object?> session, String owner) async {
+    Map<String, Object?> session,
+    String owner,
+  ) async {
     final ref = firestore.doc('sessions/${session['id']}');
 
     // Purga de subdocumentos existentes: el import REEMPLAZA la sesión.
@@ -202,19 +216,27 @@ class BackupService {
     await writeDocs('settlements', (session['settlements'] as List?) ?? []);
     await writeDocs('activity', (session['activity'] as List?) ?? []);
 
-    for (final account in ((session['accounts'] as List?) ?? const [])
-        .cast<Map<String, Object?>>()) {
-      final accountRef = ref.collection('accounts').doc(account['id'] as String);
-      await accountRef
-          .set(_decode((account['data'] as Map).cast<String, Object?>()));
-      for (final ticket in ((account['tickets'] as List?) ?? const [])
-          .cast<Map<String, Object?>>()) {
-        final ticketRef =
-            accountRef.collection('tickets').doc(ticket['id'] as String);
-        await ticketRef
-            .set(_decode((ticket['data'] as Map).cast<String, Object?>()));
-        for (final line in ((ticket['lines'] as List?) ?? const [])
+    for (final account
+        in ((session['accounts'] as List?) ?? const [])
             .cast<Map<String, Object?>>()) {
+      final accountRef = ref
+          .collection('accounts')
+          .doc(account['id'] as String);
+      await accountRef.set(
+        _decode((account['data'] as Map).cast<String, Object?>()),
+      );
+      for (final ticket
+          in ((account['tickets'] as List?) ?? const [])
+              .cast<Map<String, Object?>>()) {
+        final ticketRef = accountRef
+            .collection('tickets')
+            .doc(ticket['id'] as String);
+        await ticketRef.set(
+          _decode((ticket['data'] as Map).cast<String, Object?>()),
+        );
+        for (final line
+            in ((ticket['lines'] as List?) ?? const [])
+                .cast<Map<String, Object?>>()) {
           await ticketRef
               .collection('lines')
               .doc(line['id'] as String)
@@ -227,31 +249,34 @@ class BackupService {
   // ── (De)serialización JSON-segura ──────────────────────────────────────
 
   Object? _encodeValue(Object? value) => switch (value) {
-        Timestamp() => {'__t': value.toDate().toUtc().toIso8601String()},
-        Map() => _encode(value.cast<String, Object?>()),
-        List() => [for (final v in value) _encodeValue(v)],
-        _ => value,
-      };
+    Timestamp() => {'__t': value.toDate().toUtc().toIso8601String()},
+    Map() => _encode(value.cast<String, Object?>()),
+    List() => [for (final v in value) _encodeValue(v)],
+    _ => value,
+  };
 
-  Map<String, Object?> _encode(Map<String, Object?> map) =>
-      {for (final e in map.entries) e.key: _encodeValue(e.value)};
+  Map<String, Object?> _encode(Map<String, Object?> map) => {
+    for (final e in map.entries) e.key: _encodeValue(e.value),
+  };
 
   Object? _decodeValue(Object? value) => switch (value) {
-        Map() when value.length == 1 && value['__t'] is String =>
-          Timestamp.fromDate(DateTime.parse(value['__t'] as String)),
-        Map() => _decode(value.cast<String, Object?>()),
-        List() => [for (final v in value) _decodeValue(v)],
-        _ => value,
-      };
+    Map() when value.length == 1 && value['__t'] is String =>
+      Timestamp.fromDate(DateTime.parse(value['__t'] as String)),
+    Map() => _decode(value.cast<String, Object?>()),
+    List() => [for (final v in value) _decodeValue(v)],
+    _ => value,
+  };
 
-  Map<String, Object?> _decode(Map<String, Object?> map) =>
-      {for (final e in map.entries) e.key: _decodeValue(e.value)};
+  Map<String, Object?> _decode(Map<String, Object?> map) => {
+    for (final e in map.entries) e.key: _decodeValue(e.value),
+  };
 }
 
-final backupServiceProvider = Provider<BackupService>(
-  (ref) => BackupService(
+final backupServiceProvider = Provider<BackupService>((ref) {
+  final uid = ref.watch(currentUserIdProvider);
+  return BackupService(
     firestore: FirebaseFirestore.instance,
-    uid: () => FirebaseAuth.instance.currentUser!.uid,
+    uid: () => uid,
     shareCodeFactory: () => ShareCode.generate().value,
-  ),
-);
+  );
+});
