@@ -1,6 +1,7 @@
 # Salda (nombre provisional) — documento de traspaso y guía de desarrollo
 
-> **Propósito:** que una sesión de Codex (u otra persona) en cualquier máquina
+> **[Copia para Codex/otros agentes del CLAUDE.md canónico; si difieren, manda CLAUDE.md.]**
+> **Propósito:** que una sesión de Claude Code (u otra persona) en cualquier máquina
 > retome el proyecto sin haber visto las conversaciones anteriores. Léelo entero antes
 > de tocar código. La especificación `docs/ESPECIFICACION.md` v2.0 es **definitiva y
 > congelada** y manda sobre este resumen.
@@ -58,7 +59,7 @@ importes "c/u" desde líneas. ADR-022 en la Biblia.
 M5 código ✅ (salvo lo intrínsecamente de dispositivo: recordatorios con notificaciones,
 haptics reales, import de PDF con render nativo y captura guiada) · **M6 IA ✅ COMPLETO**:
 paquete ai_providers (contrato, prompt canónico, parseAiResponse con validación de
-cuadre, adaptadores Codex/Gemini/OpenAI-compatible + presets OpenAI/DeepSeek/GLM/
+cuadre, adaptadores Claude/Gemini/OpenAI-compatible + presets OpenAI/DeepSeek/GLM/
 OpenRouter, registry, 10 tests con Dio falso) + lado app: SecretVault (interfaz sobre
 flutter_secure_storage; keys SOLO dispositivo RF-32), AiConfigStore (config+preferido),
 pantalla /settings/ai con "Probar conexión" OBLIGATORIO antes de guardar (RF-31),
@@ -81,8 +82,18 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
-**Punto exacto:** M2 cerrado y subido (commit `3aca453` + docs/CI posteriores). Lo
-siguiente es preparar el entorno para M3 (ver §11).
+**Punto exacto:** M0–M6, estabilización P0, P1 (autenticación) y **P2 (identidad
+pública) completos a nivel de código**. P1 evolucionó la identidad: email verificado,
+Google, invitado móvil, recuperación y conversión conservando UID. P2 añade el perfil
+público: `profiles/{uid}` + claim de unicidad `usernames/{username}` (minúsculas por
+construcción, batch atómico validado con getAfter, reservados en domain y reglas),
+propuestas naturales de username en el registro (edgar → edgar27 → edgar_cantera),
+avatar derivado (iniciales + color FNV-1a del uid sobre avatarPalette), búsqueda por
+prefijo de @username y nombre (queries de campo único, sin composites) y pantallas
+/home/profile y /home/people + banner de Home para completar el perfil. Amigos,
+solicitudes, espacios compartidos, grupos, actividad y chat quedan expresamente FUERA
+(las reglas rechazan campos sin fase). El contrato vigente está en
+`docs/AUTENTICACION.md` (§Identidad pública) y ADR-024 de la Biblia.
 
 **Qué se hizo en la última sesión de trabajo, en orden:**
 1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
@@ -113,8 +124,8 @@ siguiente es preparar el entorno para M3 (ver §11).
   cleanup (cascada). 37 tests TS. `order` en participantes fija el orden determinista
   de los motores — la app lo escribe al crear (p0..pN) y DEBE mantenerse.
 - App: bootstrap Firebase (emuladores, opciones demo en
-  `core/firebase/firebase_options_stub.dart`), Auth email+contraseña (Google oculto
-  hasta proyecto real: `AuthRepository.googleSignInAvailable`), repositorio de sesiones
+  `core/firebase/firebase_options_stub.dart`), Auth email+contraseña, Google e invitado
+  móvil con verificación y conversión, repositorio de sesiones
   (creación en DOS pasos: doc sesión y luego batch — las reglas de subdocs hacen get()
   de la sesión), providers autoDispose, LoginScreen, Home=historial con tarjeta
   te-deben/debes + skeletons, hoja Gente-y-reparto (chips frecuentes, modo, pagador),
@@ -219,7 +230,7 @@ siguiente es preparar el entorno para M3 (ver §11).
   las APIs públicas de los paquetes.
 - **Commits:** en español, imperativos, con prefijo de fase o tipo (`M2: …`, `fix(ci): …`,
   `docs: …`), cuerpo con viñetas de lo relevante, y SIEMPRE la línea
-  `Co-Authored-By: Codex Fable 5 <noreply@anthropic.com>`. Un commit por fase como
+  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. Un commit por fase como
   mínimo; commits pequeños extra para arreglos puntuales.
 - Tests: unitarios por módulo + propiedades con aleatoriedad SEMBRADA (reproducible) +
   vectores dorados/corpus como contratos. Los nombres de test, en español descriptivo.
@@ -259,10 +270,11 @@ invitados, Apple cuando haya iOS) · Firestore (datos + tiempo real + offline, r
 `europe-west1`) · Storage (fotos de tickets: original ≤1600px + thumb 300px generados
 on-device) · Functions v2 (SOLO 3: `recompute` autoritativa, `notify` FCM, `cleanup`
 borrado en cascada) · Hosting (web invitados + deep links) · App Check (enforced, M3/M4)
-· FCM · Emulator Suite. **Los proyectos reales (`salda-dev`, `salda-prod`) NO existen
-todavía**: crearlos en M3 con la cuenta del usuario, activar Blaze con presupuesto 5 €/mes
-y alertas 50/90/100 % + alertas de métricas (spec §12.4). `.firebaserc` ya los referencia;
-`default` es `demo-salda` (emuladores, sin credenciales).
+· FCM · Emulator Suite. Los proyectos reales `salda-dev` y `salda-prod` existen y
+pertenecen al usuario; `default` continúa siendo `demo-salda` para emuladores. Firebase
+registra tanto `dev.salda.app` como el paquete compatible del APK existente
+`dev.salda.salda_mobile`, que se conserva para no perder identidades locales; ver
+`docs/AUTENTICACION.md`. Presupuesto y alertas se gestionan en GCP.
 
 **Modelo de datos (implantar en M3 EXACTAMENTE como spec §7):** raíz = **sesión**
 (cuenta suelta = sesión `kind:"single"`, la UI oculta la capa):
@@ -311,8 +323,8 @@ API del proveedor sin tocar Firebase.
 **Ubicación de secretos (nunca valores):** API keys de IA → `flutter_secure_storage`
 (Keystore/Keychain) del dispositivo del usuario, excluidas de logs/crashes/backup JSON ·
 config Firebase de la app (`google-services.json`, `GoogleService-Info.plist`,
-`firebase_options.dart`) → **gitignorados**, se generarán con `flutterfire configure` en
-M3 (hoy NO existen) · **no hay `.env` en el repo ni secretos en CI todavía**; cuando
+`firebase_options.dart`) → configuración pública commiteada según ADR-016; los archivos
+nativos `google-services.json`/plist siguen gitignorados · **no hay secretos en CI**; cuando
 haya despliegue automático usar Workload Identity Federation · credenciales de gh y
 firebase CLI → keyring del SO del desarrollador.
 
@@ -390,25 +402,15 @@ firebase CLI → keyring del SO del desarrollador.
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. **Entorno para M3** (bloqueante): instalar Android Studio (trae el JDK que necesitan
-   el emulador de Firestore y el build Android) + SDK Android; `flutter doctor` limpio.
-   Probar la app en dispositivo/emulador; validar OCR con 3-4 tickets reales y
-   **alimentar el corpus** con lo que falle (protocolo en test/corpus/README.md).
-2. **Crear proyectos Firebase** `salda-dev`/`salda-prod` (cuenta del usuario,
-   `firebase login`): europe-west1, Blaze + presupuesto 5 € + alertas (spec §12.4);
-   `flutterfire configure` (los archivos generados van gitignorados).
-3. **M3 — Sesiones**: (a) modelo Firestore de spec §7 con `schemaVersion`; (b) reglas =
-   matriz §13.2 con test por celda vía `firebase emulators:exec` + job `rules` en CI;
-   (c) functions `recompute` (reutiliza `src/domain/` TS), `notify`, `cleanup`,
-   idempotentes con `computeVersion`; (d) app: Auth Google+Email, repositorios Firestore,
-   crear sesión (conectar el "Continuar" de la revisión), detalle de sesión, personas
-   frecuentes, compartir enlace+QR; (e) draft persistente del wizard.
-4. **M4 — Invitados**: web Svelte real (¿quién eres? → resumen → elegir productos →
-   ya he pagado), Auth anónimo + shareCode, tiempo real, App Check enforced.
-5. **M5 — Pulido**: PDF import/export, imagen-resumen para WhatsApp, recordatorios,
-   cierre/archivado, backup JSON (RF-90/91), estados vacíos/offline, haptics, beta.
-6. **M6 — IA**: contrato + adaptadores (Codex, Gemini y openai_compatible primero),
-   "Probar conexión" obligatorio, sugerencia por confianza < 0,75 (DC-13).
+1. Validar P1 y P2 en un dispositivo Android: email real, deep link de verificación,
+   recuperación, Google, conversión de invitado sin cambio de UID, alta de perfil con
+   propuesta de username, edición y búsqueda de personas.
+2. Replicar en producción los proveedores Email/Password, Anonymous y Google ya
+   verificados en `salda-dev`; registrar también las huellas de firma release/Play.
+3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
+   activar enforcement únicamente para un cliente.
+4. Siguiente fase social (P3, PENDIENTE DE APROBACIÓN): amistades y espacios
+   compartidos sobre la identidad pública de P2. No empezar sin revisión del usuario.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 

@@ -25,6 +25,17 @@ service firebase.storage {
         && request.resource.contentType.matches('image/jpeg');
     }
 
+    // Foto de perfil (P2 deja la infraestructura lista; la UI de subida
+    // llegará después). Pública dentro del producto, como profiles/{uid}.
+    match /avatars/{uid}/avatar.jpg {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.uid == uid
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/jpeg');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

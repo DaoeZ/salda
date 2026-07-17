@@ -5,6 +5,8 @@ import '../../features/ai/presentation/ai_providers_screen.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/home/home_screen.dart';
+import '../../features/profile/presentation/people_search_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/review/presentation/review_screen.dart';
 import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
@@ -69,6 +71,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const HomeScreen(),
         routes: [
           GoRoute(path: 'review', builder: (_, _) => const ReviewScreen()),
+          GoRoute(path: 'profile', builder: (_, _) => const ProfileScreen()),
+          GoRoute(
+            path: 'people',
+            builder: (_, _) => const PeopleSearchScreen(),
+          ),
           GoRoute(
             path: 'settings',
             builder: (_, _) => const SettingsScreen(),

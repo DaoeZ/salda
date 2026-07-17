@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
+import '../auth/data/auth_repository.dart';
+import '../profile/data/profile_repository.dart';
 import '../review/application/draft_store.dart';
 import '../review/application/review_draft.dart';
 import '../scan/presentation/scan_flow.dart';
@@ -33,6 +35,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text(Brand.appName),
         actions: [
+          if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false)
+            IconButton(
+              tooltip: l10n.searchPeopleTitle,
+              onPressed: () => context.push('/home/people'),
+              icon: const Icon(Icons.person_search_outlined),
+            ),
           IconButton(
             tooltip: l10n.settingsTitle,
             onPressed: () => context.push('/home/settings'),
@@ -47,6 +55,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             : null,
       ),
       body: Column(children: [
+        const _ProfileBanner(),
         const _DraftBanner(),
         Expanded(
           child: sessions.when(
@@ -71,6 +80,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         icon: const Icon(Icons.document_scanner_outlined),
         label: Text(l10n.scanFab),
       ),
+    );
+  }
+}
+
+/// Aviso de perfil público pendiente (P2): las cuentas completas sin perfil
+/// lo crean desde aquí (cubre registro por email, Google y conversiones de
+/// invitado por igual; la pantalla propone el username automáticamente).
+class _ProfileBanner extends ConsumerWidget {
+  const _ProfileBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final isFullAccount =
+        ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
+    final profile = ref.watch(myProfileProvider);
+    // Solo cuando SABEMOS que no hay perfil (no mientras carga).
+    if (!isFullAccount || profile.isLoading || profile.value != null) {
+      return const SizedBox.shrink();
+    }
+    return MaterialBanner(
+      leading: const Icon(Icons.account_circle_outlined),
+      content: Text(l10n.profileBannerTitle),
+      actions: [
+        FilledButton.tonal(
+          onPressed: () => context.push('/home/profile'),
+          child: Text(l10n.profileBannerAction),
+        ),
+      ],
     );
   }
 }

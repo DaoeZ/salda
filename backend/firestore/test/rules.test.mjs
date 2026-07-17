@@ -22,9 +22,11 @@ import {
   getDoc,
   getDocs,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
@@ -124,6 +126,15 @@ async function seed() {
       name: 'Pendiente', isOwner: true, claimedByDevice: '',
     });
     await setDoc(doc(f, 'users/owner-uid'), { displayName: 'Edgar' });
+    // Identidad pública ya existente (P2): perfil + claim de username.
+    await setDoc(doc(f, `profiles/${STRANGER}`), {
+      displayName: 'Alba García', displayNameLower: 'alba garcia',
+      username: 'alba', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), schemaVersion: 1,
+    });
+    await setDoc(doc(f, 'usernames/alba'), {
+      uid: STRANGER, createdAt: serverTimestamp(),
+    });
   });
 }
 
@@ -137,6 +148,114 @@ before(async () => {
 after(async () => env.cleanup());
 
 beforeEach(seed);
+
+// ─── Identidad pública (P2): profiles + usernames ───────────────────────
+describe('profiles/usernames', () => {
+  const profileData = (username, overrides = {}) => ({
+    displayName: 'Edgar Cantera',
+    displayNameLower: 'edgar cantera',
+    username,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  // Alta atómica: perfil + claim en el MISMO batch (como hace la app).
+  const createProfile = (f, uid, username, overrides = {}) => {
+    const batch = writeBatch(f);
+    batch.set(doc(f, `profiles/${uid}`), profileData(username, overrides));
+    batch.set(doc(f, `usernames/${username}`), {
+      uid, createdAt: serverTimestamp(),
+    });
+    return batch.commit();
+  };
+
+  it('cuenta verificada crea perfil + claim en batch', () =>
+    assertSucceeds(createProfile(db(OWNER), OWNER, 'edgar')));
+
+  it('invitado anónimo no tiene perfil público', () =>
+    assertFails(createProfile(db(GUEST), GUEST, 'invitadin')));
+
+  it('cuenta de correo sin verificar no crea perfil', () =>
+    assertFails(createProfile(db(UNVERIFIED), UNVERIFIED, 'pendiente')));
+
+  it('no se puede crear un perfil a nombre de otro', () =>
+    assertFails(createProfile(db(OWNER), 'otro-uid', 'suplantado')));
+
+  it('perfil sin claim en el mismo batch: denegado', () =>
+    assertFails(setDoc(doc(db(OWNER), `profiles/${OWNER}`),
+      profileData('edgar'))));
+
+  it('claim sin perfil que lo referencie: denegado', () =>
+    assertFails(setDoc(doc(db(OWNER), 'usernames/edgar'),
+      { uid: OWNER, createdAt: serverTimestamp() })));
+
+  it('claim con uid ajeno: denegado', async () => {
+    const f = db(OWNER);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `profiles/${OWNER}`), profileData('edgar'));
+    batch.set(doc(f, 'usernames/edgar'),
+      { uid: 'otro-uid', createdAt: serverTimestamp() });
+    await assertFails(batch.commit());
+  });
+
+  it('usernames inválidos o reservados: denegados', async () => {
+    for (const bad of ['Edgar', 'ed', 'ed__gar', 'edgar_', '9edgar', 'admin', 'salda']) {
+      await assertFails(createProfile(db(OWNER), OWNER, bad));
+    }
+  });
+
+  it('username ya ocupado: denegado', () =>
+    assertFails(createProfile(db(OWNER), OWNER, 'alba')));
+
+  it('campos extra en el perfil (p. ej. bio): denegados hasta su fase', () =>
+    assertFails(createProfile(db(OWNER), OWNER, 'edgar',
+      { bio: 'hola' })));
+
+  it('cualquier autenticado lee y busca perfiles; sin autenticar no', async () => {
+    await assertSucceeds(getDoc(doc(db(GUEST), `profiles/${STRANGER}`)));
+    await assertSucceeds(getDocs(query(
+      collection(db(GUEST), 'profiles'),
+      where('username', '>=', 'al'), where('username', '<=', 'al'))));
+    await assertSucceeds(getDoc(doc(db(GUEST), 'usernames/alba')));
+    await assertFails(getDoc(doc(db(null), `profiles/${STRANGER}`)));
+  });
+
+  it('el dueño edita displayName conservando su username', () =>
+    assertSucceeds(updateDoc(doc(db(STRANGER), `profiles/${STRANGER}`), {
+      displayName: 'Alba G.', displayNameLower: 'alba g',
+      updatedAt: serverTimestamp(),
+    })));
+
+  it('cambio de username: batch libera el viejo y reclama el nuevo', async () => {
+    const f = db(STRANGER);
+    const batch = writeBatch(f);
+    batch.delete(doc(f, 'usernames/alba'));
+    batch.set(doc(f, 'usernames/alba_garcia'),
+      { uid: STRANGER, createdAt: serverTimestamp() });
+    batch.update(doc(f, `profiles/${STRANGER}`), {
+      username: 'alba_garcia', updatedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('cambiar el username del perfil SIN reclamar el claim: denegado', () =>
+    assertFails(updateDoc(doc(db(STRANGER), `profiles/${STRANGER}`), {
+      username: 'alba_garcia', updatedAt: serverTimestamp(),
+    })));
+
+  it('createdAt es inmutable', () =>
+    assertFails(updateDoc(doc(db(STRANGER), `profiles/${STRANGER}`), {
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    })));
+
+  it('nadie borra ni modifica el claim de otro', async () => {
+    await assertFails(deleteDoc(doc(db(OWNER), 'usernames/alba')));
+    await assertFails(updateDoc(doc(db(STRANGER), 'usernames/alba'),
+      { uid: STRANGER }));
+  });
+});
 
 // ─── Sesiones: crear ────────────────────────────────────────────────────
 describe('sessions.create', () => {

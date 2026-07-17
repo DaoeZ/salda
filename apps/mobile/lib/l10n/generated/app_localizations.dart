@@ -1359,6 +1359,144 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Taxi, entradas, gasolina…'**
   String get manualConceptHint;
+
+  /// No description provided for @profileTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Perfil público'**
+  String get profileTitle;
+
+  /// No description provided for @profileCreateTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea tu perfil'**
+  String get profileCreateTitle;
+
+  /// No description provided for @profileCreateBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu nombre de usuario es único y te identifica: así podrán encontrarte tus amigos.'**
+  String get profileCreateBody;
+
+  /// No description provided for @profileCreateAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear perfil'**
+  String get profileCreateAction;
+
+  /// No description provided for @profileUsername.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre de usuario'**
+  String get profileUsername;
+
+  /// No description provided for @profileUsernameHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Único y en minúsculas: letras, números y _'**
+  String get profileUsernameHelp;
+
+  /// No description provided for @profileSaved.
+  ///
+  /// In es, this message translates to:
+  /// **'Perfil guardado'**
+  String get profileSaved;
+
+  /// No description provided for @profileSaveError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo guardar. Comprueba la conexión o prueba otro nombre de usuario.'**
+  String get profileSaveError;
+
+  /// No description provided for @profileBannerTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Completa tu perfil público'**
+  String get profileBannerTitle;
+
+  /// No description provided for @profileBannerAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear perfil'**
+  String get profileBannerAction;
+
+  /// No description provided for @usernameChecking.
+  ///
+  /// In es, this message translates to:
+  /// **'Comprobando disponibilidad…'**
+  String get usernameChecking;
+
+  /// No description provided for @usernameAvailable.
+  ///
+  /// In es, this message translates to:
+  /// **'Disponible'**
+  String get usernameAvailable;
+
+  /// No description provided for @usernameTaken.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya está en uso'**
+  String get usernameTaken;
+
+  /// No description provided for @usernameErrorTooShort.
+  ///
+  /// In es, this message translates to:
+  /// **'Mínimo 3 caracteres'**
+  String get usernameErrorTooShort;
+
+  /// No description provided for @usernameErrorTooLong.
+  ///
+  /// In es, this message translates to:
+  /// **'Máximo 20 caracteres'**
+  String get usernameErrorTooLong;
+
+  /// No description provided for @usernameErrorInvalidChars.
+  ///
+  /// In es, this message translates to:
+  /// **'Solo letras sin tildes, números y _'**
+  String get usernameErrorInvalidChars;
+
+  /// No description provided for @usernameErrorStartLetter.
+  ///
+  /// In es, this message translates to:
+  /// **'Debe empezar por una letra'**
+  String get usernameErrorStartLetter;
+
+  /// No description provided for @usernameErrorUnderscores.
+  ///
+  /// In es, this message translates to:
+  /// **'El _ no puede ir al final ni repetido'**
+  String get usernameErrorUnderscores;
+
+  /// No description provided for @usernameErrorReserved.
+  ///
+  /// In es, this message translates to:
+  /// **'Ese nombre está reservado'**
+  String get usernameErrorReserved;
+
+  /// No description provided for @searchPeopleTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar personas'**
+  String get searchPeopleTitle;
+
+  /// No description provided for @searchPeopleHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre o @usuario'**
+  String get searchPeopleHint;
+
+  /// No description provided for @searchPeopleStart.
+  ///
+  /// In es, this message translates to:
+  /// **'Busca a otras personas por su nombre o su @usuario'**
+  String get searchPeopleStart;
+
+  /// No description provided for @searchPeopleEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin resultados'**
+  String get searchPeopleEmpty;
 }
 
 class _AppLocalizationsDelegate

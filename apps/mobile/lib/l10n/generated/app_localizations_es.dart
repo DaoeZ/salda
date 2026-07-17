@@ -692,4 +692,78 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get manualConceptHint => 'Taxi, entradas, gasolina…';
+
+  @override
+  String get profileTitle => 'Perfil público';
+
+  @override
+  String get profileCreateTitle => 'Crea tu perfil';
+
+  @override
+  String get profileCreateBody =>
+      'Tu nombre de usuario es único y te identifica: así podrán encontrarte tus amigos.';
+
+  @override
+  String get profileCreateAction => 'Crear perfil';
+
+  @override
+  String get profileUsername => 'Nombre de usuario';
+
+  @override
+  String get profileUsernameHelp =>
+      'Único y en minúsculas: letras, números y _';
+
+  @override
+  String get profileSaved => 'Perfil guardado';
+
+  @override
+  String get profileSaveError =>
+      'No se pudo guardar. Comprueba la conexión o prueba otro nombre de usuario.';
+
+  @override
+  String get profileBannerTitle => 'Completa tu perfil público';
+
+  @override
+  String get profileBannerAction => 'Crear perfil';
+
+  @override
+  String get usernameChecking => 'Comprobando disponibilidad…';
+
+  @override
+  String get usernameAvailable => 'Disponible';
+
+  @override
+  String get usernameTaken => 'Ya está en uso';
+
+  @override
+  String get usernameErrorTooShort => 'Mínimo 3 caracteres';
+
+  @override
+  String get usernameErrorTooLong => 'Máximo 20 caracteres';
+
+  @override
+  String get usernameErrorInvalidChars => 'Solo letras sin tildes, números y _';
+
+  @override
+  String get usernameErrorStartLetter => 'Debe empezar por una letra';
+
+  @override
+  String get usernameErrorUnderscores =>
+      'El _ no puede ir al final ni repetido';
+
+  @override
+  String get usernameErrorReserved => 'Ese nombre está reservado';
+
+  @override
+  String get searchPeopleTitle => 'Buscar personas';
+
+  @override
+  String get searchPeopleHint => 'Nombre o @usuario';
+
+  @override
+  String get searchPeopleStart =>
+      'Busca a otras personas por su nombre o su @usuario';
+
+  @override
+  String get searchPeopleEmpty => 'Sin resultados';
 }

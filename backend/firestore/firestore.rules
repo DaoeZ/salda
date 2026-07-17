@@ -80,6 +80,94 @@ service cloud.firestore {
       }
     }
 
+    // ── Identidad pública (P2): perfil y unicidad de username ──────────
+    // profiles/{uid} es el perfil PÚBLICO (users/{uid} sigue siendo privado).
+    // El username es único e insensible a mayúsculas POR CONSTRUCCIÓN: se
+    // almacena siempre en minúsculas y usernames/{username} es su claim de
+    // unicidad. Claim y perfil se escriben en el MISMO batch y getAfter()
+    // exige que ambos queden consistentes: no puede existir perfil sin claim
+    // ni claim que el perfil no referencie.
+
+    // La lista de reservados se duplica conscientemente en
+    // packages/domain/lib/src/identity/username.dart (única otra copia).
+    function validUsername(username) {
+      return username is string
+        && username.matches('^[a-z][a-z0-9_]{2,19}$')
+        && !username.matches('.*__.*')
+        && !username.matches('.*_$')
+        && !(username in [
+          'admin', 'administrador', 'salda', 'soporte', 'support', 'ayuda',
+          'help', 'info', 'api', 'root', 'sistema', 'system', 'moderador',
+          'mod', 'oficial', 'official', 'staff', 'equipo', 'team',
+          'seguridad', 'security', 'invitado', 'guest', 'usuario', 'user',
+          'anonimo', 'anonymous', 'test', 'prueba'
+        ]);
+    }
+
+    function validProfile(uid) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'displayName', 'displayNameLower', 'username', 'photoPath',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'displayName', 'displayNameLower', 'username',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.displayName is string
+        && data.displayName.size() >= 2
+        && data.displayName.size() <= 40
+        // displayNameLower alimenta la búsqueda por prefijo. Las reglas no
+        // pueden quitar diacríticos, así que solo exigen su forma (el
+        // cliente que lo derive mal solo se hace más difícil de encontrar).
+        && data.displayNameLower is string
+        && data.displayNameLower.matches('^[a-z0-9 ]{1,40}$')
+        && validUsername(data.username)
+        && (!('photoPath' in data)
+          || data.photoPath == null
+          || data.photoPath == 'avatars/' + uid + '/avatar.jpg')
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    function claimAfterWrite(uid, username) {
+      return getAfter(/databases/$(database)/documents/usernames/$(username))
+        .data.uid == uid;
+    }
+
+    match /profiles/{uid} {
+      // Público dentro del producto: cualquier identidad autenticada
+      // (incluidos invitados) puede verlo y buscarlo por prefijo.
+      allow read: if signedIn();
+      allow create: if isVerifiedAccount()
+        && request.auth.uid == uid
+        && validProfile(uid)
+        && request.resource.data.createdAt is timestamp
+        && claimAfterWrite(uid, request.resource.data.username);
+      allow update: if isVerifiedAccount()
+        && request.auth.uid == uid
+        && validProfile(uid)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && claimAfterWrite(uid, request.resource.data.username);
+      allow delete: if isVerifiedAccount() && request.auth.uid == uid;
+    }
+
+    match /usernames/{username} {
+      // Lectura autenticada: comprobar disponibilidad al elegir username.
+      allow read: if signedIn();
+      allow create: if isVerifiedAccount()
+        && validUsername(username)
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        // Atómico: el mismo batch debe dejar el perfil apuntando aquí.
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid))
+            .data.username == username;
+      // Liberar un username solo puede hacerlo su dueño (cambio o baja).
+      allow delete: if isVerifiedAccount()
+        && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
     // ── Sesiones ────────────────────────────────────────────────────────
     match /sessions/{sid} {
 

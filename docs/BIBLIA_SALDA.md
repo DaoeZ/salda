@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.2 · **Fecha:** 2026-07-15 · **Changelog:** v1.2 — P0.3 separa histórico
+**Versión:** 1.3 · **Fecha:** 2026-07-17 · **Changelog:** v1.3 — P2 identidad
+pública: perfil `profiles/{uid}`, unicidad de username por claims atómicos y
+búsqueda por prefijo (ADR-024). v1.2 — P0.3 separa histórico
 económico de estado actual y define el progreso sobre obligaciones de liquidación
 (ADR-022). v1.1 — blindado el modo "cada uno paga lo suyo": las líneas no reclamadas
 recaen en el pagador (ADR-021), fin de la "media previa". v1.0 primera edición.
@@ -1057,6 +1059,36 @@ verificar antes de editar; el invitado se puede proteger sin migración; perfile
 amigos, grupos permanentes y chat podrán exigir `isFullAccount` sin usar el perfil
 como fuente de autorización. App Check mantiene un rollout monitor-first para no
 romper móvil o web antes de instrumentar ambos clientes.
+
+### ADR-024: Identidad pública con claims de username y perfil separado del privado
+**Estado:** Aceptada · **Fecha:** 2026-07-17 (P2)
+**Contexto:** las funciones sociales futuras (búsqueda, amigos, espacios
+compartidos) necesitan una identidad pública, pero `users/{uid}` es privado por
+diseño (métodos de pago, política de IA) y Firestore no ofrece unicidad nativa
+de campos.
+**Decisión:** [HECHO] colección nueva `profiles/{uid}` pública (lectura para
+cualquier autenticado, escritura solo del dueño verificado) con displayName,
+displayNameLower, username, photoPath (preparado), createdAt/updatedAt y
+schemaVersion; y `usernames/{username}` como claim de unicidad cuyo docId es el
+username canónico en minúsculas (case-insensitive POR CONSTRUCCIÓN). Perfil y
+claim se escriben en el mismo batch y las reglas exigen consistencia con
+`getAfter()`: no puede existir perfil sin claim ni claim no referenciado.
+Validación y propuestas naturales (edgar → edgar27 → edgar_cantera) viven en
+`packages/domain/src/identity/` (puro, reutilizable por la web); la lista de
+reservados se duplica conscientemente en las reglas. El avatar (iniciales +
+color de `avatarPalette` por FNV-1a del uid) se DERIVA, nunca se almacena. La
+búsqueda son dos queries de prefijo (`username`, `displayNameLower`) de campo
+único: índices automáticos, cero composites. Las reglas rechazan campos aún sin
+fase (`hasOnly`), de modo que bio/estadísticas llegarán como cambio de reglas
+explícito, no silencioso.
+**Consecuencias:** los invitados anónimos no tienen perfil (coherente con
+ADR-023); el banner de Home cubre alta por email, Google y conversiones sin
+acoplar el router a Firestore; el uid sigue siendo la clave de todo (espacios
+compartidos y relaciones económicas futuras referenciarán uids, y la
+trazabilidad balance→espacio→ticket→línea no depende del username, que es
+editable). Renombrar el username no toca ningún dato económico.
+**Revisión:** si la búsqueda por prefijo se queda corta (typos, contains),
+evaluar un índice invertido propio antes que un servicio externo.
 
 ---
 

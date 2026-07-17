@@ -5,6 +5,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:salda_mobile/features/auth/data/auth_repository.dart';
 import 'package:salda_mobile/features/people/data/frequent_people_repository.dart';
+import 'package:salda_mobile/features/profile/data/profile_repository.dart';
 import 'package:salda_mobile/features/sessions/data/firestore_session_repository.dart';
 import 'package:salda_mobile/features/sessions/data/session_repository.dart';
 
@@ -100,6 +101,9 @@ List<Override> loggedInOverrides({FakeFirebaseFirestore? firestore}) {
     ),
     frequentPeopleRepositoryProvider.overrideWithValue(
       FrequentPeopleRepository(firestore: fake, uid: () => 'owner'),
+    ),
+    profileRepositoryProvider.overrideWithValue(
+      ProfileRepository(firestore: fake, uid: () => 'owner'),
     ),
   ];
 }

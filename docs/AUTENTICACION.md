@@ -1,7 +1,8 @@
 # Identidad y autenticación
 
-Estado: P1 implementado (2026-07-16). Este documento describe el contrato
-operativo vigente; `docs/ESPECIFICACION.md` continúa congelada.
+Estado: P1 implementado (2026-07-16); P2 identidad pública implementada
+(2026-07-17). Este documento describe el contrato operativo vigente;
+`docs/ESPECIFICACION.md` continúa congelada.
 
 ## Tipos de identidad
 
@@ -65,6 +66,23 @@ Forzarlo antes rompería la web de invitados.
   firmas release/Play se registrarán antes de publicar.
 - En `salda-dev` están habilitados y verificados Email/Password, Anonymous y Google.
   Producción deberá repetir esta configuración antes de publicar.
+
+## Identidad pública (P2)
+
+Solo una cuenta completa (`isFullAccount`) tiene perfil público en
+`profiles/{uid}`: displayName, displayNameLower (búsqueda sin diacríticos),
+username, photoPath (preparado, aún sin UI de subida), createdAt/updatedAt y
+schemaVersion. `users/{uid}` sigue siendo privado. El username es único e
+insensible a mayúsculas por construcción (siempre minúsculas) mediante el claim
+`usernames/{username}`; perfil y claim se escriben en el mismo batch y las
+reglas los validan juntos con `getAfter()`. La validación, los nombres
+reservados y las propuestas naturales de registro (edgar → edgar27 →
+edgar_cantera) están en `packages/domain/lib/src/identity/`. El avatar sin foto
+se deriva siempre (iniciales + color FNV-1a del uid sobre `avatarPalette`). La
+búsqueda de personas (por @username o nombre) son dos queries de prefijo de
+campo único, sin índices compuestos. El detalle completo está en ADR-024 de la
+Biblia. Amigos, solicitudes y espacios compartidos quedan expresamente fuera:
+las reglas rechazan cualquier campo del perfil que aún no tenga fase.
 
 ## Pruebas
 

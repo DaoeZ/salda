@@ -12,6 +12,8 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../people/data/frequent_people_repository.dart';
+import '../../profile/data/profile_repository.dart';
+import '../../profile/presentation/profile_avatar.dart';
 import '../../sessions/application/create_session_controller.dart';
 import '../data/backup_service.dart';
 import '../data/user_profile_repository.dart';
@@ -79,6 +81,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ]),
           if (isFullAccount) ...[
+            section(l10n.profileTitle, [const _ProfileTile()]),
             section(l10n.settingsPayments, [const _PaymentMethodsForm()]),
             section(l10n.settingsPeople, [
               if (people.isEmpty)
@@ -130,6 +133,31 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: TokenSpacing.xl),
         ],
       ),
+    );
+  }
+}
+
+/// Acceso al perfil público (P2): avatar + @username, o invitación a crearlo.
+class _ProfileTile extends ConsumerWidget {
+  const _ProfileTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final user = ref.watch(currentAppUserProvider);
+    final profile = ref.watch(myProfileProvider).value;
+    return ListTile(
+      leading: profile == null
+          ? const Icon(Icons.account_circle_outlined)
+          : ProfileAvatar(
+              seed: user?.uid ?? '',
+              displayName: profile.displayName,
+              radius: 16,
+            ),
+      title: Text(profile?.displayName ?? l10n.profileBannerTitle),
+      subtitle: profile == null ? null : Text('@${profile.username}'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push('/home/profile'),
     );
   }
 }

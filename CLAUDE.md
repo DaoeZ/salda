@@ -81,9 +81,18 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
-**Punto exacto:** M0–M6 y estabilización P0 están completos a nivel de código. P1
-evoluciona la identidad: email verificado, Google, invitado móvil, recuperación y
-conversión conservando UID. El contrato vigente está en `docs/AUTENTICACION.md`.
+**Punto exacto:** M0–M6, estabilización P0, P1 (autenticación) y **P2 (identidad
+pública) completos a nivel de código**. P1 evolucionó la identidad: email verificado,
+Google, invitado móvil, recuperación y conversión conservando UID. P2 añade el perfil
+público: `profiles/{uid}` + claim de unicidad `usernames/{username}` (minúsculas por
+construcción, batch atómico validado con getAfter, reservados en domain y reglas),
+propuestas naturales de username en el registro (edgar → edgar27 → edgar_cantera),
+avatar derivado (iniciales + color FNV-1a del uid sobre avatarPalette), búsqueda por
+prefijo de @username y nombre (queries de campo único, sin composites) y pantallas
+/home/profile y /home/people + banner de Home para completar el perfil. Amigos,
+solicitudes, espacios compartidos, grupos, actividad y chat quedan expresamente FUERA
+(las reglas rechazan campos sin fase). El contrato vigente está en
+`docs/AUTENTICACION.md` (§Identidad pública) y ADR-024 de la Biblia.
 
 **Qué se hizo en la última sesión de trabajo, en orden:**
 1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
@@ -392,14 +401,15 @@ firebase CLI → keyring del SO del desarrollador.
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. Validar P1 en un dispositivo Android: email real, deep link de verificación,
-   recuperación, Google y conversión de invitado sin cambio de UID.
+1. Validar P1 y P2 en un dispositivo Android: email real, deep link de verificación,
+   recuperación, Google, conversión de invitado sin cambio de UID, alta de perfil con
+   propuesta de username, edición y búsqueda de personas.
 2. Replicar en producción los proveedores Email/Password, Anonymous y Google ya
    verificados en `salda-dev`; registrar también las huellas de firma release/Play.
 3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
    activar enforcement únicamente para un cliente.
-4. Preparar la siguiente fase de usuarios/nombres de usuario sin implementar todavía
-   perfiles públicos, amigos, grupos permanentes, chat ni actividad social.
+4. Siguiente fase social (P3, PENDIENTE DE APROBACIÓN): amistades y espacios
+   compartidos sobre la identidad pública de P2. No empezar sin revisión del usuario.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 
