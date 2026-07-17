@@ -195,6 +195,16 @@ class _SummaryTab extends ConsumerWidget {
     final names = {for (final p in participants) p.id: p.name};
     final progress = detail.summary.settlementProgress;
 
+    // Confirmar la recepción es del RECEPTOR (P2.1): en la app, el owner
+    // solo puede cuando el receptor es su propio participante o un nombre
+    // sin reclamar (sin dispositivo, el owner actúa de representante).
+    // Espejo exacto de la regla isReceiver() de Firestore.
+    bool canConfirmFor(String toPid) {
+      final receiver =
+          participants.where((p) => p.id == toPid).firstOrNull;
+      return receiver != null && receiver.claimedByDevice.isEmpty;
+    }
+
     return ListView(
       padding: const EdgeInsets.all(TokenSpacing.lg),
       children: [
@@ -246,6 +256,7 @@ class _SummaryTab extends ConsumerWidget {
               fromName: names[settlement.from] ?? settlement.from,
               toName: names[settlement.to] ?? settlement.to,
               open: detail.summary.status == SessionStatus.open,
+              canConfirm: canConfirmFor(settlement.to),
             ),
         if (settlements.any((s) => s.state == SettlementState.confirmed)) ...[
           const SizedBox(height: TokenSpacing.md),
@@ -284,7 +295,9 @@ class _SummaryTab extends ConsumerWidget {
                             fontFeatures: [FontFeature.tabularFigures()],
                           ),
                         ),
-                        if (detail.summary.status == SessionStatus.open)
+                        // Deshacer una confirmación también es del receptor.
+                        if (detail.summary.status == SessionStatus.open &&
+                            canConfirmFor(settlement.to))
                           IconButton(
                             tooltip: l10n.actionBackToPending,
                             onPressed: () => ref
@@ -489,6 +502,7 @@ class _SettlementCard extends ConsumerWidget {
     required this.fromName,
     required this.toName,
     required this.open,
+    required this.canConfirm,
   });
 
   final String sessionId;
@@ -496,6 +510,10 @@ class _SettlementCard extends ConsumerWidget {
   final String fromName;
   final String toName;
   final bool open;
+
+  /// El owner solo confirma si el receptor es suyo o está sin reclamar
+  /// (P2.1); si no, confirma el receptor desde la web.
+  final bool canConfirm;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -546,15 +564,23 @@ class _SettlementCard extends ConsumerWidget {
                       ),
                       icon: const Icon(Icons.undo, size: 18),
                     ),
-                  FilledButton.tonal(
-                    onPressed: () => repo.updateSettlementState(
-                      sessionId,
-                      settlement.id,
-                      SettlementState.confirmed,
+                  if (canConfirm)
+                    FilledButton.tonal(
+                      onPressed: () => repo.updateSettlementState(
+                        sessionId,
+                        settlement.id,
+                        SettlementState.confirmed,
+                      ),
+                      child: Text(l10n.actionConfirm),
+                    )
+                  else
+                    // El receptor reclamó su nombre: confirma él desde la
+                    // web. El creador no puede dar el dinero por recibido.
+                    Text(
+                      l10n.settlementAwaitsReceiver(toName),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    child: Text(l10n.actionConfirm),
-                  ),
-                ] else if (open) ...[
+                ] else if (open && canConfirm) ...[
                   const SizedBox(width: TokenSpacing.sm),
                   IconButton(
                     tooltip: l10n.actionBackToPending,

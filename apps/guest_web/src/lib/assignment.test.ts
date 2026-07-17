@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isPickedBy,
+  myUnits,
   needsShareConfirmation,
   otherConsumers,
+  setUnits,
   toggleSelf,
+  unitsForQuantity,
 } from './assignment';
 
 describe('toggleSelf (contrato con las reglas de Firestore)', () => {
@@ -96,5 +99,55 @@ describe('flujo de compartir (nunca duplica líneas)', () => {
     expect(after.lastEditorPid).toBe('p2'); // exigido por las reglas
     // Sigue siendo UNA línea: mismo objeto de asignación, dos consumidores.
     expect(Object.keys(after.participants)).toHaveLength(2);
+  });
+});
+
+describe('unidades (P2.1)', () => {
+  it('unitsForQuantity: enteros ≥2 son unidades; pesos y unidad simple, 1', () => {
+    expect(unitsForQuantity(1000)).toBe(1);
+    expect(unitsForQuantity(2000)).toBe(2);
+    expect(unitsForQuantity(5000)).toBe(5);
+    expect(unitsForQuantity(466)).toBe(1); // 0,466 kg
+    expect(unitsForQuantity(2500)).toBe(1); // 2,5 no es entero
+  });
+
+  it('setUnits fija SOLO mi entrada con el nº de unidades', () => {
+    const result = setUnits(
+      { type: 'one', participants: { p3: 1 } },
+      'p2',
+      2,
+    );
+    expect(result).toEqual({
+      type: 'shared',
+      participants: { p3: 1, p2: 2 },
+      lastEditorPid: 'p2',
+    });
+  });
+
+  it('setUnits a 0 me quita sin tocar a los demás', () => {
+    const result = setUnits(
+      { type: 'shared', participants: { p2: 2, p3: 1 } },
+      'p2',
+      0,
+    );
+    expect(result).toEqual({
+      type: 'one',
+      participants: { p3: 1 },
+      lastEditorPid: 'p2',
+    });
+  });
+
+  it('toggleSelf es setUnits(1)/setUnits(0): contrato intacto', () => {
+    expect(toggleSelf(undefined, 'p2')).toEqual(
+      setUnits(undefined, 'p2', 1),
+    );
+    expect(
+      toggleSelf({ type: 'one', participants: { p2: 2 } }, 'p2'),
+    ).toEqual(setUnits({ type: 'one', participants: { p2: 2 } }, 'p2', 0));
+  });
+
+  it('myUnits lee mi peso (0 si no estoy)', () => {
+    expect(myUnits({ type: 'one', participants: { p2: 2 } }, 'p2')).toBe(2);
+    expect(myUnits(undefined, 'p2')).toBe(0);
   });
 });

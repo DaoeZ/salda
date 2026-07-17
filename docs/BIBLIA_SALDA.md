@@ -1,8 +1,10 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.3 · **Fecha:** 2026-07-17 · **Changelog:** v1.3 — P2 identidad
-pública: perfil `profiles/{uid}`, unicidad de username por claims atómicos y
-búsqueda por prefijo (ADR-024). v1.2 — P0.3 separa histórico
+**Versión:** 1.4 · **Fecha:** 2026-07-17 · **Changelog:** v1.4 — P2.1 reparto
+por unidades (peso = unidades reclamadas, residual al pagador), selección del
+creador y confirmación de pagos exclusiva del receptor (ADR-025). v1.3 — P2
+identidad pública: perfil `profiles/{uid}`, unicidad de username por claims
+atómicos y búsqueda por prefijo (ADR-024). v1.2 — P0.3 separa histórico
 económico de estado actual y define el progreso sobre obligaciones de liquidación
 (ADR-022). v1.1 — blindado el modo "cada uno paga lo suyo": las líneas no reclamadas
 recaen en el pagador (ADR-021), fin de la "media previa". v1.0 primera edición.
@@ -1089,6 +1091,42 @@ trazabilidad balance→espacio→ticket→línea no depende del username, que es
 editable). Renombrar el username no toca ningún dato económico.
 **Revisión:** si la búsqueda por prefijo se queda corta (typos, contains),
 evaluar un índice invertido propio antes que un servicio externo.
+
+### ADR-025: Unidades reclamables, selección del creador y confirmación del receptor
+**Estado:** Aceptada · **Fecha:** 2026-07-17 (P2.1)
+**Contexto:** (1) seleccionar una línea "2 × flauta" cobraba las DOS unidades
+al seleccionador; (2) el creador no podía declarar su propio consumo (todo lo
+suyo era residual implícito); (3) confirmar la recepción de un pago era del
+owner por ser creador, aunque el dinero lo recibiera otra persona.
+**Decisión:** [HECHO]
+- El peso de `assignment.participants` pasa a significar UNIDADES reclamadas.
+  `SplitLine.units` deriva de `quantityMilli` (solo múltiplos enteros ≥ 2; los
+  artículos a peso siguen siendo 1). Si Σ pesos < unidades, el motor añade el
+  resto al PAGADOR (extensión natural de ADR-021); si Σ pesos ≥ unidades, el
+  reparto es proporcional puro — compartir sigue funcionando EXACTAMENTE igual
+  (pizza entre 3 = tercios). Sin `payerId` el motor conserva el comportamiento
+  histórico (vector dorado "legacy"). 8 vectores dorados nuevos ejecutados por
+  Dart y TS.
+- El creador selecciona como cualquier invitado: líneas vivas en el detalle
+  del ticket (toggle / stepper de unidades), misma forma de escritura que la
+  web (`assignment` con `lastEditorPid`). El residual sigue calculándose tras
+  las selecciones explícitas y recae en el pagador: explícito y residual no
+  pueden duplicarse porque son pesos de la MISMA línea.
+- Confirmar (o des-confirmar) una liquidación es EXCLUSIVO del receptor: regla
+  `isReceiver` = dispositivo que reclamó el participante `to`; si nadie lo
+  reclamó, el owner actúa como representante (un nombre sin dispositivo no
+  tiene uid: sin ese proxy nadie podría confirmar jamás). Un nombre reclamado
+  EXCLUYE al owner. El owner conserva la gestión organizativa pending↔marked
+  y el alta/borrado por import de backup (ADR-017). La web muestra "He
+  recibido el dinero" al receptor de una liquidación `marked`.
+**Consecuencias:** los tickets antiguos no migran nada (mismo esquema; una
+línea multi-unidad seleccionada entera ahora reparte el resto al pagador, que
+es la semántica correcta que faltaba); la web de invitados sigue sin calcular
+dinero; el caso Alba/Pedro (pago confirmado congelado + reasignación
+posterior) queda blindado con test de regresión en recompute.
+**Revisión:** si algún flujo real necesita compartir UNA unidad concreta de
+una línea multi-unidad entre varias personas con el resto individual, habrá
+que partir la línea (hoy se aproxima con pesos).
 
 ---
 

@@ -25,6 +25,7 @@ import {
 import type { Cents } from './domain/money.js';
 import {
   splitTicket,
+  unitsFromQuantityMilli,
   type SplitLine,
   type SplitMode,
 } from './domain/splitEngine.js';
@@ -41,6 +42,8 @@ export interface ParticipantDoc {
 export interface LineDoc {
   id: string;
   totalPrice: Cents;
+  /** Cantidad ×1000; define las unidades reclamables de la línea (P2.1). */
+  quantityMilli?: number;
   assignment?: {
     type?: string;
     participants?: Record<string, number>;
@@ -166,6 +169,9 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         // así que aquí no debe quedar ninguna sin asignar; si quedara, es un
         // bug y preferimos que salte a que se promedie en silencio.
         unassignedPolicy: 'error',
+        // Residual por unidades (P2.1): lo reclamado parcialmente también
+        // recae en el pagador, unidad a unidad.
+        payerId: paidBy,
       });
       contributions.push({
         paidBy,
@@ -258,11 +264,13 @@ function sanitizeLine(
   payerId: string,
 ): SplitLine {
   const rawType = line.assignment?.type ?? 'unassigned';
+  const units = unitsFromQuantityMilli(line.quantityMilli ?? 1000);
 
   if (rawType === 'all') {
     return {
       id: line.id,
       totalPrice: line.totalPrice,
+      units,
       assignment: { type: 'all', weights: {} },
     };
   }
@@ -285,12 +293,18 @@ function sanitizeLine(
     return {
       id: line.id,
       totalPrice: line.totalPrice,
+      units,
       assignment: { type: 'one', weights: { [payerId]: 1 } },
     };
   }
 
   const type = consumers.length === 1 && rawType === 'one' ? 'one' : 'shared';
-  return { id: line.id, totalPrice: line.totalPrice, assignment: { type, weights } };
+  return {
+    id: line.id,
+    totalPrice: line.totalPrice,
+    units,
+    assignment: { type, weights },
+  };
 }
 
 // ── Lectura de Firestore y escritura de agregados ─────────────────────────
@@ -324,6 +338,7 @@ export async function recomputeSession(sid: string): Promise<void> {
             lines: linesSnap.docs.map((l) => ({
               id: l.id,
               totalPrice: (l.data().totalPrice as number) ?? 0,
+              quantityMilli: l.data().quantityMilli as number | undefined,
               assignment: l.data().assignment,
             })),
           };

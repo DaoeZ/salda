@@ -28,3 +28,8 @@ final accountTicketsProvider = StreamProvider.autoDispose
     .family<List<SessionTicket>, ({String sid, String aid})>((ref, key) => ref
         .watch(sessionRepositoryProvider)
         .watchTickets(key.sid, key.aid));
+
+/// Líneas vivas de un ticket (P2.1): el creador ve elegir y elige él mismo.
+final ticketLinesProvider = StreamProvider.autoDispose
+    .family<List<TicketLine>, String>((ref, ticketPath) =>
+        ref.watch(sessionRepositoryProvider).watchTicketLines(ticketPath));

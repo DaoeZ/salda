@@ -93,6 +93,11 @@ async function seed() {
       name: 'Cena', totalPrice: 1000,
       assignment: { type: 'unassigned', participants: {} },
     });
+    // Línea con 2 unidades (P2.1): el peso reclama unidades.
+    await setDoc(doc(f, `${S}/accounts/a1/tickets/t1/lines/l3`), {
+      name: 'Flautas', totalPrice: 400, quantityMilli: 2000,
+      assignment: { type: 'unassigned', participants: {} },
+    });
     // Ticket con modo forzado a "a medias": el invitado NO puede autoasignarse.
     await setDoc(doc(f, `${S}/accounts/a1/tickets/t2`), {
       kind: 'manual', grandTotal: 500, paidByParticipantId: 'p1',
@@ -107,6 +112,14 @@ async function seed() {
     });
     await setDoc(doc(f, `${S}/settlements/st2`), {
       from: 'p3', to: 'p1', amount: 300, state: 'pending',
+    });
+    // P2.1: liquidación cuyo receptor es un invitado RECLAMADO (p2=GUEST).
+    await setDoc(doc(f, `${S}/settlements/st3`), {
+      from: 'p3', to: 'p2', amount: 500, state: 'marked',
+    });
+    // P2.1: receptor sin reclamar (p4): el owner actúa de representante.
+    await setDoc(doc(f, `${S}/settlements/st4`), {
+      from: 'p2', to: 'p4', amount: 200, state: 'marked',
     });
     // Sesión cerrada para probar el bloqueo total.
     await setDoc(doc(f, 'sessions/s2'), {
@@ -503,6 +516,29 @@ describe('lines: autoasignación', () => {
     assertSucceeds(updateDoc(doc(db(OWNER), line), {
       assignment: { type: 'shared', participants: { p1: 2, p2: 1 } },
     })));
+
+  const unitsLine = `${S}/accounts/a1/tickets/t1/lines/l3`;
+
+  it('P2.1: en una línea de 2 unidades el invitado reclama 1 o 2', async () => {
+    await assertSucceeds(updateDoc(doc(db(GUEST), unitsLine), {
+      assignment: { type: 'one', participants: { p2: 1 }, lastEditorPid: 'p2' },
+    }));
+    await assertSucceeds(updateDoc(doc(db(GUEST), unitsLine), {
+      assignment: { type: 'one', participants: { p2: 2 }, lastEditorPid: 'p2' },
+    }));
+  });
+
+  it('P2.1: no puede reclamar más unidades de las que tiene la línea', () =>
+    assertFails(updateDoc(doc(db(GUEST), unitsLine), {
+      assignment: { type: 'one', participants: { p2: 3 }, lastEditorPid: 'p2' },
+    })));
+
+  it('P2.1: el peso debe ser entero', () =>
+    assertFails(updateDoc(doc(db(GUEST), unitsLine), {
+      assignment: {
+        type: 'one', participants: { p2: 1.5 }, lastEditorPid: 'p2',
+      },
+    })));
 });
 
 // ─── Liquidaciones ───────────────────────────────────────────────────────
@@ -533,11 +569,47 @@ describe('settlements', () => {
     assertFails(updateDoc(doc(db(GUEST), `${S}/settlements/st1`),
       { state: 'confirmed' })));
 
-  it('el owner confirma y puede forzar cualquier estado', async () => {
+  it('el owner confirma la SUYA (él es el receptor) y puede deshacerla',
+      async () => {
     await assertSucceeds(updateDoc(doc(db(OWNER), `${S}/settlements/st1`),
       { state: 'confirmed' }));
     await assertSucceeds(updateDoc(doc(db(OWNER), `${S}/settlements/st1`),
       { state: 'pending' }));
+  });
+
+  it('P2.1: el receptor reclamado confirma la recepción y puede deshacerla',
+      async () => {
+    // st3: p3 → p2; p2 está reclamado por GUEST. Solo GUEST confirma.
+    await assertSucceeds(updateDoc(doc(db(GUEST), `${S}/settlements/st3`),
+      { state: 'confirmed' }));
+    await assertSucceeds(updateDoc(doc(db(GUEST), `${S}/settlements/st3`),
+      { state: 'pending' }));
+  });
+
+  it('P2.1: el CREADOR no confirma cuando el receptor está reclamado', () =>
+    assertFails(updateDoc(doc(db(OWNER), `${S}/settlements/st3`),
+      { state: 'confirmed' })));
+
+  it('P2.1: el deudor tampoco confirma la que él debe', () =>
+    // st3: OTHER reclama p3 (el deudor); no es el receptor.
+    assertFails(updateDoc(doc(db(OTHER), `${S}/settlements/st3`),
+      { state: 'confirmed' })));
+
+  it('P2.1: receptor sin reclamar → el owner actúa como representante',
+      async () => {
+    // st4: p2 → p4; p4 no está reclamado por ningún dispositivo.
+    await assertSucceeds(updateDoc(doc(db(OWNER), `${S}/settlements/st4`),
+      { state: 'confirmed' }));
+    // El deudor (GUEST reclama p2) sigue sin poder confirmar.
+    await assertFails(updateDoc(doc(db(GUEST), `${S}/settlements/st4`),
+      { state: 'confirmed' }));
+  });
+
+  it('P2.1: el owner mantiene la gestión pending ↔ marked', async () => {
+    await assertSucceeds(updateDoc(doc(db(OWNER), `${S}/settlements/st3`),
+      { state: 'pending' }));
+    await assertSucceeds(updateDoc(doc(db(OWNER), `${S}/settlements/st3`),
+      { state: 'marked' }));
   });
 
   it('nadie cambia importe/from/to', async () => {

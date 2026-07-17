@@ -278,6 +278,12 @@ class FirestoreSessionRepository implements SessionRepository {
                         (d.data()['paidByParticipantId'] as String?) ?? '',
                     kind: (d.data()['kind'] as String?) ?? 'scanned',
                     imagePath: d.data()['imagePath'] as String?,
+                    splitModeOverride: switch (
+                        d.data()['splitModeOverride'] as String?) {
+                      'equal' => SplitMode.equal,
+                      'byItem' => SplitMode.byItem,
+                      _ => null,
+                    },
                   ),
               ]);
 
@@ -295,6 +301,59 @@ class FirestoreSessionRepository implements SessionRepository {
           totalPrice: Money((line.data()['totalPrice'] as int?) ?? 0),
         ),
     ];
+  }
+
+  @override
+  Stream<List<TicketLine>> watchTicketLines(String ticketPath) => firestore
+      .collection('$ticketPath/lines')
+      .orderBy('order')
+      .snapshots()
+      .map((snap) => [
+            for (final line in snap.docs)
+              TicketLine(
+                id: line.id,
+                path: line.reference.path,
+                name: (line.data()['name'] as String?) ?? '',
+                quantityMilli:
+                    (line.data()['quantityMilli'] as int?) ?? 1000,
+                totalPrice: Money((line.data()['totalPrice'] as int?) ?? 0),
+                assignmentType: ((line.data()['assignment'] as Map?)?['type']
+                        as String?) ??
+                    'unassigned',
+                weights: {
+                  for (final entry in (((line.data()['assignment']
+                              as Map?)?['participants'] as Map?) ??
+                          const {})
+                      .entries)
+                    if (entry.value is int && (entry.value as int) > 0)
+                      entry.key as String: entry.value as int,
+                },
+              ),
+          ]);
+
+  @override
+  Future<void> setLineAssignment(
+    String linePath,
+    Map<String, int> weights, {
+    required String editorPid,
+  }) {
+    // [weights] es el mapa COMPLETO deseado: 0 = quitar a esa persona.
+    // Cada entrada se escribe con su ruta punteada (peso o delete): misma
+    // semántica en producción y en fake_cloud_firestore, que fusionaría un
+    // mapa pasado como valor y dejaría entradas fantasma.
+    final positive = weights.values.where((w) => w > 0).length;
+    final updates = <String, Object?>{
+      'assignment.type': positive == 0
+          ? 'unassigned'
+          : positive == 1
+              ? 'one'
+              : 'shared',
+      'assignment.lastEditorPid': editorPid,
+      for (final entry in weights.entries)
+        'assignment.participants.${entry.key}':
+            entry.value > 0 ? entry.value : FieldValue.delete(),
+    };
+    return firestore.doc(linePath).update(updates);
   }
 
   @override

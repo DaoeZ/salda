@@ -33,18 +33,31 @@ class LineAssignment {
   final Map<String, int> weights;
 }
 
-/// Línea de ticket vista por el motor: solo importa el importe total y la
-/// asignación (nombre, cantidad y precio unitario son presentación).
+/// Línea de ticket vista por el motor: importe total, asignación y unidades.
 class SplitLine {
   const SplitLine({
     required this.id,
     required this.totalPrice,
     required this.assignment,
+    this.units = 1,
   });
 
   final String id;
   final Money totalPrice;
   final LineAssignment assignment;
+
+  /// Unidades de la línea (P2.1): "2 × flauta" son 2 unidades y un peso de 1
+  /// reclama UNA (la mitad del importe). Deriva de quantityMilli solo cuando
+  /// es un múltiplo entero (los pesos —0,466 kg— siguen siendo 1 unidad):
+  /// [unitsFromQuantityMilli]. Con 1 (por defecto) el comportamiento es el
+  /// histórico: cualquier selección reparte la línea completa.
+  final int units;
+
+  /// Unidades "reclamables" a partir de una cantidad ×1000.
+  static int unitsFromQuantityMilli(int quantityMilli) =>
+      quantityMilli >= 2000 && quantityMilli % 1000 == 0
+          ? quantityMilli ~/ 1000
+          : 1;
 }
 
 /// Entrada del motor para un ticket.
@@ -68,11 +81,19 @@ abstract final class SplitEngine {
   /// [participantIds] define el universo de participantes activos y el orden
   /// estable de desempate en redondeos. Todos aparecen en el resultado
   /// (con 0 si no consumieron).
+  ///
+  /// [payerId] activa la regla de residual por unidades (P2.1): si en una
+  /// línea la suma de pesos reclamados no llega a sus [SplitLine.units], las
+  /// unidades sin reclamar recaen en el pagador (extensión natural de
+  /// ADR-021: lo que nadie ha cogido es de quien pagó). Cuando la suma
+  /// alcanza o supera las unidades, el reparto es proporcional puro — el
+  /// comportamiento de compartir de siempre, intacto.
   static Map<String, Money> splitTicket({
     required List<String> participantIds,
     required SplitMode mode,
     required SplitTicketInput ticket,
     UnassignedLinePolicy unassignedPolicy = UnassignedLinePolicy.error,
+    String? payerId,
   }) {
     if (participantIds.isEmpty) {
       throw const DomainException(
@@ -84,7 +105,7 @@ abstract final class SplitEngine {
     final weights = switch (mode) {
       SplitMode.equal => List<int>.filled(participantIds.length, 1),
       SplitMode.byItem =>
-        _lineWeights(participantIds, ticket.lines, unassignedPolicy),
+        _lineWeights(participantIds, ticket.lines, unassignedPolicy, payerId),
     };
 
     // byItem sin consumo en líneas (ticket manual sin desglose): a medias.
@@ -108,6 +129,7 @@ abstract final class SplitEngine {
     List<String> participantIds,
     List<SplitLine> lines,
     UnassignedLinePolicy unassignedPolicy,
+    String? payerId,
   ) {
     final index = {
       for (var i = 0; i < participantIds.length; i++) participantIds[i]: i,
@@ -133,6 +155,18 @@ abstract final class SplitEngine {
           _explicitWeights(line, index, participantIds.length),
         AssignmentType.unassigned => throw StateError('resuelto arriba'),
       };
+
+      // Residual por unidades: reclamar 1 de las 2 flautas deja la otra al
+      // pagador. Solo aplica a reclamaciones explícitas: `all` ya cubre el
+      // total por definición.
+      if (payerId != null &&
+          (type == AssignmentType.one || type == AssignmentType.shared)) {
+        final payerIndex = index[payerId];
+        final claimed = lineWeights.fold(0, (a, w) => a + w);
+        if (payerIndex != null && claimed < line.units) {
+          lineWeights[payerIndex] += line.units - claimed;
+        }
+      }
 
       final shares = allocateProportionally(line.totalPrice, lineWeights);
       for (var i = 0; i < shares.length; i++) {

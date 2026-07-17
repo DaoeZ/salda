@@ -142,6 +142,20 @@
         <span>{names.get(settlement.from) ?? '—'}</span>
         <span class="money">{formatCents(settlement.amount)}</span>
       </div>
+      {#if settlement.state === 'marked'}
+        <!-- Confirmar la recepción es del RECEPTOR (P2.1): tú. -->
+        <p class="state waiting">
+          {names.get(settlement.from) ?? '—'} dice que ya te ha pagado.
+        </p>
+        {#if guest.open}
+          <button
+            class="btn-primary paid"
+            onclick={() => guest.confirmReceived(settlement.id)}
+          >
+            He recibido el dinero
+          </button>
+        {/if}
+      {/if}
     {/each}
   </section>
 {/if}

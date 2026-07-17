@@ -81,8 +81,15 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
-**Punto exacto:** M0–M6, estabilización P0, P1 (autenticación) y **P2 (identidad
-pública) completos a nivel de código**. P1 evolucionó la identidad: email verificado,
+**Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
+pública)** y **P2.1 (correcciones de reparto y pagos)** completos a nivel de
+código. P2.1 (ADR-025): el peso de una asignación son UNIDADES reclamadas
+(2×flauta → cada peso 1 = una flauta; lo no reclamado, incluido lo parcial,
+recae en el pagador; compartir sigue igual), el creador selecciona su consumo
+en el detalle del ticket (líneas vivas, toggle/stepper) exactamente como un
+invitado, y confirmar la recepción de un pago es EXCLUSIVO del receptor
+(regla isReceiver: dispositivo que reclamó el `to`; owner solo como proxy de
+nombres sin reclamar; la web muestra "He recibido el dinero"). P1 evolucionó la identidad: email verificado,
 Google, invitado móvil, recuperación y conversión conservando UID. P2 añade el perfil
 público: `profiles/{uid}` + claim de unicidad `usernames/{username}` (minúsculas por
 construcción, batch atómico validado con getAfter, reservados en domain y reglas),

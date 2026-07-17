@@ -71,6 +71,15 @@ service cloud.firestore {
         .data.get('claimedByDevice', '');
     }
 
+    // Receptor real de una liquidación (P2.1): el dispositivo que reclamó
+    // ese participante; para nombres sin reclamar (sin uid), el owner actúa
+    // como representante. Un nombre reclamado EXCLUYE al owner.
+    function isReceiver(sid, pid) {
+      let claimed = claimedBy(sid, pid);
+      return (hasGuestAccess(sid) && claimed == request.auth.uid)
+        || (isOwner(sid) && claimed == '');
+    }
+
     // ── Perfil privado del anfitrión ────────────────────────────────────
     match /users/{uid} {
       allow read, write: if isVerifiedAccount() && request.auth.uid == uid;
@@ -268,9 +277,14 @@ service cloud.firestore {
 
       // ── Liquidaciones ──────────────────────────────────────────────────
       // Normalmente las crea/borra la function (recompute). El OWNER también
-      // puede crearlas/borrarlas (necesario para importar backups, RF-91):
-      // no rompe invariantes — el owner ya puede forzar cualquier estado en
-      // su sesión (RF-52) y recompute regenera las pendientes que no cuadren.
+      // puede crearlas/borrarlas (necesario para importar backups, RF-91).
+      //
+      // Confirmar la recepción del dinero (o deshacer esa confirmación) es
+      // EXCLUSIVO del receptor real (P2.1): el dispositivo que reclamó el
+      // participante `to`. El owner solo confirma si el receptor es SU
+      // participante o si nadie ha reclamado ese nombre (un participante sin
+      // dispositivo no tiene uid: sin este representante, nadie podría
+      // confirmar jamás). Ser el creador del ticket/sesión NO autoriza.
       match /settlements/{stid} {
         allow read: if canRead(sid);
         allow create: if isOwner(sid) && isOpen(sid)
@@ -283,10 +297,16 @@ service cloud.firestore {
         allow update: if isOpen(sid)
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['state', 'stateHistory', 'updatedAt'])
+          && request.resource.data.state in ['pending', 'marked', 'confirmed']
           && (
-            // Owner: cualquier transición entre estados válidos.
-            (isOwner(sid)
-              && request.resource.data.state in ['pending', 'marked', 'confirmed'])
+            // Toca 'confirmed' (confirmar o deshacer): SOLO el receptor.
+            ((resource.data.state == 'confirmed'
+                || request.resource.data.state == 'confirmed')
+              && isReceiver(sid, resource.data.to))
+            // Gestión organizativa pending ↔ marked: el owner.
+            || (isOwner(sid)
+              && resource.data.state in ['pending', 'marked']
+              && request.resource.data.state in ['pending', 'marked'])
             // Invitado deudor: SOLO pending → marked en las suyas.
             || (hasGuestAccess(sid)
               && resource.data.state == 'pending'
@@ -306,6 +326,8 @@ service cloud.firestore {
     }
 
     // Autoasignación de línea por invitado (ver cabecera del archivo).
+    // P2.1: el peso son UNIDADES reclamadas (1..unidades de la línea, según
+    // quantityMilli entero); en líneas de una unidad sigue siendo 1.
     function guestCanEditLine(sid, aid, tid) {
       let session = sessionData(sid);
       let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
@@ -313,6 +335,8 @@ service cloud.firestore {
       let editor = request.resource.data.assignment.get('lastEditorPid', '');
       let oldParts = resource.data.assignment.get('participants', {});
       let newParts = request.resource.data.assignment.get('participants', {});
+      let weight = newParts.get(editor, 1);
+      let quantityMilli = request.resource.data.get('quantityMilli', 1000);
       return hasGuestAccess(sid)
         && session.status == 'open'
         && mode == 'byItem'
@@ -321,8 +345,11 @@ service cloud.firestore {
         // Solo cambió SU entrada del mapa de participantes…
         && editor != ''
         && newParts.diff(oldParts).affectedKeys().hasOnly([editor])
-        // …con peso 1 si se añade (los pesos distintos los pone el owner)…
-        && newParts.get(editor, 1) == 1
+        // …con un peso entero entre 1 y las unidades de la línea…
+        && weight is int
+        && weight >= 1
+        && (weight == 1
+          || (quantityMilli % 1000 == 0 && weight * 1000 <= quantityMilli))
         // …el pid editado está reclamado por este dispositivo…
         && claimedBy(sid, editor) == request.auth.uid
         // …y un invitado no puede convertir la línea en "todos".

@@ -11,12 +11,31 @@ export interface Assignment {
   lastEditorPid?: string;
 }
 
-export function toggleSelf(current: Assignment | undefined, pid: string): Assignment {
+/**
+ * Unidades reclamables de una línea (P2.1). Espejo exacto de
+ * SplitLine.unitsFromQuantityMilli (Dart/TS): solo cantidades enteras >= 2
+ * son unidades; los pesos (0,466 kg) siguen siendo una.
+ */
+export function unitsForQuantity(quantityMilli: number): number {
+  return quantityMilli >= 2000 && quantityMilli % 1000 === 0
+    ? quantityMilli / 1000
+    : 1;
+}
+
+/**
+ * Fija MIS unidades reclamadas (0 = quitarme). Las reglas validan que el
+ * peso sea entero y no supere las unidades de la línea.
+ */
+export function setUnits(
+  current: Assignment | undefined,
+  pid: string,
+  units: number,
+): Assignment {
   const participants = { ...(current?.participants ?? {}) };
-  if (participants[pid]) {
+  if (units <= 0) {
     delete participants[pid];
   } else {
-    participants[pid] = 1;
+    participants[pid] = units;
   }
   const count = Object.keys(participants).length;
   return {
@@ -24,6 +43,15 @@ export function toggleSelf(current: Assignment | undefined, pid: string): Assign
     participants,
     lastEditorPid: pid,
   };
+}
+
+export function toggleSelf(current: Assignment | undefined, pid: string): Assignment {
+  return setUnits(current, pid, current?.participants?.[pid] ? 0 : 1);
+}
+
+/** Mis unidades reclamadas en la línea (0 si ninguna). */
+export function myUnits(current: Assignment | undefined, pid: string): number {
+  return current?.participants?.[pid] ?? 0;
 }
 
 export function isPickedBy(current: Assignment | undefined, pid: string): boolean {

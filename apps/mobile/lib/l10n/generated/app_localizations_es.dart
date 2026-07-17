@@ -694,6 +694,34 @@ class AppLocalizationsEs extends AppLocalizations {
   String get manualConceptHint => 'Taxi, entradas, gasolina…';
 
   @override
+  String get ticketPickHint =>
+      'Toca lo que consumiste tú; en líneas de varias unidades usa + y −. Lo que nadie reclame corre a cargo de quien pagó.';
+
+  @override
+  String get lineForAll => 'Para todos';
+
+  @override
+  String lineSharedWith(String names) {
+    return 'Compartido con $names';
+  }
+
+  @override
+  String lineTakenBy(String names) {
+    return 'Lo tiene $names';
+  }
+
+  @override
+  String get lineAddUnit => 'Añadir una unidad';
+
+  @override
+  String get lineRemoveUnit => 'Quitar una unidad';
+
+  @override
+  String settlementAwaitsReceiver(String name) {
+    return 'Confirmará $name al recibir el dinero';
+  }
+
+  @override
   String get profileTitle => 'Perfil público';
 
   @override

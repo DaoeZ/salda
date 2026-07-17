@@ -42,6 +42,7 @@ for (const c of loadCases('split_engine.json')) {
         participantIds: c.participants,
         mode: c.mode as SplitMode,
         unassignedPolicy: c.unassignedPolicy === 'all' ? 'splitAmongAll' : 'error',
+        payerId: c.payerId,
         ticket: c.ticket as SplitTicketInput,
       });
 

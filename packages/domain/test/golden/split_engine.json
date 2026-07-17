@@ -255,6 +255,110 @@
         ]
       },
       "expected": { "a": 501, "b": 500 }
+    },
+    {
+      "name": "unidades (P2.1): reclamar 1 de 2 deja la otra al pagador",
+      "participants": ["creador", "alba"],
+      "mode": "byItem",
+      "payerId": "creador",
+      "ticket": {
+        "grandTotal": 400,
+        "lines": [
+          { "id": "l1", "totalPrice": 400, "units": 2, "assignment": { "type": "one", "weights": { "alba": 1 } } }
+        ]
+      },
+      "expected": { "creador": 200, "alba": 200 }
+    },
+    {
+      "name": "unidades (P2.1): dos personas cubren las dos unidades; el pagador, cero",
+      "participants": ["creador", "alba", "pedro"],
+      "mode": "byItem",
+      "payerId": "creador",
+      "ticket": {
+        "grandTotal": 400,
+        "lines": [
+          { "id": "l1", "totalPrice": 400, "units": 2, "assignment": { "type": "shared", "weights": { "alba": 1, "pedro": 1 } } }
+        ]
+      },
+      "expected": { "creador": 0, "alba": 200, "pedro": 200 }
+    },
+    {
+      "name": "unidades (P2.1): compartir una unidad entre tres sigue siendo por pesos",
+      "participants": ["edgar", "alba", "pedro"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 1200,
+        "lines": [
+          { "id": "l1", "totalPrice": 1200, "units": 1, "assignment": { "type": "shared", "weights": { "edgar": 1, "alba": 1, "pedro": 1 } } }
+        ]
+      },
+      "expected": { "edgar": 400, "alba": 400, "pedro": 400 }
+    },
+    {
+      "name": "unidades (P2.1): seleccion explicita del creador + residual sin duplicar",
+      "participants": ["creador", "alba"],
+      "mode": "byItem",
+      "payerId": "creador",
+      "ticket": {
+        "grandTotal": 600,
+        "lines": [
+          { "id": "l1", "totalPrice": 600, "units": 3, "assignment": { "type": "shared", "weights": { "creador": 1, "alba": 1 } } }
+        ]
+      },
+      "expected": { "creador": 400, "alba": 200 }
+    },
+    {
+      "name": "unidades (P2.1): redondeo del residual con resto mayor",
+      "participants": ["creador", "alba"],
+      "mode": "byItem",
+      "payerId": "creador",
+      "ticket": {
+        "grandTotal": 1000,
+        "lines": [
+          { "id": "l1", "totalPrice": 1000, "units": 3, "assignment": { "type": "one", "weights": { "alba": 1 } } }
+        ]
+      },
+      "expected": { "creador": 667, "alba": 333 }
+    },
+    {
+      "name": "unidades (P2.1): sin payerId la seleccion reparte la linea completa (legacy)",
+      "participants": ["creador", "alba"],
+      "mode": "byItem",
+      "ticket": {
+        "grandTotal": 400,
+        "lines": [
+          { "id": "l1", "totalPrice": 400, "units": 2, "assignment": { "type": "one", "weights": { "alba": 1 } } }
+        ]
+      },
+      "expected": { "creador": 0, "alba": 400 }
+    },
+    {
+      "name": "unidades (P2.1): sobre-reclamado (suma > unidades) es proporcional puro",
+      "participants": ["creador", "alba", "pedro"],
+      "mode": "byItem",
+      "payerId": "creador",
+      "ticket": {
+        "grandTotal": 400,
+        "lines": [
+          { "id": "l1", "totalPrice": 400, "units": 2, "assignment": { "type": "shared", "weights": { "creador": 1, "alba": 1, "pedro": 1 } } }
+        ]
+      },
+      "expected": { "creador": 134, "alba": 133, "pedro": 133 }
+    },
+    {
+      "name": "unidades (P2.1): la propina se prorratea tambien sobre el residual",
+      "participants": ["creador", "alba"],
+      "mode": "byItem",
+      "payerId": "creador",
+      "ticket": {
+        "grandTotal": 660,
+        "lines": [
+          { "id": "l1", "totalPrice": 400, "units": 2, "assignment": { "type": "one", "weights": { "alba": 1 } } },
+          { "id": "l2", "totalPrice": 200, "assignment": { "type": "one", "weights": { "creador": 1 } } }
+        ]
+      },
+      "expected": { "creador": 440, "alba": 220 }
     }
   ]
 }

@@ -22,7 +22,12 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 
-import { isPickedBy, toggleSelf, type Assignment } from './assignment';
+import {
+  isPickedBy,
+  setUnits,
+  toggleSelf,
+  type Assignment,
+} from './assignment';
 import { db, ensureSignedIn } from './firebase';
 import {
   forgetParticipant,
@@ -251,6 +256,33 @@ class GuestSession {
     await updateDoc(doc(db, line.path), {
       assignment: toggleSelf(line.assignment, this.myPid),
     });
+  }
+
+  /** Fija MIS unidades reclamadas en una línea multi-unidad (P2.1). */
+  async setLineUnits(line: LineInfo, units: number): Promise<void> {
+    if (!this.myPid) return;
+    await updateDoc(doc(db, line.path), {
+      assignment: setUnits(line.assignment, this.myPid, units),
+    });
+  }
+
+  /**
+   * "He recibido el dinero": marked → confirmed SOLO en las liquidaciones
+   * donde este dispositivo reclama al RECEPTOR (la regla lo garantiza).
+   */
+  async confirmReceived(settlementId: string): Promise<void> {
+    await updateDoc(
+      doc(db, 'sessions', this.sid, 'settlements', settlementId),
+      {
+        state: 'confirmed',
+        stateHistory: arrayUnion({
+          state: 'confirmed',
+          at: Timestamp.now(),
+          by: 'receiver',
+        }),
+        updatedAt: serverTimestamp(),
+      },
+    );
   }
 
   isMine(line: LineInfo): boolean {

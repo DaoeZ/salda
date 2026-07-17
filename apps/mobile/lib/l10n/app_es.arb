@@ -246,6 +246,17 @@
   "manualAmount": "Importe",
   "manualConceptHint": "Taxi, entradas, gasolina…",
 
+  "ticketPickHint": "Toca lo que consumiste tú; en líneas de varias unidades usa + y −. Lo que nadie reclame corre a cargo de quien pagó.",
+  "lineForAll": "Para todos",
+  "lineSharedWith": "Compartido con {names}",
+  "@lineSharedWith": { "placeholders": { "names": { "type": "String" } } },
+  "lineTakenBy": "Lo tiene {names}",
+  "@lineTakenBy": { "placeholders": { "names": { "type": "String" } } },
+  "lineAddUnit": "Añadir una unidad",
+  "lineRemoveUnit": "Quitar una unidad",
+  "settlementAwaitsReceiver": "Confirmará {name} al recibir el dinero",
+  "@settlementAwaitsReceiver": { "placeholders": { "name": { "type": "String" } } },
+
   "profileTitle": "Perfil público",
   "profileCreateTitle": "Crea tu perfil",
   "profileCreateBody": "Tu nombre de usuario es único y te identifica: así podrán encontrarte tus amigos.",

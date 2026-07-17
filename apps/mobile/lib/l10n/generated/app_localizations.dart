@@ -1360,6 +1360,48 @@ abstract class AppLocalizations {
   /// **'Taxi, entradas, gasolina…'**
   String get manualConceptHint;
 
+  /// No description provided for @ticketPickHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Toca lo que consumiste tú; en líneas de varias unidades usa + y −. Lo que nadie reclame corre a cargo de quien pagó.'**
+  String get ticketPickHint;
+
+  /// No description provided for @lineForAll.
+  ///
+  /// In es, this message translates to:
+  /// **'Para todos'**
+  String get lineForAll;
+
+  /// No description provided for @lineSharedWith.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartido con {names}'**
+  String lineSharedWith(String names);
+
+  /// No description provided for @lineTakenBy.
+  ///
+  /// In es, this message translates to:
+  /// **'Lo tiene {names}'**
+  String lineTakenBy(String names);
+
+  /// No description provided for @lineAddUnit.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir una unidad'**
+  String get lineAddUnit;
+
+  /// No description provided for @lineRemoveUnit.
+  ///
+  /// In es, this message translates to:
+  /// **'Quitar una unidad'**
+  String get lineRemoveUnit;
+
+  /// No description provided for @settlementAwaitsReceiver.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmará {name} al recibir el dinero'**
+  String settlementAwaitsReceiver(String name);
+
   /// No description provided for @profileTitle.
   ///
   /// In es, this message translates to:

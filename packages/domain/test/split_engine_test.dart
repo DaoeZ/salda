@@ -118,5 +118,55 @@ void main() {
         expect(sum, total.cents, reason: 'caso $t');
       }
     });
+
+    test('unitsFromQuantityMilli: enteros ≥2 son unidades; el resto, 1', () {
+      expect(SplitLine.unitsFromQuantityMilli(1000), 1);
+      expect(SplitLine.unitsFromQuantityMilli(2000), 2);
+      expect(SplitLine.unitsFromQuantityMilli(5000), 5);
+      expect(SplitLine.unitsFromQuantityMilli(466), 1); // a peso
+      expect(SplitLine.unitsFromQuantityMilli(2500), 1); // 2,5 no es entero
+    });
+
+    test(
+        'propiedad P2.1: con unidades y pagador, Σ consumo == grandTotal '
+        '(500 tickets sembrados)', () {
+      final rng = Random(11);
+      for (var t = 0; t < 500; t++) {
+        final n = 1 + rng.nextInt(6);
+        final pids = List<String>.generate(n, (i) => 'p$i');
+        final payer = pids[rng.nextInt(n)];
+        final lines = List<SplitLine>.generate(rng.nextInt(8), (i) {
+          final units = 1 + rng.nextInt(5);
+          // Reclamaciones parciales a propósito: pesos que a veces no llegan
+          // a cubrir las unidades (el residual cae al pagador).
+          final claimers = (pids.toList()..shuffle(rng))
+              .take(1 + rng.nextInt(n))
+              .toList();
+          final weights = {
+            for (final p in claimers) p: 1 + rng.nextInt(units),
+          };
+          return SplitLine(
+            id: 'l$i',
+            totalPrice: Money(rng.nextInt(5000)),
+            units: units,
+            assignment: LineAssignment(
+              claimers.length == 1
+                  ? AssignmentType.one
+                  : AssignmentType.shared,
+              weights,
+            ),
+          );
+        });
+        final total = Money(rng.nextInt(100000));
+        final result = SplitEngine.splitTicket(
+          participantIds: pids,
+          mode: SplitMode.byItem,
+          payerId: payer,
+          ticket: SplitTicketInput(grandTotal: total, lines: lines),
+        );
+        final sum = result.values.fold<int>(0, (a, m) => a + m.cents);
+        expect(sum, total.cents, reason: 'caso $t');
+      }
+    });
   });
 }

@@ -497,3 +497,129 @@ test('modo "a medias" (equal) es indiferente a las asignaciones de línea', () =
   assert.equal(r.balances.p2.consumed, 300);
   assert.equal(r.balances.p3.consumed, 300);
 });
+
+// ─── P2.1: unidades reclamables y residual al pagador ─────────────────────
+
+test('P2.1 unidades: reclamar 1 de 2 flautas deja la otra al pagador', () => {
+  // 2 × flauta (2 €/ud, 4 €). Alba (p2) coge UNA: 2 € ella, 2 € el pagador
+  // (p1). Antes se llevaba la línea entera.
+  const r = computeAggregates(
+    byItem(400, [
+      {
+        id: 'flautas',
+        totalPrice: 400,
+        quantityMilli: 2000,
+        assignment: one('p2'),
+      },
+    ]),
+  );
+  assert.equal(r.balances.p2.consumed, 200);
+  assert.equal(r.balances.p1.consumed, 200);
+  assert.equal(r.balances.p3.consumed, 0);
+});
+
+test('P2.1 unidades: Alba y Pedro cubren las 2 unidades; el creador, cero', () => {
+  const r = computeAggregates(
+    byItem(400, [
+      {
+        id: 'flautas',
+        totalPrice: 400,
+        quantityMilli: 2000,
+        assignment: shared('p2', 'p3'),
+      },
+    ]),
+  );
+  assert.equal(r.balances.p2.consumed, 200);
+  assert.equal(r.balances.p3.consumed, 200);
+  assert.equal(r.balances.p1.consumed, 0);
+});
+
+test('P2.1 unidades: compartir una pizza entre 3 sigue intacto (4 € c/u)', () => {
+  const r = computeAggregates(
+    byItem(1200, [
+      {
+        id: 'pizza',
+        totalPrice: 1200,
+        quantityMilli: 1000,
+        assignment: shared('p1', 'p2', 'p3'),
+      },
+    ]),
+  );
+  assert.equal(r.balances.p1.consumed, 400);
+  assert.equal(r.balances.p2.consumed, 400);
+  assert.equal(r.balances.p3.consumed, 400);
+});
+
+test('P2.1 unidades: selección explícita del creador + residual, sin duplicar', () => {
+  // 3 unidades: el creador (pagador) coge 1, Alba 1, queda 1 sin reclamar.
+  // El creador termina con 2 (1 explícita + 1 residual); Alba con 1.
+  const r = computeAggregates(
+    byItem(600, [
+      {
+        id: 'triple',
+        totalPrice: 600,
+        quantityMilli: 3000,
+        assignment: shared('p1', 'p2'),
+      },
+    ]),
+  );
+  assert.equal(r.balances.p1.consumed, 400);
+  assert.equal(r.balances.p2.consumed, 200);
+  assert.equal(
+    r.balances.p1.consumed + r.balances.p2.consumed + r.balances.p3.consumed,
+    600,
+  );
+});
+
+test('P2.1 unidades: los pesos (0,466 kg) siguen siendo UNA unidad', () => {
+  // quantityMilli no múltiplo de 1000 = artículo a peso: seleccionarlo se
+  // lleva la línea completa, como siempre.
+  const r = computeAggregates(
+    byItem(233, [
+      {
+        id: 'platanos',
+        totalPrice: 233,
+        quantityMilli: 466,
+        assignment: one('p2'),
+      },
+    ]),
+  );
+  assert.equal(r.balances.p2.consumed, 233);
+  assert.equal(r.balances.p1.consumed, 0);
+});
+
+test('P2.1 unidades: ticket antiguo sin quantityMilli se comporta igual', () => {
+  const r = computeAggregates(
+    byItem(500, [{ id: 'l', totalPrice: 500, assignment: one('p2') }]),
+  );
+  assert.equal(r.balances.p2.consumed, 500);
+  assert.equal(r.balances.p1.consumed, 0);
+});
+
+test('P2.1 REGRESIÓN Alba/Pedro: tras confirmar el pago de Alba, lo nuevo ' +
+    'de Pedro se lo debe a ALBA, no al creador', () => {
+  // Edgar (p1) pagó 20 €. Alba (p2) consumió 10 y YA pagó (confirmada).
+  // Después Pedro (p3) comparte la mitad de lo de Alba: 5 €.
+  // Alba queda a +5 (pagó 10, consume 5) y Pedro a -5 → Pedro paga a ALBA.
+  const snapshot = byItem(2000, [
+    { id: 'edgar', totalPrice: 1000, assignment: one('p1') },
+    { id: 'compartido', totalPrice: 1000, assignment: shared('p2', 'p3') },
+  ]);
+  snapshot.settlements = [
+    {
+      id: 'pending_p2_p1',
+      from: 'p2',
+      to: 'p1',
+      amount: 1000,
+      state: 'confirmed',
+    },
+  ];
+  const r = computeAggregates(snapshot);
+  assert.equal(r.balances.p2.outstanding, 500); // a Alba le deben 5
+  assert.equal(r.balances.p3.outstanding, -500); // Pedro debe 5
+  assert.equal(r.balances.p1.outstanding, 0); // Edgar ya está en paz
+  assert.deepEqual(r.settlementSync.writes, [
+    { from: 'p3', to: 'p2', amount: 500 },
+  ]);
+  assert.equal(settlementId(r.settlementSync.writes[0]), 'pending_p3_p2');
+});

@@ -24,6 +24,7 @@ void main() {
               unassignedPolicy: c['unassignedPolicy'] == 'all'
                   ? UnassignedLinePolicy.splitAmongAll
                   : UnassignedLinePolicy.error,
+              payerId: c['payerId'] as String?,
               ticket: SplitTicketInput(
                 grandTotal: Money(ticketJson['grandTotal'] as int),
                 lines: [
@@ -32,6 +33,7 @@ void main() {
                     SplitLine(
                       id: l['id'] as String,
                       totalPrice: Money(l['totalPrice'] as int),
+                      units: (l['units'] as int?) ?? 1,
                       assignment: _assignment(
                           l['assignment'] as Map<String, dynamic>),
                     ),

@@ -35,6 +35,18 @@ abstract interface class SessionRepository {
   /// Líneas de un ticket (lectura puntual para el detalle).
   Future<List<LineExport>> fetchTicketLines(String ticketPath);
 
+  /// Líneas VIVAS de un ticket con su asignación (P2.1): el creador ve a
+  /// los invitados elegir en tiempo real y selecciona él mismo.
+  Stream<List<TicketLine>> watchTicketLines(String ticketPath);
+
+  /// Escribe la asignación de una línea (solo el owner pasa por aquí; los
+  /// invitados escriben desde la web con las reglas quirúrgicas).
+  Future<void> setLineAssignment(
+    String linePath,
+    Map<String, int> weights, {
+    required String editorPid,
+  });
+
   /// Registra la ruta de Storage de la foto del ticket.
   Future<void> setTicketImage(String ticketPath, String storagePath);
 

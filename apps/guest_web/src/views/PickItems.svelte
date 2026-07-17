@@ -1,7 +1,9 @@
 <script lang="ts">
   import {
+    myUnits,
     needsShareConfirmation,
     otherConsumers,
+    unitsForQuantity,
   } from '../lib/assignment';
   import { formatCents } from '../lib/money';
   import { guest, type LineInfo } from '../lib/session.svelte';
@@ -10,8 +12,13 @@
 
   void guest.loadTickets();
 
-  // Diálogo "¿compartir?" cuando pulso un producto que ya cogió otra persona.
-  let sharePrompt = $state<{ line: LineInfo; names: string[] } | null>(null);
+  // Diálogo "¿compartir?" cuando pulso un producto que ya cogió otra
+  // persona. `target` son las unidades que quedarán reclamadas al aceptar.
+  let sharePrompt = $state<{
+    line: LineInfo;
+    names: string[];
+    target: number;
+  } | null>(null);
 
   const names = $derived(
     new Map(guest.participants.map((p) => [p.id, p.name])),
@@ -26,22 +33,32 @@
     );
   }
 
-  async function tap(line: LineInfo) {
+  function mine(line: LineInfo): number {
+    return myUnits(line.assignment, guest.myPid ?? '');
+  }
+
+  /** Fija mis unidades; al SUMARME a algo de otros, pregunta antes. */
+  async function requestUnits(line: LineInfo, target: number) {
     if (!guest.open || !guest.myPid) return;
-    // Quitármela nunca pregunta; sumarme a algo que ya cogió otro, sí.
-    if (guest.isMine(line)) {
-      await guest.toggleLine(line);
-    } else if (needsShareConfirmation(line.assignment, guest.myPid)) {
-      sharePrompt = { line, names: others(line) };
-    } else {
-      await guest.toggleLine(line);
+    if (
+      target > 0 &&
+      mine(line) === 0 &&
+      needsShareConfirmation(line.assignment, guest.myPid)
+    ) {
+      sharePrompt = { line, names: others(line), target };
+      return;
     }
+    await guest.setLineUnits(line, target);
+  }
+
+  async function tap(line: LineInfo) {
+    await requestUnits(line, mine(line) > 0 ? 0 : 1);
   }
 
   async function confirmShare() {
     const prompt = sharePrompt;
     sharePrompt = null;
-    if (prompt) await guest.toggleLine(prompt.line);
+    if (prompt) await guest.setLineUnits(prompt.line, prompt.target);
   }
 
   function shareNames(list: string[]): string {
@@ -55,7 +72,8 @@
   <h1>Tus productos</h1>
   <p class="muted">
     Marca lo que consumiste tú. Si algo era compartido, marcadlo cada uno y
-    se divide solo.
+    se divide solo. En los productos con varias unidades, elige cuántas son
+    tuyas con + y −.
   </p>
 </header>
 
@@ -64,27 +82,63 @@
     <h2>{ticket.merchantName}</h2>
     <div class="lines">
       {#each ticket.lines as line (line.id)}
-        {@const mine = guest.isMine(line)}
+        {@const units = unitsForQuantity(line.quantityMilli)}
+        {@const myN = mine(line)}
         {@const shared = others(line)}
-        <button
-          class="card line"
-          class:mine
-          aria-pressed={mine}
-          disabled={!guest.open}
-          onclick={() => tap(line)}
-        >
-          <span class="check" aria-hidden="true">{mine ? '✓' : ''}</span>
-          <span class="info">
-            <span class="name">{line.name}</span>
-            {#if shared.length > 0}
-              <span class="muted small">
-                {mine ? 'compartido con' : 'lo tiene'}
-                {shareNames(shared)}
-              </span>
-            {/if}
-          </span>
-          <span class="money">{formatCents(line.totalPrice)}</span>
-        </button>
+        {#if units === 1}
+          <button
+            class="card line"
+            class:mine={myN > 0}
+            aria-pressed={myN > 0}
+            disabled={!guest.open}
+            onclick={() => tap(line)}
+          >
+            <span class="check" aria-hidden="true">{myN > 0 ? '✓' : ''}</span>
+            <span class="info">
+              <span class="name">{line.name}</span>
+              {#if shared.length > 0}
+                <span class="muted small">
+                  {myN > 0 ? 'compartido con' : 'lo tiene'}
+                  {shareNames(shared)}
+                </span>
+              {/if}
+            </span>
+            <span class="money">{formatCents(line.totalPrice)}</span>
+          </button>
+        {:else}
+          <!-- Varias unidades (P2.1): reclama cuántas son tuyas. -->
+          <div class="card line multi" class:mine={myN > 0}>
+            <span class="check" aria-hidden="true">{myN > 0 ? '✓' : ''}</span>
+            <span class="info">
+              <span class="name">{units}× {line.name}</span>
+              {#if shared.length > 0}
+                <span class="muted small">
+                  {myN > 0 ? 'compartido con' : 'lo tiene'}
+                  {shareNames(shared)}
+                </span>
+              {/if}
+              {#if myN > 0}
+                <span class="muted small">tuyas: {myN} de {units}</span>
+              {/if}
+            </span>
+            <span class="stepper" aria-label="Unidades reclamadas">
+              <button
+                class="step"
+                aria-label="Quitar una unidad"
+                disabled={!guest.open || myN === 0}
+                onclick={() => requestUnits(line, myN - 1)}
+              >−</button>
+              <span class="count">{myN}</span>
+              <button
+                class="step"
+                aria-label="Añadir una unidad"
+                disabled={!guest.open || myN === units}
+                onclick={() => requestUnits(line, myN + 1)}
+              >+</button>
+            </span>
+            <span class="money">{formatCents(line.totalPrice)}</span>
+          </div>
+        {/if}
       {/each}
     </div>
   </section>
@@ -179,6 +233,33 @@
     background: var(--primary);
     border-color: var(--primary);
     color: var(--on-primary);
+  }
+  .stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: none;
+  }
+  .step {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--outline);
+    background: var(--surface);
+    color: inherit;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .step:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .count {
+    min-width: 20px;
+    text-align: center;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
   .info {
     flex: 1;

@@ -171,6 +171,7 @@ class SessionTicket {
     required this.paidBy,
     required this.kind,
     this.imagePath,
+    this.splitModeOverride,
   });
 
   final String id;
@@ -183,6 +184,43 @@ class SessionTicket {
   final String paidBy; // pid
   final String kind; // scanned | manual
   final String? imagePath; // ruta en Storage (null hasta subir la foto)
+
+  /// Modo forzado del ticket; null = hereda el de la sesión. Decide si las
+  /// líneas son seleccionables en el detalle (P2.1).
+  final SplitMode? splitModeOverride;
+}
+
+/// Línea VIVA de un ticket (P2.1): el creador ve y edita las asignaciones
+/// exactamente igual que un invitado. Los pesos son unidades reclamadas.
+class TicketLine {
+  const TicketLine({
+    required this.id,
+    required this.path,
+    required this.name,
+    required this.quantityMilli,
+    required this.totalPrice,
+    this.assignmentType = 'unassigned',
+    this.weights = const {},
+  });
+
+  final String id;
+
+  /// Ruta completa del documento (para la escritura de la asignación).
+  final String path;
+  final String name;
+  final int quantityMilli;
+  final Money totalPrice;
+  final String assignmentType; // unassigned | one | shared | all
+  final Map<String, int> weights; // pid → unidades reclamadas
+
+  /// Unidades reclamables (misma derivación que motor y reglas).
+  int get units => SplitLine.unitsFromQuantityMilli(quantityMilli);
+
+  int weightOf(String pid) => weights[pid] ?? 0;
+
+  /// pids con consumo distintos de [pid] (para "compartido con…").
+  List<String> othersThan(String pid) =>
+      [for (final entry in weights.keys) if (entry != pid) entry];
 }
 
 // ── Export (PDF / imagen-resumen) ─────────────────────────────────────────
