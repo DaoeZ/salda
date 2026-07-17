@@ -24,6 +24,11 @@ export interface SplitLine {
    * UNA. Por defecto 1 = comportamiento histórico (la línea entera).
    */
   readonly units?: number;
+  /**
+   * P2.2: índice de unidad → consumidores. Ausente conserva la semántica
+   * histórica/P2.1; presente activa el reparto físico unidad a unidad.
+   */
+  readonly unitConsumers?: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Unidades "reclamables" a partir de una cantidad ×1000 (espejo Dart). */
@@ -90,6 +95,18 @@ function lineWeights(
   const totals = Array<number>(participantIds.length).fill(0);
 
   for (const line of lines) {
+    if (line.unitConsumers !== undefined) {
+      addUnitShares({
+        line,
+        participantIds,
+        index,
+        totals,
+        unassignedPolicy,
+        payerId,
+      });
+      continue;
+    }
+
     let type = line.assignment.type;
     if (type === 'unassigned') {
       if (unassignedPolicy === 'error') {
@@ -123,6 +140,59 @@ function lineWeights(
     }
   }
   return totals;
+}
+
+function addUnitShares(params: {
+  line: SplitLine;
+  participantIds: readonly string[];
+  index: ReadonlyMap<string, number>;
+  totals: number[];
+  unassignedPolicy: UnassignedLinePolicy;
+  payerId?: string;
+}): void {
+  const { line, participantIds, index, totals, unassignedPolicy, payerId } =
+    params;
+  const units = line.units ?? 1;
+  if (!Number.isInteger(units) || units <= 0) {
+    throw new DomainError(
+      'invalidWeights',
+      `Número de unidades inválido en la línea ${line.id}`,
+    );
+  }
+  const unitAmounts = allocateProportionally(
+    line.totalPrice,
+    Array<number>(units).fill(1),
+  );
+  for (let unit = 0; unit < units; unit++) {
+    const requested = line.unitConsumers?.[String(unit)] ?? [];
+    const consumers: string[] = [];
+    for (const pid of requested) {
+      if (!index.has(pid)) {
+        throw new DomainError(
+          'unknownParticipant',
+          `Participante desconocido "${pid}" en la unidad ${unit} de la línea ${line.id}`,
+        );
+      }
+      if (!consumers.includes(pid)) consumers.push(pid);
+    }
+    if (consumers.length === 0) {
+      if (payerId !== undefined && index.has(payerId)) {
+        consumers.push(payerId);
+      } else if (unassignedPolicy === 'splitAmongAll') {
+        consumers.push(...participantIds);
+      } else {
+        throw new DomainError(
+          'unassignedLine',
+          `La unidad ${unit} de la línea ${line.id} no está asignada`,
+        );
+      }
+    }
+    const weights = participantIds.map((pid) =>
+      consumers.includes(pid) ? 1 : 0,
+    );
+    const shares = allocateProportionally(unitAmounts[unit], weights);
+    for (let i = 0; i < shares.length; i++) totals[i] += shares[i];
+  }
 }
 
 function explicitWeights(

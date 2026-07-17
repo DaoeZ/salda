@@ -51,8 +51,9 @@ class TicketDetailScreen extends ConsumerWidget {
               trailing: Text(
                 formatMoney(t.grandTotal),
                 style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()]),
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
           ),
@@ -86,11 +87,10 @@ class _TicketLines extends ConsumerWidget {
     final theme = Theme.of(context);
     final ticket = ticketRef.ticket;
     final linesAsync = ref.watch(ticketLinesProvider(ticket.path));
-    final detail =
-        ref.watch(sessionDetailProvider(ticketRef.sessionId)).value;
+    final detail = ref.watch(sessionDetailProvider(ticketRef.sessionId)).value;
     final participants =
         ref.watch(participantsProvider(ticketRef.sessionId)).value ??
-            const <SessionParticipant>[];
+        const <SessionParticipant>[];
 
     final lines = linesAsync.value ?? const <TicketLine>[];
     if (linesAsync.hasValue && lines.isEmpty) {
@@ -107,10 +107,10 @@ class _TicketLines extends ConsumerWidget {
         .where((p) => p.isOwner)
         .map((p) => p.id)
         .firstOrNull;
-    final mode = ticket.splitModeOverride ??
-        detail?.splitModeDefault ??
-        SplitMode.equal;
-    final canPick = ownerPid != null &&
+    final mode =
+        ticket.splitModeOverride ?? detail?.splitModeDefault ?? SplitMode.equal;
+    final canPick =
+        ownerPid != null &&
         mode == SplitMode.byItem &&
         detail?.summary.status == SessionStatus.open;
 
@@ -122,15 +122,18 @@ class _TicketLines extends ConsumerWidget {
           const SizedBox(height: TokenSpacing.sm),
         ],
         Card(
-          child: Column(children: [
-            for (final line in lines)
-              _LineTile(
-                line: line,
-                ownerPid: ownerPid,
-                canPick: canPick,
-                names: names,
-              ),
-          ]),
+          child: Column(
+            children: [
+              for (final line in lines)
+                _LineTile(
+                  line: line,
+                  ownerPid: ownerPid,
+                  canPick: canPick,
+                  names: names,
+                  payerName: ticketRef.payerName,
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -143,12 +146,14 @@ class _LineTile extends ConsumerWidget {
     required this.ownerPid,
     required this.canPick,
     required this.names,
+    required this.payerName,
   });
 
   final TicketLine line;
   final String? ownerPid;
   final bool canPick;
   final Map<String, String> names;
+  final String payerName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -158,6 +163,45 @@ class _LineTile extends ConsumerWidget {
     final myUnits = pid == null ? 0 : line.weightOf(pid);
     final mine = myUnits > 0;
     final interactive = canPick && line.assignmentType != 'all';
+
+    Future<void> toggleUnit(int unit) => ref
+        .read(sessionRepositoryProvider)
+        .setUnitConsumer(
+          line.path,
+          unit: unit,
+          participantId: pid!,
+          selected: !line.unitIsMine(unit, pid),
+        );
+
+    Future<void> convertToUnits() async {
+      final confirmed =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text(l10n.unitsUpgradeTitle),
+              content: Text(l10n.unitsUpgradeBody),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(l10n.commonCancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(l10n.unitsUpgradeAction),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed || !context.mounted) return;
+      await ref
+          .read(sessionRepositoryProvider)
+          .convertLineToUnitAssignment(
+            line.path,
+            editorPid: pid!,
+            unitCount: line.units,
+          );
+    }
 
     Future<void> setUnits(int units) {
       // Mapa completo deseado; 0 elimina la entrada (contrato del repo).
@@ -172,66 +216,165 @@ class _LineTile extends ConsumerWidget {
     final subtitle = line.assignmentType == 'all'
         ? l10n.lineForAll
         : others.isEmpty
-            ? null
-            : (mine ? l10n.lineSharedWith : l10n.lineTakenBy)(
-                others.map((p) => names[p] ?? '?').join(', '),
-              );
+        ? null
+        : (mine ? l10n.lineSharedWith : l10n.lineTakenBy)(
+            others.map((p) => names[p] ?? '?').join(', '),
+          );
 
-    return ListTile(
-      dense: true,
-      onTap: interactive && line.units == 1
-          ? () => setUnits(mine ? 0 : 1)
-          : null,
-      leading: interactive
-          ? Icon(
-              mine ? Icons.check_circle : Icons.circle_outlined,
-              color: mine
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outline,
-            )
-          : null,
-      title: Row(children: [
-        if (line.quantityMilli != 1000) ...[
-          Text(
-            line.quantityMilli % 1000 == 0
-                ? '${line.quantityMilli ~/ 1000}×'
-                : '${(line.quantityMilli / 1000).toStringAsFixed(3)} kg',
-            style: theme.textTheme.labelMedium,
+    final unitDescriptions = line.usesUnitModel
+        ? [
+            for (var unit = 0; unit < line.units; unit++)
+              l10n.unitAssignment(
+                unit + 1,
+                line.consumersOf(unit).isEmpty
+                    ? l10n.unitResidual(payerName)
+                    : line
+                          .consumersOf(unit)
+                          .map((p) => names[p] ?? '?')
+                          .join(', '),
+              ),
+          ]
+        : const <String>[];
+    final effectiveSubtitle = line.usesUnitModel
+        ? (line.units <= 4
+              ? unitDescriptions.join('\n')
+              : l10n.unitCompactSummary(
+                  [
+                    for (var unit = 0; unit < line.units; unit++)
+                      if (pid != null && line.unitIsMine(unit, pid)) unit,
+                  ].length,
+                  line.units,
+                  [
+                    for (var unit = 0; unit < line.units; unit++)
+                      if (line.consumersOf(unit).isEmpty) unit,
+                  ].length,
+                ))
+        : subtitle;
+
+    Widget unitChip(int unit) {
+      final consumers = line.consumersOf(unit);
+      final selected = pid != null && consumers.contains(pid);
+      final detail = consumers.isEmpty
+          ? l10n.unitResidual(payerName)
+          : consumers.map((p) => names[p] ?? '?').join(', ');
+      return Tooltip(
+        message: l10n.unitAssignment(unit + 1, detail),
+        child: FilterChip(
+          selected: selected,
+          onSelected: interactive ? (_) => toggleUnit(unit) : null,
+          label: Text('${unit + 1}'),
+          avatar: Icon(
+            consumers.length > 1 ? Icons.group_outlined : Icons.person_outline,
+            size: 16,
           ),
-          const SizedBox(width: TokenSpacing.xs),
-        ],
-        Expanded(child: Text(line.name)),
-      ]),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle, style: theme.textTheme.bodySmall),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (interactive && line.units > 1) ...[
-            IconButton(
-              tooltip: l10n.lineRemoveUnit,
-              visualDensity: VisualDensity.compact,
-              onPressed: myUnits > 0 ? () => setUnits(myUnits - 1) : null,
-              icon: const Icon(Icons.remove_circle_outline, size: 20),
-            ),
-            Text('$myUnits', style: theme.textTheme.titleSmall),
-            IconButton(
-              tooltip: l10n.lineAddUnit,
-              visualDensity: VisualDensity.compact,
-              onPressed:
-                  myUnits < line.units ? () => setUnits(myUnits + 1) : null,
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-            ),
-            const SizedBox(width: TokenSpacing.xs),
-          ],
-          Text(
-            formatMoney(line.totalPrice),
-            style:
-                const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          dense: true,
+          onTap: interactive && line.units == 1
+              ? line.usesUnitModel
+                    ? () => toggleUnit(0)
+                    : () => setUnits(mine ? 0 : 1)
+              : null,
+          leading: interactive && line.units == 1
+              ? Icon(
+                  (line.usesUnitModel ? line.unitIsMine(0, pid!) : mine)
+                      ? Icons.check_circle
+                      : Icons.circle_outlined,
+                  color: (line.usesUnitModel ? line.unitIsMine(0, pid!) : mine)
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outline,
+                )
+              : null,
+          title: Row(
+            children: [
+              if (line.quantityMilli != 1000) ...[
+                Text(
+                  line.quantityMilli % 1000 == 0
+                      ? '${line.quantityMilli ~/ 1000}×'
+                      : '${(line.quantityMilli / 1000).toStringAsFixed(3)} kg',
+                  style: theme.textTheme.labelMedium,
+                ),
+                const SizedBox(width: TokenSpacing.xs),
+              ],
+              Expanded(
+                child: Text(
+                  line.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+          subtitle: effectiveSubtitle == null
+              ? null
+              : Text(
+                  effectiveSubtitle,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+          trailing: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 104),
+            child: Text(
+              formatMoney(line.totalPrice),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ),
+        if (interactive && line.units > 1 && line.usesUnitModel)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              TokenSpacing.lg,
+              0,
+              TokenSpacing.lg,
+              TokenSpacing.sm,
+            ),
+            child: line.units <= 12
+                ? Wrap(
+                    spacing: TokenSpacing.xs,
+                    runSpacing: TokenSpacing.xs,
+                    children: [
+                      for (var unit = 0; unit < line.units; unit++)
+                        unitChip(unit),
+                    ],
+                  )
+                : SizedBox(
+                    height: 48,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: line.units,
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(width: TokenSpacing.xs),
+                      itemBuilder: (_, unit) => unitChip(unit),
+                    ),
+                  ),
+          ),
+        if (interactive && line.units > 1 && !line.usesUnitModel)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              TokenSpacing.lg,
+              0,
+              TokenSpacing.lg,
+              TokenSpacing.sm,
+            ),
+            child: FilledButton.tonalIcon(
+              onPressed: convertToUnits,
+              icon: const Icon(Icons.grid_view_outlined),
+              label: Text(l10n.unitsUpgradeAction),
+            ),
+          ),
+        const Divider(height: 1),
+      ],
     );
   }
 }

@@ -98,6 +98,11 @@ async function seed() {
       name: 'Flautas', totalPrice: 400, quantityMilli: 2000,
       assignment: { type: 'unassigned', participants: {} },
     });
+    await setDoc(doc(f, `${S}/accounts/a1/tickets/t1/lines/l4`), {
+      name: 'Pizzas', totalPrice: 800, quantityMilli: 2000,
+      unitIds: ['u0', 'u1'],
+      assignment: { type: 'units', schemaVersion: 2, units: {} },
+    });
     // Ticket con modo forzado a "a medias": el invitado NO puede autoasignarse.
     await setDoc(doc(f, `${S}/accounts/a1/tickets/t2`), {
       kind: 'manual', grandTotal: 500, paidByParticipantId: 'p1',
@@ -537,6 +542,59 @@ describe('lines: autoasignación', () => {
     assertFails(updateDoc(doc(db(GUEST), unitsLine), {
       assignment: {
         type: 'one', participants: { p2: 1.5 }, lastEditorPid: 'p2',
+      },
+    })));
+
+  const unitLine = `${S}/accounts/a1/tickets/t1/lines/l4`;
+
+  it('P2.2: dos participantes comparten la misma unidad sin pisarse', async () => {
+    await assertSucceeds(updateDoc(doc(db(GUEST), unitLine), {
+      assignment: {
+        type: 'units', schemaVersion: 2,
+        units: { u0: { p2: true } },
+        lastEditorPid: 'p2', lastEditedUnit: 'u0',
+      },
+    }));
+    await assertSucceeds(updateDoc(doc(db(OTHER), unitLine), {
+      assignment: {
+        type: 'units', schemaVersion: 2,
+        units: { u0: { p2: true, p3: true } },
+        lastEditorPid: 'p3', lastEditedUnit: 'u0',
+      },
+    }));
+    const saved = await getDoc(doc(db(GUEST), unitLine));
+    assert.deepEqual(saved.data().assignment.units.u0, { p2: true, p3: true });
+  });
+
+  it('P2.2: invitado solo cambia su entrada y una unidad válida', async () => {
+    await assertFails(updateDoc(doc(db(GUEST), unitLine), {
+      assignment: {
+        type: 'units', schemaVersion: 2,
+        units: { u0: { p3: true } },
+        lastEditorPid: 'p2', lastEditedUnit: 'u0',
+      },
+    }));
+    await assertFails(updateDoc(doc(db(GUEST), unitLine), {
+      assignment: {
+        type: 'units', schemaVersion: 2,
+        units: { u9: { p2: true } },
+        lastEditorPid: 'p2', lastEditedUnit: 'u9',
+      },
+    }));
+    await assertFails(updateDoc(doc(db(GUEST), unitLine), {
+      assignment: {
+        type: 'units', schemaVersion: 2,
+        units: { u0: { p2: true }, u1: { p2: true } },
+        lastEditorPid: 'p2', lastEditedUnit: 'u0',
+      },
+    }));
+  });
+
+  it('P2.2: un invitado no convierte por su cuenta un reparto histórico', () =>
+    assertFails(updateDoc(doc(db(GUEST), unitsLine), {
+      assignment: {
+        type: 'units', schemaVersion: 2, units: { u0: { p2: true } },
+        lastEditorPid: 'p2', lastEditedUnit: 'u0',
       },
     })));
 });

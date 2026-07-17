@@ -10,6 +10,7 @@
 import {
   arrayUnion,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -26,6 +27,8 @@ import {
   isPickedBy,
   setUnits,
   toggleSelf,
+  unitIsPickedBy,
+  usesUnitModel,
   type Assignment,
 } from './assignment';
 import { db, ensureSignedIn } from './firebase';
@@ -267,6 +270,22 @@ class GuestSession {
   }
 
   /**
+   * P2.2: cambia solo MI pertenencia a UNA unidad mediante ruta punteada.
+   * Dos participantes editando la misma unidad no se sobrescriben; Firestore
+   * fusiona campos distintos y las reglas verifican el pid y la unidad.
+   */
+  async setLineUnit(line: LineInfo, unit: number, selected: boolean): Promise<void> {
+    if (!this.myPid) return;
+    await updateDoc(doc(db, line.path), {
+      'assignment.type': 'units',
+      'assignment.schemaVersion': 2,
+      'assignment.lastEditorPid': this.myPid,
+      'assignment.lastEditedUnit': `u${unit}`,
+      [`assignment.units.u${unit}.${this.myPid}`]: selected ? true : deleteField(),
+    });
+  }
+
+  /**
    * "He recibido el dinero": marked → confirmed SOLO en las liquidaciones
    * donde este dispositivo reclama al RECEPTOR (la regla lo garantiza).
    */
@@ -286,7 +305,14 @@ class GuestSession {
   }
 
   isMine(line: LineInfo): boolean {
-    return this.myPid != null && isPickedBy(line.assignment, this.myPid);
+    if (!this.myPid) return false;
+    if (usesUnitModel(line.assignment)) {
+      const units = Math.max(1, Math.floor(line.quantityMilli / 1000));
+      return Array.from({ length: units }, (_, unit) => unit).some((unit) =>
+        unitIsPickedBy(line.assignment, unit, this.myPid!),
+      );
+    }
+    return isPickedBy(line.assignment, this.myPid);
   }
 
   /** Carga tickets y suscribe sus líneas en vivo (se ve elegir a los demás). */

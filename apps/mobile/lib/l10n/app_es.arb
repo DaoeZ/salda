@@ -180,6 +180,8 @@
   "menuDelete": "Eliminar",
   "closeConfirmBody": "Nadie podrá modificarla hasta que la reabras. ¿Cerrar?",
   "deleteConfirmBody": "Se borrará todo: tickets, fotos y pagos. Esta acción no se puede deshacer.",
+  "deleteInProgress": "Eliminando cuenta",
+  "deleteError": "No se ha podido eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.",
   "closedBanner": "Cuenta cerrada: solo lectura",
 
   "draftResumeTitle": "Tienes un ticket sin terminar",
@@ -246,7 +248,7 @@
   "manualAmount": "Importe",
   "manualConceptHint": "Taxi, entradas, gasolina…",
 
-  "ticketPickHint": "Toca lo que consumiste tú; en líneas de varias unidades usa + y −. Lo que nadie reclame corre a cargo de quien pagó.",
+  "ticketPickHint": "Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.",
   "lineForAll": "Para todos",
   "lineSharedWith": "Compartido con {names}",
   "@lineSharedWith": { "placeholders": { "names": { "type": "String" } } },
@@ -254,6 +256,15 @@
   "@lineTakenBy": { "placeholders": { "names": { "type": "String" } } },
   "lineAddUnit": "Añadir una unidad",
   "lineRemoveUnit": "Quitar una unidad",
+  "unitAssignment": "Unidad {number}: {names}",
+  "@unitAssignment": { "placeholders": { "number": { "type": "int" }, "names": { "type": "String" } } },
+  "unitResidual": "sin reclamar (para {payer})",
+  "@unitResidual": { "placeholders": { "payer": { "type": "String" } } },
+  "unitCompactSummary": "{selected} de {total} tuyas · {residual} sin reclamar",
+  "@unitCompactSummary": { "placeholders": { "selected": { "type": "int" }, "total": { "type": "int" }, "residual": { "type": "int" } } },
+  "unitsUpgradeTitle": "Actualizar el reparto por unidades",
+  "unitsUpgradeBody": "Este producto usa el reparto anterior, que no identifica cada unidad. Al actualizarlo se borrarán sus selecciones actuales y podrás marcar cada unidad sin ambigüedad.",
+  "unitsUpgradeAction": "Repartir por unidades",
   "settlementAwaitsReceiver": "Confirmará {name} al recibir el dinero",
   "@settlementAwaitsReceiver": { "placeholders": { "name": { "type": "String" } } },
 

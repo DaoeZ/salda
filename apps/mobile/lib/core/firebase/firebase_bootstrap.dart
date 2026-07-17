@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../firebase_options.dart';
+import '../config/app_environment.dart';
 
 /// Arranque de Firebase contra el proyecto real (salda-dev).
 ///
@@ -12,13 +13,20 @@ import '../../firebase_options.dart';
 /// (con `firebase emulators:start` en marcha; en el emulador Android el
 /// host local es 10.0.2.2).
 Future<void> bootstrapFirebase() async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final options = DefaultFirebaseOptions.currentPlatform;
+  AppEnvironment.validateFirebaseProject(options.projectId);
+  await Firebase.initializeApp(options: options);
 
-  const useEmulators =
-      bool.fromEnvironment('USE_EMULATORS', defaultValue: false);
+  const useEmulators = bool.fromEnvironment(
+    'USE_EMULATORS',
+    defaultValue: false,
+  );
   if (useEmulators) {
     final host = defaultTargetPlatform == TargetPlatform.android
-        ? const String.fromEnvironment('EMULATOR_HOST', defaultValue: '10.0.2.2')
+        ? const String.fromEnvironment(
+            'EMULATOR_HOST',
+            defaultValue: '10.0.2.2',
+          )
         : 'localhost';
     await FirebaseAuth.instance.useAuthEmulator(host, 9099);
     FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);

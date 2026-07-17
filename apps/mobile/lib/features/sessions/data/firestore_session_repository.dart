@@ -28,8 +28,7 @@ class FirestoreSessionRepository implements SessionRepository {
       .where('ownerUid', isEqualTo: uid())
       .orderBy('updatedAt', descending: true)
       .snapshots()
-      .map((snap) =>
-          snap.docs.map((d) => _summary(d.id, d.data())).toList());
+      .map((snap) => snap.docs.map((d) => _summary(d.id, d.data())).toList());
 
   @override
   Stream<SessionDetail?> watchSession(String sessionId) =>
@@ -39,8 +38,9 @@ class FirestoreSessionRepository implements SessionRepository {
         return SessionDetail(
           summary: _summary(doc.id, data),
           shareCode: (data['shareCode'] as String?) ?? '',
-          splitModeDefault: SplitMode.values
-              .byName((data['splitModeDefault'] as String?) ?? 'equal'),
+          splitModeDefault: SplitMode.values.byName(
+            (data['splitModeDefault'] as String?) ?? 'equal',
+          ),
           balances: {
             for (final entry
                 in ((data['balances'] as Map?) ?? const {}).entries)
@@ -56,18 +56,20 @@ class FirestoreSessionRepository implements SessionRepository {
           .collection('participants')
           .orderBy('order')
           .snapshots()
-          .map((snap) => [
-                for (final d in snap.docs)
-                  SessionParticipant(
-                    id: d.id,
-                    name: (d.data()['name'] as String?) ?? '',
-                    isOwner: (d.data()['isOwner'] as bool?) ?? false,
-                    order: (d.data()['order'] as int?) ?? 0,
-                    claimedByDevice:
-                        (d.data()['claimedByDevice'] as String?) ?? '',
-                    active: (d.data()['active'] as bool?) ?? true,
-                  ),
-              ]);
+          .map(
+            (snap) => [
+              for (final d in snap.docs)
+                SessionParticipant(
+                  id: d.id,
+                  name: (d.data()['name'] as String?) ?? '',
+                  isOwner: (d.data()['isOwner'] as bool?) ?? false,
+                  order: (d.data()['order'] as int?) ?? 0,
+                  claimedByDevice:
+                      (d.data()['claimedByDevice'] as String?) ?? '',
+                  active: (d.data()['active'] as bool?) ?? true,
+                ),
+            ],
+          );
 
   @override
   Stream<List<SessionAccount>> watchAccounts(String sessionId) => _sessions
@@ -75,38 +77,44 @@ class FirestoreSessionRepository implements SessionRepository {
       .collection('accounts')
       .orderBy('order')
       .snapshots()
-      .map((snap) => [
-            for (final d in snap.docs)
-              SessionAccount(
-                id: d.id,
-                name: (d.data()['name'] as String?) ?? '',
-                order: (d.data()['order'] as int?) ?? 0,
-                grandTotal: Money(
-                    ((d.data()['totals'] as Map?)?['grandTotal'] as int?) ??
-                        0),
+      .map(
+        (snap) => [
+          for (final d in snap.docs)
+            SessionAccount(
+              id: d.id,
+              name: (d.data()['name'] as String?) ?? '',
+              order: (d.data()['order'] as int?) ?? 0,
+              grandTotal: Money(
+                ((d.data()['totals'] as Map?)?['grandTotal'] as int?) ?? 0,
               ),
-          ]);
+            ),
+        ],
+      );
 
   @override
   Stream<List<Settlement>> watchSettlements(String sessionId) => _sessions
       .doc(sessionId)
       .collection('settlements')
       .snapshots()
-      .map((snap) => [
-            for (final d in snap.docs)
-              Settlement(
-                id: d.id,
-                from: (d.data()['from'] as String?) ?? '',
-                to: (d.data()['to'] as String?) ?? '',
-                amount: Money((d.data()['amount'] as int?) ?? 0),
-                state: SettlementState.values
-                    .byName((d.data()['state'] as String?) ?? 'pending'),
+      .map(
+        (snap) => [
+          for (final d in snap.docs)
+            Settlement(
+              id: d.id,
+              from: (d.data()['from'] as String?) ?? '',
+              to: (d.data()['to'] as String?) ?? '',
+              amount: Money((d.data()['amount'] as int?) ?? 0),
+              state: SettlementState.values.byName(
+                (d.data()['state'] as String?) ?? 'pending',
               ),
-          ]..sort((a, b) => b.amount.cents.compareTo(a.amount.cents)));
+            ),
+        ]..sort((a, b) => b.amount.cents.compareTo(a.amount.cents)),
+      );
 
   @override
   Future<({String sessionId, String ticketPath})> createSession(
-      NewSessionInput input) async {
+    NewSessionInput input,
+  ) async {
     final owner = uid();
     final sessionRef = _sessions.doc();
 
@@ -208,8 +216,7 @@ class FirestoreSessionRepository implements SessionRepository {
     required NewTicketInput ticket,
     required String payerPid,
   }) {
-    final accountRef =
-        sessionRef.collection('accounts').doc('a$accountIndex');
+    final accountRef = sessionRef.collection('accounts').doc('a$accountIndex');
     batch.set(accountRef, {
       'name': accountName,
       'order': accountIndex,
@@ -245,9 +252,18 @@ class FirestoreSessionRepository implements SessionRepository {
         'unitPrice': line.unitPrice?.cents,
         'totalPrice': line.totalPrice.cents,
         'order': i,
+        'unitIds': [
+          for (
+            var unit = 0;
+            unit < SplitLine.unitsFromQuantityMilli(line.quantityMilli);
+            unit++
+          )
+            'u$unit',
+        ],
         'assignment': {
-          'type': 'unassigned',
-          'participants': const <String, Object?>{},
+          'type': 'units',
+          'schemaVersion': 2,
+          'units': const <String, Object?>{},
         },
       });
     }
@@ -256,36 +272,36 @@ class FirestoreSessionRepository implements SessionRepository {
 
   @override
   Stream<List<SessionTicket>> watchTickets(
-          String sessionId, String accountId) =>
-      _sessions
-          .doc(sessionId)
-          .collection('accounts')
-          .doc(accountId)
-          .collection('tickets')
-          .snapshots()
-          .map((snap) => [
-                for (final d in snap.docs)
-                  SessionTicket(
-                    id: d.id,
-                    path: d.reference.path,
-                    merchantName:
-                        ((d.data()['merchant'] as Map?)?['name'] as String?) ??
-                            '',
-                    date: d.data()['date'] as String?,
-                    grandTotal:
-                        Money((d.data()['grandTotal'] as int?) ?? 0),
-                    paidBy:
-                        (d.data()['paidByParticipantId'] as String?) ?? '',
-                    kind: (d.data()['kind'] as String?) ?? 'scanned',
-                    imagePath: d.data()['imagePath'] as String?,
-                    splitModeOverride: switch (
-                        d.data()['splitModeOverride'] as String?) {
-                      'equal' => SplitMode.equal,
-                      'byItem' => SplitMode.byItem,
-                      _ => null,
-                    },
-                  ),
-              ]);
+    String sessionId,
+    String accountId,
+  ) => _sessions
+      .doc(sessionId)
+      .collection('accounts')
+      .doc(accountId)
+      .collection('tickets')
+      .snapshots()
+      .map(
+        (snap) => [
+          for (final d in snap.docs)
+            SessionTicket(
+              id: d.id,
+              path: d.reference.path,
+              merchantName:
+                  ((d.data()['merchant'] as Map?)?['name'] as String?) ?? '',
+              date: d.data()['date'] as String?,
+              grandTotal: Money((d.data()['grandTotal'] as int?) ?? 0),
+              paidBy: (d.data()['paidByParticipantId'] as String?) ?? '',
+              kind: (d.data()['kind'] as String?) ?? 'scanned',
+              imagePath: d.data()['imagePath'] as String?,
+              splitModeOverride: switch (d.data()['splitModeOverride']
+                  as String?) {
+                'equal' => SplitMode.equal,
+                'byItem' => SplitMode.byItem,
+                _ => null,
+              },
+            ),
+        ],
+      );
 
   @override
   Future<List<LineExport>> fetchTicketLines(String ticketPath) async {
@@ -308,28 +324,49 @@ class FirestoreSessionRepository implements SessionRepository {
       .collection('$ticketPath/lines')
       .orderBy('order')
       .snapshots()
-      .map((snap) => [
-            for (final line in snap.docs)
-              TicketLine(
-                id: line.id,
-                path: line.reference.path,
-                name: (line.data()['name'] as String?) ?? '',
-                quantityMilli:
-                    (line.data()['quantityMilli'] as int?) ?? 1000,
-                totalPrice: Money((line.data()['totalPrice'] as int?) ?? 0),
-                assignmentType: ((line.data()['assignment'] as Map?)?['type']
-                        as String?) ??
-                    'unassigned',
-                weights: {
-                  for (final entry in (((line.data()['assignment']
-                              as Map?)?['participants'] as Map?) ??
-                          const {})
-                      .entries)
-                    if (entry.value is int && (entry.value as int) > 0)
-                      entry.key as String: entry.value as int,
-                },
-              ),
-          ]);
+      .map(
+        (snap) => [
+          for (final line in snap.docs)
+            TicketLine(
+              id: line.id,
+              path: line.reference.path,
+              name: (line.data()['name'] as String?) ?? '',
+              quantityMilli: (line.data()['quantityMilli'] as int?) ?? 1000,
+              totalPrice: Money((line.data()['totalPrice'] as int?) ?? 0),
+              assignmentType:
+                  ((line.data()['assignment'] as Map?)?['type'] as String?) ??
+                  'unassigned',
+              weights: {
+                for (final entry
+                    in (((line.data()['assignment'] as Map?)?['participants']
+                                as Map?) ??
+                            const {})
+                        .entries)
+                  if (entry.value is int && (entry.value as int) > 0)
+                    entry.key as String: entry.value as int,
+              },
+              assignmentSchemaVersion:
+                  ((line.data()['assignment'] as Map?)?['schemaVersion']
+                      as int?),
+              unitConsumers: {
+                for (final unitEntry
+                    in (((line.data()['assignment'] as Map?)?['units']
+                                as Map?) ??
+                            const {})
+                        .entries)
+                  if ((unitEntry.key as String).startsWith('u') &&
+                      int.tryParse((unitEntry.key as String).substring(1)) !=
+                          null)
+                    int.parse((unitEntry.key as String).substring(1)): {
+                      for (final member
+                          in ((unitEntry.value as Map?) ?? const {}).entries)
+                        if (member.value == true || member.value == 1)
+                          member.key as String,
+                    },
+              },
+            ),
+        ],
+      );
 
   @override
   Future<void> setLineAssignment(
@@ -346,15 +383,47 @@ class FirestoreSessionRepository implements SessionRepository {
       'assignment.type': positive == 0
           ? 'unassigned'
           : positive == 1
-              ? 'one'
-              : 'shared',
+          ? 'one'
+          : 'shared',
       'assignment.lastEditorPid': editorPid,
       for (final entry in weights.entries)
-        'assignment.participants.${entry.key}':
-            entry.value > 0 ? entry.value : FieldValue.delete(),
+        'assignment.participants.${entry.key}': entry.value > 0
+            ? entry.value
+            : FieldValue.delete(),
     };
     return firestore.doc(linePath).update(updates);
   }
+
+  @override
+  Future<void> convertLineToUnitAssignment(
+    String linePath, {
+    required String editorPid,
+    required int unitCount,
+  }) => firestore.doc(linePath).update({
+    'unitIds': [for (var unit = 0; unit < unitCount; unit++) 'u$unit'],
+    'assignment.type': 'units',
+    'assignment.schemaVersion': 2,
+    'assignment.units': const <String, Object?>{},
+    'assignment.lastEditorPid': editorPid,
+    'assignment.lastEditedUnit': '',
+    'assignment.participants': FieldValue.delete(),
+  });
+
+  @override
+  Future<void> setUnitConsumer(
+    String linePath, {
+    required int unit,
+    required String participantId,
+    required bool selected,
+  }) => firestore.doc(linePath).update({
+    'assignment.type': 'units',
+    'assignment.schemaVersion': 2,
+    'assignment.lastEditorPid': participantId,
+    'assignment.lastEditedUnit': 'u$unit',
+    'assignment.units.u$unit.$participantId': selected
+        ? true
+        : FieldValue.delete(),
+  });
 
   @override
   Future<void> setTicketImage(String ticketPath, String storagePath) =>
@@ -365,12 +434,11 @@ class FirestoreSessionRepository implements SessionRepository {
     String sessionId,
     String settlementId,
     SettlementState state,
-  ) =>
-      _sessions
-          .doc(sessionId)
-          .collection('settlements')
-          .doc(settlementId)
-          .update({
+  ) => _sessions
+      .doc(sessionId)
+      .collection('settlements')
+      .doc(settlementId)
+      .update({
         'state': state.name,
         'stateHistory': FieldValue.arrayUnion([
           {'state': state.name, 'at': Timestamp.now(), 'by': 'host'},
@@ -382,8 +450,9 @@ class FirestoreSessionRepository implements SessionRepository {
   Future<void> setStatus(String sessionId, SessionStatus status) =>
       _sessions.doc(sessionId).update({
         'status': status.name,
-        'closedAt':
-            status == SessionStatus.closed ? FieldValue.serverTimestamp() : null,
+        'closedAt': status == SessionStatus.closed
+            ? FieldValue.serverTimestamp()
+            : null,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -398,8 +467,10 @@ class FirestoreSessionRepository implements SessionRepository {
       'shareCode': code,
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    final guests =
-        await _sessions.doc(sessionId).collection('guestAccess').get();
+    final guests = await _sessions
+        .doc(sessionId)
+        .collection('guestAccess')
+        .get();
     final batch = firestore.batch();
     for (final doc in guests.docs) {
       batch.delete(doc.reference);
@@ -424,29 +495,31 @@ class FirestoreSessionRepository implements SessionRepository {
             .collection('lines')
             .orderBy('order')
             .get();
-        exports.add(TicketExport(
-          merchantName: ((ticket.data()['merchant'] as Map?)?['name']
-                  as String?) ??
-              (account.data()['name'] as String? ?? ''),
-          date: ticket.data()['date'] as String?,
-          grandTotal: Money((ticket.data()['grandTotal'] as int?) ?? 0),
-          paidBy: (ticket.data()['paidByParticipantId'] as String?) ?? '',
-          lines: [
-            for (final line in lines.docs)
-              LineExport(
-                name: (line.data()['name'] as String?) ?? '',
-                quantityMilli:
-                    (line.data()['quantityMilli'] as int?) ?? 1000,
-                totalPrice:
-                    Money((line.data()['totalPrice'] as int?) ?? 0),
-              ),
-          ],
-        ));
+        exports.add(
+          TicketExport(
+            merchantName:
+                ((ticket.data()['merchant'] as Map?)?['name'] as String?) ??
+                (account.data()['name'] as String? ?? ''),
+            date: ticket.data()['date'] as String?,
+            grandTotal: Money((ticket.data()['grandTotal'] as int?) ?? 0),
+            paidBy: (ticket.data()['paidByParticipantId'] as String?) ?? '',
+            lines: [
+              for (final line in lines.docs)
+                LineExport(
+                  name: (line.data()['name'] as String?) ?? '',
+                  quantityMilli: (line.data()['quantityMilli'] as int?) ?? 1000,
+                  totalPrice: Money((line.data()['totalPrice'] as int?) ?? 0),
+                ),
+            ],
+          ),
+        );
       }
-      result.add(AccountExport(
-        name: (account.data()['name'] as String?) ?? '',
-        tickets: exports,
-      ));
+      result.add(
+        AccountExport(
+          name: (account.data()['name'] as String?) ?? '',
+          tickets: exports,
+        ),
+      );
     }
     return result;
   }
@@ -462,8 +535,9 @@ class FirestoreSessionRepository implements SessionRepository {
       id: id,
       name: (data['name'] as String?) ?? '',
       kind: (data['kind'] as String?) ?? 'single',
-      status: SessionStatus.values
-          .byName((data['status'] as String?) ?? 'open'),
+      status: SessionStatus.values.byName(
+        (data['status'] as String?) ?? 'open',
+      ),
       grandTotal: Money((totals['grandTotal'] as int?) ?? 0),
       settlementRequired: Money(
         (totals['settlementRequired'] as int?) ??
@@ -483,9 +557,9 @@ class FirestoreSessionRepository implements SessionRepository {
   }
 
   ParticipantBalanceView _balance(Map raw) => ParticipantBalanceView(
-        paid: Money((raw['paid'] as int?) ?? 0),
-        consumed: Money((raw['consumed'] as int?) ?? 0),
-        net: Money((raw['net'] as int?) ?? 0),
-        outstanding: Money((raw['outstanding'] as int?) ?? 0),
-      );
+    paid: Money((raw['paid'] as int?) ?? 0),
+    consumed: Money((raw['consumed'] as int?) ?? 0),
+    net: Money((raw['net'] as int?) ?? 0),
+    outstanding: Money((raw['outstanding'] as int?) ?? 0),
+  );
 }

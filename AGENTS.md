@@ -83,8 +83,12 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
 **Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
-pública)** y **P2.1 (correcciones de reparto y pagos)** completos a nivel de
-código. P2.1 (ADR-025): el peso de una asignación son UNIDADES reclamadas
+pública)**, **P2.1** y **P2.2 (unidades físicas + estabilidad)** completos a nivel
+de código. P2.2 (ADR-026) sustituye el peso ambiguo para documentos nuevos por
+unidades independientes (`assignment.schemaVersion: 2`), conserva P2.1 como
+lector histórico, corrige borrado/navegación, branding visible y separación de
+URLs dev/release. Contratos: `docs/REPARTO_POR_UNIDADES.md` y `docs/ENTORNOS.md`.
+P2.1 (ADR-025): el peso de una asignación son UNIDADES reclamadas
 (2×flauta → cada peso 1 = una flauta; lo no reclamado, incluido lo parcial,
 recae en el pagador; compartir sigue igual), el creador selecciona su consumo
 en el detalle del ticket (líneas vivas, toggle/stepper) exactamente como un
@@ -297,8 +301,9 @@ sessions/{id}                ownerUid, kind, shareCode 128 bits, status, splitMo
     tickets/{tid}            kind, merchant{name,brandKey}, paidByParticipantId,
                              imagePath, ocr{engine,confidence}, subtotal/taxes[]/
                              discounts[]/tip/grandTotal, splitModeOverride
-      lines/{lid}            name, quantity(×1000), unitPrice, totalPrice,
-                             assignment{type, participants{pid:peso}}, order
+      lines/{lid}            name, quantity(×1000), unitPrice, totalPrice, order,
+                             unitIds?, assignment histórico o
+                             {type:units,schemaVersion:2,units{unitId{pid:true}}}
   settlements/{sid}          from,to,amount,state pending|marked|confirmed, frozen,
                              stateHistory[], generation
   activity/{eid}             feed append-only

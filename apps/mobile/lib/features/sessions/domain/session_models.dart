@@ -46,10 +46,10 @@ class SessionSummary {
   final int? updatedAtMillis;
 
   SettlementProgress get settlementProgress => SettlementProgress(
-        required: settlementRequired,
-        confirmed: settledConfirmed,
-        marked: settledMarked,
-      );
+    required: settlementRequired,
+    confirmed: settledConfirmed,
+    marked: settledMarked,
+  );
 }
 
 /// Estado derivado exclusivamente de agregados autoritativos de liquidación.
@@ -69,18 +69,15 @@ class SettlementProgress {
 
   bool get isSettled => required.cents == confirmed.cents;
 
-  Money get remaining => Money(
-        (required.cents - confirmed.cents).clamp(0, required.cents),
-      );
+  Money get remaining =>
+      Money((required.cents - confirmed.cents).clamp(0, required.cents));
 
-  double get confirmedFraction => required.isZero
-      ? 1
-      : (confirmed.cents / required.cents).clamp(0.0, 1.0);
+  double get confirmedFraction =>
+      required.isZero ? 1 : (confirmed.cents / required.cents).clamp(0.0, 1.0);
 
   double get markedFraction => required.isZero
       ? 0
-      : (marked.cents / required.cents)
-          .clamp(0.0, 1.0 - confirmedFraction);
+      : (marked.cents / required.cents).clamp(0.0, 1.0 - confirmedFraction);
 }
 
 class SessionParticipant {
@@ -201,6 +198,8 @@ class TicketLine {
     required this.totalPrice,
     this.assignmentType = 'unassigned',
     this.weights = const {},
+    this.assignmentSchemaVersion,
+    this.unitConsumers = const {},
   });
 
   final String id;
@@ -212,6 +211,12 @@ class TicketLine {
   final Money totalPrice;
   final String assignmentType; // unassigned | one | shared | all
   final Map<String, int> weights; // pid → unidades reclamadas
+  final int? assignmentSchemaVersion;
+
+  /// P2.2: índice de unidad → pids que comparten ESA unidad.
+  final Map<int, Set<String>> unitConsumers;
+
+  bool get usesUnitModel => assignmentSchemaVersion == 2;
 
   /// Unidades reclamables (misma derivación que motor y reglas).
   int get units => SplitLine.unitsFromQuantityMilli(quantityMilli);
@@ -219,8 +224,14 @@ class TicketLine {
   int weightOf(String pid) => weights[pid] ?? 0;
 
   /// pids con consumo distintos de [pid] (para "compartido con…").
-  List<String> othersThan(String pid) =>
-      [for (final entry in weights.keys) if (entry != pid) entry];
+  List<String> othersThan(String pid) => [
+    for (final entry in weights.keys)
+      if (entry != pid) entry,
+  ];
+
+  Set<String> consumersOf(int unit) => unitConsumers[unit] ?? const {};
+
+  bool unitIsMine(int unit, String pid) => consumersOf(unit).contains(pid);
 }
 
 // ── Export (PDF / imagen-resumen) ─────────────────────────────────────────

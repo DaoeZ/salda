@@ -19,18 +19,62 @@ import 'ticket_detail_screen.dart';
 /// Detalle de sesión: Resumen (balances + liquidaciones) · Cuentas · Actividad.
 /// Los importes vienen de los agregados autoritativos de la function; la app
 /// los pinta en tiempo real vía streams.
-class SessionDetailScreen extends ConsumerWidget {
+class SessionDetailScreen extends ConsumerStatefulWidget {
   const SessionDetailScreen({super.key, required this.sessionId});
 
   final String sessionId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SessionDetailScreen> createState() =>
+      _SessionDetailScreenState();
+}
+
+class _SessionDetailScreenState extends ConsumerState<SessionDetailScreen> {
+  bool _deleting = false;
+
+  Future<void> _deleteSession() async {
+    if (_deleting) return;
+
+    // El router y el messenger pertenecen a la ruta, no al PopupMenu que se
+    // desmonta en cuanto el stream deja de encontrar la sesión eliminada.
+    final router = GoRouter.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final deleteError = AppLocalizations.of(context).deleteError;
+    setState(() => _deleting = true);
+    try {
+      await ref.read(sessionRepositoryProvider).deleteSession(widget.sessionId);
+      router.go('/home');
+    } on Object {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(deleteError)));
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final detail = ref.watch(sessionDetailProvider(sessionId)).value;
+    final detailAsync = ref.watch(sessionDetailProvider(widget.sessionId));
+    final detail = detailAsync.value;
 
     if (detail == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      if (!_deleting && detailAsync.hasValue) {
+        // El documento también puede desaparecer desde otro dispositivo. La
+        // ruta ya no es válida y debe abandonarse sin dejar un stream huérfano.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) GoRouter.of(context).go('/home');
+        });
+      }
+      return Scaffold(
+        body: Center(
+          child: Semantics(
+            label: _deleting ? l10n.deleteInProgress : null,
+            child: const CircularProgressIndicator(),
+          ),
+        ),
+      );
     }
     final closed = detail.summary.status != SessionStatus.open;
 
@@ -39,7 +83,14 @@ class SessionDetailScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           title: Text(detail.summary.name),
-          actions: [_Menu(sessionId: sessionId, detail: detail)],
+          actions: [
+            _Menu(
+              sessionId: widget.sessionId,
+              detail: detail,
+              deleting: _deleting,
+              onDelete: _deleteSession,
+            ),
+          ],
           bottom: TabBar(
             tabs: [
               Tab(text: l10n.detailTabSummary),
@@ -59,8 +110,8 @@ class SessionDetailScreen extends ConsumerWidget {
             Expanded(
               child: TabBarView(
                 children: [
-                  _SummaryTab(sessionId: sessionId, detail: detail),
-                  _AccountsTab(sessionId: sessionId),
+                  _SummaryTab(sessionId: widget.sessionId, detail: detail),
+                  _AccountsTab(sessionId: widget.sessionId),
                   _ActivityTab(),
                 ],
               ),
@@ -73,10 +124,17 @@ class SessionDetailScreen extends ConsumerWidget {
 }
 
 class _Menu extends ConsumerWidget {
-  const _Menu({required this.sessionId, required this.detail});
+  const _Menu({
+    required this.sessionId,
+    required this.detail,
+    required this.deleting,
+    required this.onDelete,
+  });
 
   final String sessionId;
   final SessionDetail detail;
+  final bool deleting;
+  final Future<void> Function() onDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -104,6 +162,7 @@ class _Menu extends ConsumerWidget {
         false;
 
     return PopupMenuButton<String>(
+      enabled: !deleting,
       onSelected: (action) async {
         switch (action) {
           case 'add_ticket':
@@ -157,8 +216,7 @@ class _Menu extends ConsumerWidget {
             await repo.setStatus(sessionId, SessionStatus.archived);
           case 'delete':
             if (await confirm(l10n.deleteConfirmBody)) {
-              await repo.deleteSession(sessionId);
-              if (context.mounted) context.go('/home');
+              await onDelete();
             }
         }
       },
@@ -200,8 +258,7 @@ class _SummaryTab extends ConsumerWidget {
     // sin reclamar (sin dispositivo, el owner actúa de representante).
     // Espejo exacto de la regla isReceiver() de Firestore.
     bool canConfirmFor(String toPid) {
-      final receiver =
-          participants.where((p) => p.id == toPid).firstOrNull;
+      final receiver = participants.where((p) => p.id == toPid).firstOrNull;
       return receiver != null && receiver.claimedByDevice.isEmpty;
     }
 
@@ -241,7 +298,7 @@ class _SummaryTab extends ConsumerWidget {
                     color: theme.colorScheme.settlementConfirmed,
                   ),
                   const SizedBox(width: TokenSpacing.sm),
-                  Text(l10n.allSettled),
+                  Expanded(child: Text(l10n.allSettled)),
                 ],
               ),
             ),
@@ -284,6 +341,8 @@ class _SummaryTab extends ConsumerWidget {
                         names[settlement.from] ?? settlement.from,
                         names[settlement.to] ?? settlement.to,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(l10n.stateConfirmed),
                     trailing: Row(
@@ -403,9 +462,11 @@ class _CurrentStateCard extends StatelessWidget {
                     color: theme.colorScheme.settlementMarked,
                   ),
                   const SizedBox(width: TokenSpacing.xs),
-                  Text(
-                    l10n.settlementMarkedAmount(formatMoney(progress.marked)),
-                    style: theme.textTheme.bodySmall,
+                  Expanded(
+                    child: Text(
+                      l10n.settlementMarkedAmount(formatMoney(progress.marked)),
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ),
                 ],
               ),
@@ -438,7 +499,7 @@ class _CurrentBalanceRow extends StatelessWidget {
         radius: 16,
         child: Text(name.isEmpty ? '?' : name[0]),
       ),
-      title: Text(name),
+      title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: Text(label),
       trailing: Text(
         '${outstanding > 0 ? '+' : ''}${formatMoney(Money(outstanding))}',
@@ -472,7 +533,7 @@ class _HistoricalBalanceRow extends StatelessWidget {
         radius: 16,
         child: Text(name.isEmpty ? '?' : name[0]),
       ),
-      title: Text(name),
+      title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: balance == null
           ? null
           : Text(
@@ -553,47 +614,48 @@ class _SettlementCard extends ConsumerWidget {
                 Icon(Icons.circle, size: 10, color: color),
                 const SizedBox(width: TokenSpacing.xs),
                 Expanded(child: Text(label)),
-                if (open && settlement.state != SettlementState.confirmed) ...[
-                  if (settlement.state == SettlementState.marked)
-                    IconButton(
-                      tooltip: l10n.actionBackToPending,
-                      onPressed: () => repo.updateSettlementState(
-                        sessionId,
-                        settlement.id,
-                        SettlementState.pending,
-                      ),
-                      icon: const Icon(Icons.undo, size: 18),
-                    ),
-                  if (canConfirm)
-                    FilledButton.tonal(
-                      onPressed: () => repo.updateSettlementState(
-                        sessionId,
-                        settlement.id,
-                        SettlementState.confirmed,
-                      ),
-                      child: Text(l10n.actionConfirm),
-                    )
-                  else
-                    // El receptor reclamó su nombre: confirma él desde la
-                    // web. El creador no puede dar el dinero por recibido.
-                    Text(
-                      l10n.settlementAwaitsReceiver(toName),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ] else if (open && canConfirm) ...[
-                  const SizedBox(width: TokenSpacing.sm),
-                  IconButton(
-                    tooltip: l10n.actionBackToPending,
-                    onPressed: () => repo.updateSettlementState(
-                      sessionId,
-                      settlement.id,
-                      SettlementState.pending,
-                    ),
-                    icon: const Icon(Icons.undo, size: 18),
-                  ),
-                ],
               ],
             ),
+            if (open && settlement.state != SettlementState.confirmed) ...[
+              const SizedBox(height: TokenSpacing.xs),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: TokenSpacing.xs,
+                  runSpacing: TokenSpacing.xs,
+                  children: [
+                    if (settlement.state == SettlementState.marked)
+                      IconButton(
+                        tooltip: l10n.actionBackToPending,
+                        onPressed: () => repo.updateSettlementState(
+                          sessionId,
+                          settlement.id,
+                          SettlementState.pending,
+                        ),
+                        icon: const Icon(Icons.undo, size: 18),
+                      ),
+                    if (canConfirm)
+                      FilledButton.tonal(
+                        onPressed: () => repo.updateSettlementState(
+                          sessionId,
+                          settlement.id,
+                          SettlementState.confirmed,
+                        ),
+                        child: Text(l10n.actionConfirm),
+                      )
+                    else
+                      // El receptor reclamó su nombre: confirma él desde la
+                      // web. El creador no puede dar el dinero por recibido.
+                      Text(
+                        l10n.settlementAwaitsReceiver(toName),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -650,11 +712,16 @@ class _AccountCard extends ConsumerWidget {
       child: ExpansionTile(
         leading: const Icon(Icons.receipt_long_outlined),
         initiallyExpanded: true,
-        title: Text(account.name),
-        trailing: Text(
-          formatMoney(account.grandTotal),
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontFeatures: const [FontFeature.tabularFigures()],
+        title: Text(account.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        trailing: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 112),
+          child: Text(
+            formatMoney(account.grandTotal),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ),
         children: [
@@ -666,12 +733,18 @@ class _AccountCard extends ConsumerWidget {
                     ? Icons.edit_note_outlined
                     : Icons.photo_camera_outlined,
               ),
-              title: Text(ticket.merchantName),
+              title: Text(
+                ticket.merchantName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
               subtitle: Text(
                 [
                   if (ticket.date != null) ticket.date!,
                   l10n.ticketPaidBy(names[ticket.paidBy] ?? '—'),
                 ].join(' · '),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               trailing: Text(
                 formatMoney(ticket.grandTotal),

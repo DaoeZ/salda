@@ -359,6 +359,123 @@
         ]
       },
       "expected": { "creador": 440, "alba": 220 }
+    },
+    {
+      "name": "unidades P2.2: dos unidades, una exclusiva para cada persona",
+      "participants": ["edgar", "alba"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 418,
+        "lines": [
+          { "id": "flautas", "totalPrice": 418, "units": 2, "unitConsumers": { "0": ["edgar"], "1": ["alba"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 209, "alba": 209 }
+    },
+    {
+      "name": "unidades P2.2 regresion: una exclusiva y otra compartida",
+      "participants": ["edgar", "alba"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 418,
+        "lines": [
+          { "id": "flautas", "totalPrice": 418, "units": 2, "unitConsumers": { "0": ["edgar"], "1": ["edgar", "alba"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 314, "alba": 104 }
+    },
+    {
+      "name": "unidades P2.2: dos unidades compartidas por las mismas personas",
+      "participants": ["edgar", "alba"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 418,
+        "lines": [
+          { "id": "flautas", "totalPrice": 418, "units": 2, "unitConsumers": { "0": ["edgar", "alba"], "1": ["edgar", "alba"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 210, "alba": 208 }
+    },
+    {
+      "name": "unidades P2.2: cada unidad compartida por grupos distintos",
+      "participants": ["edgar", "alba", "pedro"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 418,
+        "lines": [
+          { "id": "pizzas", "totalPrice": 418, "units": 2, "unitConsumers": { "0": ["edgar", "alba"], "1": ["alba", "pedro"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 105, "alba": 209, "pedro": 104 }
+    },
+    {
+      "name": "unidades P2.2: unidad no reclamada recae en el pagador",
+      "participants": ["edgar", "alba", "pagador"],
+      "mode": "byItem",
+      "payerId": "pagador",
+      "ticket": {
+        "grandTotal": 600,
+        "lines": [
+          { "id": "cervezas", "totalPrice": 600, "units": 3, "unitConsumers": { "0": ["edgar"], "1": ["alba"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 200, "alba": 200, "pagador": 200 }
+    },
+    {
+      "name": "unidades P2.2: pagador distinto del creador recibe solo el residual",
+      "participants": ["creador", "pagador"],
+      "mode": "byItem",
+      "payerId": "pagador",
+      "ticket": {
+        "grandTotal": 400,
+        "lines": [
+          { "id": "producto", "totalPrice": 400, "units": 2, "unitConsumers": { "0": ["creador"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "creador": 200, "pagador": 200 }
+    },
+    {
+      "name": "unidades P2.2: una unidad compartida entre tres con resto estable",
+      "participants": ["edgar", "alba", "pedro"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 419,
+        "lines": [
+          { "id": "pizza", "totalPrice": 419, "units": 1, "unitConsumers": { "0": ["edgar", "alba", "pedro"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 140, "alba": 140, "pedro": 139 }
+    },
+    {
+      "name": "unidades P2.2: centimos se reparten primero entre unidades",
+      "participants": ["edgar", "alba"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 5,
+        "lines": [
+          { "id": "mini", "totalPrice": 5, "units": 2, "unitConsumers": { "0": ["edgar"], "1": ["edgar", "alba"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 4, "alba": 1 }
+    },
+    {
+      "name": "unidades P2.2: patrones mixtos y residual no duplican dinero",
+      "participants": ["edgar", "alba", "pedro"],
+      "mode": "byItem",
+      "payerId": "edgar",
+      "ticket": {
+        "grandTotal": 800,
+        "lines": [
+          { "id": "productos", "totalPrice": 800, "units": 4, "unitConsumers": { "0": ["edgar", "alba"], "1": ["edgar", "alba"], "2": ["pedro"] }, "assignment": { "type": "unassigned" } }
+        ]
+      },
+      "expected": { "edgar": 400, "alba": 200, "pedro": 200 }
     }
   ]
 }

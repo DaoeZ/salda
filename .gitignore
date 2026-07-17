@@ -54,7 +54,8 @@ Thumbs.db
 *.env
 .env.*
 # Config pública de cliente de la web (no es secreto): SÍ se commitea.
-!apps/guest_web/.env.production
+!apps/guest_web/.env.salda-dev
+!apps/guest_web/.env.production.example
 google-services.json
 GoogleService-Info.plist
 serviceAccount*.json

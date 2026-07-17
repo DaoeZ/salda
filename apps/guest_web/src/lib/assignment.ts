@@ -6,9 +6,34 @@
  * quién edita, y el tipo nunca puede ser "all" desde un invitado.
  */
 export interface Assignment {
-  type: 'unassigned' | 'one' | 'shared' | 'all';
-  participants: Record<string, number>;
+  type: 'unassigned' | 'one' | 'shared' | 'all' | 'units';
+  participants?: Record<string, number>;
+  schemaVersion?: number;
+  units?: Record<string, Record<string, boolean | number>>;
   lastEditorPid?: string;
+  lastEditedUnit?: string;
+}
+
+export function usesUnitModel(current: Assignment | undefined): boolean {
+  return current?.schemaVersion === 2 && current?.type === 'units';
+}
+
+export function unitConsumers(
+  current: Assignment | undefined,
+  unit: number,
+): string[] {
+  const members = current?.units?.[`u${unit}`] ?? {};
+  return Object.entries(members)
+    .filter(([, selected]) => Boolean(selected))
+    .map(([pid]) => pid);
+}
+
+export function unitIsPickedBy(
+  current: Assignment | undefined,
+  unit: number,
+  pid: string,
+): boolean {
+  return unitConsumers(current, unit).includes(pid);
 }
 
 /**

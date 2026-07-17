@@ -7,7 +7,10 @@ import {
   otherConsumers,
   setUnits,
   toggleSelf,
+  unitConsumers,
+  unitIsPickedBy,
   unitsForQuantity,
+  usesUnitModel,
 } from './assignment';
 
 describe('toggleSelf (contrato con las reglas de Firestore)', () => {
@@ -98,7 +101,7 @@ describe('flujo de compartir (nunca duplica líneas)', () => {
     expect(after.participants).toEqual({ p3: 1, p2: 1 });
     expect(after.lastEditorPid).toBe('p2'); // exigido por las reglas
     // Sigue siendo UNA línea: mismo objeto de asignación, dos consumidores.
-    expect(Object.keys(after.participants)).toHaveLength(2);
+    expect(Object.keys(after.participants!)).toHaveLength(2);
   });
 });
 
@@ -149,5 +152,37 @@ describe('unidades (P2.1)', () => {
   it('myUnits lee mi peso (0 si no estoy)', () => {
     expect(myUnits({ type: 'one', participants: { p2: 2 } }, 'p2')).toBe(2);
     expect(myUnits(undefined, 'p2')).toBe(0);
+  });
+});
+
+describe('unidades físicas (P2.2)', () => {
+  const assignment = {
+    type: 'units' as const,
+    schemaVersion: 2,
+    units: {
+      u0: { edgar: true },
+      u1: { edgar: true, alba: true },
+    },
+  };
+
+  it('cada índice conserva consumidores independientes', () => {
+    expect(usesUnitModel(assignment)).toBe(true);
+    expect(usesUnitModel({ type: 'units' })).toBe(false);
+    expect(usesUnitModel({ type: 'shared', schemaVersion: 2 })).toBe(false);
+    expect(unitConsumers(assignment, 0)).toEqual(['edgar']);
+    expect(unitConsumers(assignment, 1)).toEqual(['edgar', 'alba']);
+    expect(unitConsumers(assignment, 2)).toEqual([]);
+  });
+
+  it('dos personas pueden seleccionar la misma unidad sin duplicarla', () => {
+    expect(unitIsPickedBy(assignment, 1, 'edgar')).toBe(true);
+    expect(unitIsPickedBy(assignment, 1, 'alba')).toBe(true);
+    expect(unitIsPickedBy(assignment, 0, 'alba')).toBe(false);
+    expect(Object.keys(assignment.units)).toHaveLength(2);
+  });
+
+  it('el modelo histórico sigue detectándose como histórico', () => {
+    expect(usesUnitModel({ type: 'shared', participants: { edgar: 2, alba: 1 } }))
+      .toBe(false);
   });
 });

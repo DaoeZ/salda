@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.4 · **Fecha:** 2026-07-17 · **Changelog:** v1.4 — P2.1 reparto
+**Versión:** 1.5 · **Fecha:** 2026-07-17 · **Changelog:** v1.5 — P2.2 unidades
+físicas independientes, compatibilidad versionada y configuración dev/release
+(ADR-026). v1.4 — P2.1 reparto
 por unidades (peso = unidades reclamadas, residual al pagador), selección del
 creador y confirmación de pagos exclusiva del receptor (ADR-025). v1.3 — P2
 identidad pública: perfil `profiles/{uid}`, unicidad de username por claims
@@ -1124,9 +1126,36 @@ línea multi-unidad seleccionada entera ahora reparte el resto al pagador, que
 es la semántica correcta que faltaba); la web de invitados sigue sin calcular
 dinero; el caso Alba/Pedro (pago confirmado congelado + reasignación
 posterior) queda blindado con test de regresión en recompute.
-**Revisión:** si algún flujo real necesita compartir UNA unidad concreta de
-una línea multi-unidad entre varias personas con el resto individual, habrá
-que partir la línea (hoy se aproxima con pesos).
+**Revisión:** la semántica de pesos para líneas multi-unidad queda
+**superada por ADR-026** para documentos nuevos. Se conserva únicamente como
+lector compatible de P2.1 para no cambiar balances históricos.
+
+### ADR-026: Unidades físicas independientes con esquema aditivo
+**Estado:** Aceptada · **Fecha:** 2026-07-17 (P2.2)
+**Contexto:** P2.1 aplicaba una suma de pesos al total de línea. En 2 flautas,
+Edgar con peso 2 y Alba con peso 1 producía 2/3 y 1/3, aunque el caso real era
+una flauta exclusiva de Edgar y otra compartida. Los pesos no contienen la
+identidad de la unidad y no permiten reconstruir ese hecho sin ambigüedad.
+**Decisión:** [HECHO] extensión opcional por línea `assignment.type: units`,
+`schemaVersion: 2`, `unitIds: [u0…]` y `units.{unitId}.{pid}: true`. Cada
+unidad se divide solo entre sus consumidores; una unidad vacía es residual del
+pagador real. Los clientes escriben la pertenencia por ruta punteada para que
+ediciones concurrentes de pids distintos converjan sin sobrescritura. Rules
+limita al invitado a su pid y a una unidad declarada. Solo cantidades enteras
+discretas ≥2 se descomponen; peso/volumen/decimales siguen siendo una línea.
+El dinero se reparte primero entre unidades y luego dentro de cada unidad con
+`allocateProportionally`; los empates siguen `participant.order`, idéntico en
+Dart y TypeScript. El caso 2 × 2,09 € queda 3,14 €/1,04 € por ese desempate.
+**Compatibilidad:** la ausencia de la pareja exacta `type: units` +
+`schemaVersion: 2` conserva el algoritmo histórico/P2.1. La conversión solo es
+explícita al editar y parte vacía: nunca adivina unidades ni reinterpreta
+balances confirmados. Es una ampliación de campos, sin migración destructiva.
+**Consecuencias:** el modelo representa unidades exclusivas, compartidas por
+grupos distintos, residuales y cantidades grandes con UX compacta; recompute
+sigue siendo autoritativo y los vectores dorados compartidos garantizan suma
+exacta y paridad. Contrato detallado en `docs/REPARTO_POR_UNIDADES.md`.
+**Revisión:** si una futura importación ofrece identificadores de lote/unidad
+reales, mapearlos a los ids estables existentes sin cambiar el motor.
 
 ---
 
@@ -1161,7 +1190,7 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 
 | Requisito/Componente | Documento | ADR | Código | Tests |
 |---|---|---|---|---|
-| Motor de reparto | spec §8, Biblia §26 | 006, 007 | `packages/domain/.../split_engine.dart` + espejo `backend/functions/src/domain/splitEngine.ts` | golden `split_engine.json` (19), propiedades en `split_engine_test.dart` |
+| Motor de reparto | spec §8, Biblia §26, `docs/REPARTO_POR_UNIDADES.md` | 006, 007, 025, 026 | `packages/domain/.../split_engine.dart` + espejo `backend/functions/src/domain/splitEngine.ts` | golden `split_engine.json`, propiedades en `split_engine_test.dart`, recompute y Rules |
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |

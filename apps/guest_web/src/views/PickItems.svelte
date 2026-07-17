@@ -3,7 +3,10 @@
     myUnits,
     needsShareConfirmation,
     otherConsumers,
+    unitConsumers,
+    unitIsPickedBy,
     unitsForQuantity,
+    usesUnitModel,
   } from '../lib/assignment';
   import { formatCents } from '../lib/money';
   import { guest, type LineInfo } from '../lib/session.svelte';
@@ -18,6 +21,7 @@
     line: LineInfo;
     names: string[];
     target: number;
+    unit?: number;
   } | null>(null);
 
   const names = $derived(
@@ -35,6 +39,18 @@
 
   function mine(line: LineInfo): number {
     return myUnits(line.assignment, guest.myPid ?? '');
+  }
+
+  function consumersOf(line: LineInfo, unit: number): string[] {
+    return unitConsumers(line.assignment, unit);
+  }
+
+  function unitNames(line: LineInfo, unit: number): string[] {
+    return consumersOf(line, unit).map((pid) => names.get(pid) ?? '?');
+  }
+
+  function unitMine(line: LineInfo, unit: number): boolean {
+    return unitIsPickedBy(line.assignment, unit, guest.myPid ?? '');
   }
 
   /** Fija mis unidades; al SUMARME a algo de otros, pregunta antes. */
@@ -55,10 +71,28 @@
     await requestUnits(line, mine(line) > 0 ? 0 : 1);
   }
 
+  async function requestUnit(line: LineInfo, unit: number) {
+    if (!guest.open || !guest.myPid) return;
+    const selected = unitMine(line, unit);
+    const otherNames = unitNames(line, unit).filter(
+      (_, index) => consumersOf(line, unit)[index] !== guest.myPid,
+    );
+    if (!selected && otherNames.length > 0) {
+      sharePrompt = { line, names: otherNames, target: 1, unit };
+      return;
+    }
+    await guest.setLineUnit(line, unit, !selected);
+  }
+
   async function confirmShare() {
     const prompt = sharePrompt;
     sharePrompt = null;
-    if (prompt) await guest.setLineUnits(prompt.line, prompt.target);
+    if (!prompt) return;
+    if (prompt.unit !== undefined) {
+      await guest.setLineUnit(prompt.line, prompt.unit, true);
+    } else {
+      await guest.setLineUnits(prompt.line, prompt.target);
+    }
   }
 
   function shareNames(list: string[]): string {
@@ -85,7 +119,37 @@
         {@const units = unitsForQuantity(line.quantityMilli)}
         {@const myN = mine(line)}
         {@const shared = others(line)}
-        {#if units === 1}
+        {#if usesUnitModel(line.assignment)}
+          <div class="card unit-line">
+            <div class="line-heading">
+              <span class="info">
+                <span class="name">{units > 1 ? `${units}× ` : ''}{line.name}</span>
+                <span class="muted small">
+                  Elige unidades concretas. Si otra persona marca la misma, se comparte.
+                </span>
+              </span>
+              <span class="money">{formatCents(line.totalPrice)}</span>
+            </div>
+            <div class:many={units > 12} class="unit-grid" role="group" aria-label={`Unidades de ${line.name}`}>
+              {#each Array.from({ length: units }, (_, i) => i) as unit (unit)}
+                {@const selected = unitMine(line, unit)}
+                {@const consumers = unitNames(line, unit)}
+                <button
+                  class="unit"
+                  class:selected
+                  aria-pressed={selected}
+                  disabled={!guest.open}
+                  onclick={() => requestUnit(line, unit)}
+                >
+                  <strong>Unidad {unit + 1}</strong>
+                  <span class="small">
+                    {consumers.length > 0 ? shareNames(consumers) : 'Sin reclamar'}
+                  </span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {:else if units === 1}
           <button
             class="card line"
             class:mine={myN > 0}
@@ -106,8 +170,9 @@
             <span class="money">{formatCents(line.totalPrice)}</span>
           </button>
         {:else}
-          <!-- Varias unidades (P2.1): reclama cuántas son tuyas. -->
-          <div class="card line multi" class:mine={myN > 0}>
+          <!-- Histórico P2.1: se muestra sin reinterpretar. Solo el owner
+               puede convertirlo porque los pesos no identifican unidades. -->
+          <div class="card line multi legacy" class:mine={myN > 0}>
             <span class="check" aria-hidden="true">{myN > 0 ? '✓' : ''}</span>
             <span class="info">
               <span class="name">{units}× {line.name}</span>
@@ -117,24 +182,7 @@
                   {shareNames(shared)}
                 </span>
               {/if}
-              {#if myN > 0}
-                <span class="muted small">tuyas: {myN} de {units}</span>
-              {/if}
-            </span>
-            <span class="stepper" aria-label="Unidades reclamadas">
-              <button
-                class="step"
-                aria-label="Quitar una unidad"
-                disabled={!guest.open || myN === 0}
-                onclick={() => requestUnits(line, myN - 1)}
-              >−</button>
-              <span class="count">{myN}</span>
-              <button
-                class="step"
-                aria-label="Añadir una unidad"
-                disabled={!guest.open || myN === units}
-                onclick={() => requestUnits(line, myN + 1)}
-              >+</button>
+              <span class="muted small">Reparto anterior · el creador debe actualizarlo por unidades</span>
             </span>
             <span class="money">{formatCents(line.totalPrice)}</span>
           </div>
@@ -217,6 +265,48 @@
     background: var(--primary-container);
     color: var(--on-primary-container);
   }
+  .unit-line {
+    padding: var(--space-md) var(--space-lg);
+  }
+  .line-heading {
+    display: flex;
+    align-items: start;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+  }
+  .unit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    gap: var(--space-xs);
+  }
+  .unit-grid.many {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .unit {
+    min-width: 0;
+    min-height: 52px;
+    display: grid;
+    gap: 2px;
+    text-align: left;
+    padding: var(--space-sm);
+    border: 1px solid var(--outline);
+    border-radius: var(--radius-control);
+    background: var(--surface);
+    color: var(--on-surface);
+  }
+  .unit.selected {
+    border-color: var(--primary);
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+  }
+  .unit span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .check {
     width: 24px;
     height: 24px;
@@ -233,33 +323,6 @@
     background: var(--primary);
     border-color: var(--primary);
     color: var(--on-primary);
-  }
-  .stepper {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    flex: none;
-  }
-  .step {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: 1px solid var(--outline);
-    background: var(--surface);
-    color: inherit;
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-  }
-  .step:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-  .count {
-    min-width: 20px;
-    text-align: center;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
   }
   .info {
     flex: 1;

@@ -54,29 +54,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               )
             : null,
       ),
-      body: Column(children: [
-        const _ProfileBanner(),
-        const _DraftBanner(),
-        Expanded(
-          child: sessions.when(
-            loading: () => const _SessionsSkeleton(),
-            error: (error, _) => Center(child: Text('$error')),
-            data: (list) => list.isEmpty
-                ? _EmptyState(l10n: l10n)
-                : _SessionsList(sessions: list),
+      body: Column(
+        children: [
+          const _ProfileBanner(),
+          const _DraftBanner(),
+          Expanded(
+            child: sessions.when(
+              loading: () => const _SessionsSkeleton(),
+              error: (error, _) => Center(child: Text('$error')),
+              data: (list) => list.isEmpty
+                  ? _EmptyState(l10n: l10n)
+                  : _SessionsList(sessions: list),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _scanning
             ? null
             : () => showScanEntrySheet(
-                  context,
-                  ref,
-                  onBusy: (busy) {
-                    if (mounted) setState(() => _scanning = busy);
-                  },
-                ),
+                context,
+                ref,
+                onBusy: (busy) {
+                  if (mounted) setState(() => _scanning = busy);
+                },
+              ),
         icon: const Icon(Icons.document_scanner_outlined),
         label: Text(l10n.scanFab),
       ),
@@ -161,12 +163,14 @@ class _SessionsList extends StatelessWidget {
       ...sessions.where((s) => s.status == SessionStatus.archived),
     ];
     final owedToMe = sessions
-        .where((s) =>
-            s.status == SessionStatus.open && s.myOutstanding.cents > 0)
+        .where(
+          (s) => s.status == SessionStatus.open && s.myOutstanding.cents > 0,
+        )
         .fold(0, (a, s) => a + s.myOutstanding.cents);
     final iOwe = sessions
-        .where((s) =>
-            s.status == SessionStatus.open && s.myOutstanding.cents < 0)
+        .where(
+          (s) => s.status == SessionStatus.open && s.myOutstanding.cents < 0,
+        )
         .fold(0, (a, s) => a - s.myOutstanding.cents);
 
     return ListView(
@@ -195,26 +199,34 @@ class _TotalsHeader extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     Widget cell(String label, Money amount) => Expanded(
-          child: Column(children: [
-            Text(label, style: theme.textTheme.labelMedium),
-            Text(
-              formatMoney(amount),
-              style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()]),
+      child: Column(
+        children: [
+          Text(label, style: theme.textTheme.labelMedium),
+          Text(
+            formatMoney(amount),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
-          ]),
-        );
+          ),
+        ],
+      ),
+    );
     return Card(
       color: theme.colorScheme.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(TokenSpacing.lg),
-        child: Row(children: [
-          cell(l10n.summaryOwedToMe, owedToMe),
-          Container(
-              width: 1, height: 36, color: theme.colorScheme.outlineVariant),
-          cell(l10n.summaryIOwe, iOwe),
-        ]),
+        child: Row(
+          children: [
+            cell(l10n.summaryOwedToMe, owedToMe),
+            Container(
+              width: 1,
+              height: 36,
+              color: theme.colorScheme.outlineVariant,
+            ),
+            cell(l10n.summaryIOwe, iOwe),
+          ],
+        ),
       ),
     );
   }
@@ -239,38 +251,51 @@ class _SessionCard extends StatelessWidget {
           onTap: () => context.push('/home/session/${session.id}'),
           child: Padding(
             padding: const EdgeInsets.all(TokenSpacing.lg),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              Row(children: [
-                Expanded(
-                  child: Text(session.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        session.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                    Text(
+                      formatMoney(session.grandTotal),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  formatMoney(session.grandTotal),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()]),
+                const SizedBox(height: TokenSpacing.xs),
+                Wrap(
+                  spacing: TokenSpacing.sm,
+                  runSpacing: TokenSpacing.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      l10n.sessionPeople(session.participantsCount),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    if (session.status == SessionStatus.closed)
+                      _chip(theme, l10n.statusClosed, Icons.lock_outline),
+                    if (archived)
+                      _chip(theme, l10n.statusArchived, Icons.archive_outlined),
+                  ],
                 ),
-              ]),
-              const SizedBox(height: TokenSpacing.xs),
-              Row(children: [
-                Text(l10n.sessionPeople(session.participantsCount),
-                    style: theme.textTheme.bodySmall),
-                const SizedBox(width: TokenSpacing.sm),
-                if (session.status == SessionStatus.closed)
-                  _chip(theme, l10n.statusClosed, Icons.lock_outline),
-                if (archived)
-                  _chip(theme, l10n.statusArchived, Icons.archive_outlined),
-              ]),
-              const SizedBox(height: TokenSpacing.sm),
-              SettlementProgressBar(
-                progress: session.settlementProgress,
-                semanticLabel: l10n.settlementProgressSemantics,
-              ),
-            ]),
+                const SizedBox(height: TokenSpacing.sm),
+                SettlementProgressBar(
+                  progress: session.settlementProgress,
+                  semanticLabel: l10n.settlementProgressSemantics,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -278,13 +303,13 @@ class _SessionCard extends StatelessWidget {
   }
 
   Widget _chip(ThemeData theme, String label, IconData icon) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 2),
-          Text(label, style: theme.textTheme.labelSmall),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+      const SizedBox(width: 2),
+      Text(label, style: theme.textTheme.labelSmall),
+    ],
+  );
 }
 
 class _EmptyState extends StatelessWidget {
@@ -298,16 +323,24 @@ class _EmptyState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(TokenSpacing.xl),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.receipt_long_outlined,
-              size: 64, color: theme.colorScheme.primary),
-          const SizedBox(height: TokenSpacing.lg),
-          Text(l10n.sessionsEmptyTitle, style: theme.textTheme.titleMedium),
-          const SizedBox(height: TokenSpacing.xs),
-          Text(l10n.sessionsEmptyBody,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 64,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: TokenSpacing.lg),
+            Text(l10n.sessionsEmptyTitle, style: theme.textTheme.titleMedium),
+            const SizedBox(height: TokenSpacing.xs),
+            Text(
+              l10n.sessionsEmptyBody,
               style: theme.textTheme.bodySmall,
-              textAlign: TextAlign.center),
-        ]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -328,11 +361,13 @@ class _SessionsSkeleton extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
             child: Padding(
               padding: const EdgeInsets.all(TokenSpacing.lg),
-              child: Column(children: [
-                Container(height: 16, color: color),
-                const SizedBox(height: TokenSpacing.sm),
-                Container(height: 10, color: color),
-              ]),
+              child: Column(
+                children: [
+                  Container(height: 16, color: color),
+                  const SizedBox(height: TokenSpacing.sm),
+                  Container(height: 10, color: color),
+                ],
+              ),
             ),
           ),
       ],

@@ -6,7 +6,8 @@ abstract final class Brand {
   static const String appName = 'Salda';
   static const String tagline = 'Escanea el ticket, reparte y salda cuentas.';
   static const bool provisional = true;
-  static const String hostingDomain = 'salda-dev.web.app';
+  static const String developmentHostingDomain = 'salda-dev.web.app';
+  static const String productionHostingDomain = 'salda-prod.web.app';
 }
 
 /// Colores como int ARGB; la app los envuelve en `Color(...)`.

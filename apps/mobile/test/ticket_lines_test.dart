@@ -24,10 +24,16 @@ Future<FakeFirebaseFirestore> _seed() async {
     'currency': 'EUR',
   });
   await fake.doc('sessions/s1/participants/p1').set({
-    'name': 'Edgar', 'isOwner': true, 'order': 0, 'claimedByDevice': '',
+    'name': 'Edgar',
+    'isOwner': true,
+    'order': 0,
+    'claimedByDevice': '',
   });
   await fake.doc('sessions/s1/participants/p2').set({
-    'name': 'Alba', 'isOwner': false, 'order': 1, 'claimedByDevice': 'dev-2',
+    'name': 'Alba',
+    'isOwner': false,
+    'order': 1,
+    'claimedByDevice': 'dev-2',
   });
   await fake.doc(_ticketPath).set({
     'kind': 'manual',
@@ -39,16 +45,35 @@ Future<FakeFirebaseFirestore> _seed() async {
     'order': 0,
     'quantityMilli': 2000,
     'totalPrice': 400,
-    'assignment': {'type': 'unassigned', 'participants': <String, int>{}},
+    'unitIds': ['u0', 'u1'],
+    'assignment': {
+      'type': 'units',
+      'schemaVersion': 2,
+      'units': <String, Object?>{},
+    },
   });
   await fake.doc('$_ticketPath/lines/l2').set({
     'name': 'Pizza',
     'order': 1,
     'quantityMilli': 1000,
     'totalPrice': 1200,
+    'unitIds': ['u0'],
     'assignment': {
-      'type': 'one',
-      'participants': {'p2': 1},
+      'type': 'units',
+      'schemaVersion': 2,
+      'units': {
+        'u0': {'p2': true},
+      },
+    },
+  });
+  await fake.doc('$_ticketPath/lines/l3').set({
+    'name': 'Cervezas históricas',
+    'order': 2,
+    'quantityMilli': 3000,
+    'totalPrice': 600,
+    'assignment': {
+      'type': 'shared',
+      'participants': {'p1': 2, 'p2': 1},
     },
   });
   return fake;
@@ -94,13 +119,83 @@ void main() {
         shareCodeFactory: () => 'X',
       );
       final lines = await repo.watchTicketLines(_ticketPath).first;
-      expect(lines, hasLength(2));
+      expect(lines, hasLength(3));
       expect(lines.first.units, 2);
-      expect(lines.first.weightOf('p1'), 0);
-      expect(lines.last.units, 1);
-      expect(lines.last.weightOf('p2'), 1);
-      expect(lines.last.othersThan('p1'), ['p2']);
+      expect(lines.first.usesUnitModel, isTrue);
+      expect(lines.first.consumersOf(0), isEmpty);
+      expect(lines[1].units, 1);
+      expect(lines[1].unitIsMine(0, 'p2'), isTrue);
+      expect(lines.last.units, 3);
+      expect(lines.last.usesUnitModel, isFalse);
+      expect(lines.last.weightOf('p1'), 2);
     });
+
+    test(
+      'P2.2 escribe miembros por unidad sin pisar otros participantes',
+      () async {
+        final fake = await _seed();
+        final repo = FirestoreSessionRepository(
+          firestore: fake,
+          uid: () => 'owner',
+          shareCodeFactory: () => 'X',
+        );
+        await repo.setUnitConsumer(
+          '$_ticketPath/lines/l1',
+          unit: 1,
+          participantId: 'p1',
+          selected: true,
+        );
+        await repo.setUnitConsumer(
+          '$_ticketPath/lines/l1',
+          unit: 1,
+          participantId: 'p2',
+          selected: true,
+        );
+        var assignment =
+            (await fake.doc('$_ticketPath/lines/l1').get())
+                    .data()!['assignment']
+                as Map<String, dynamic>;
+        expect((assignment['units'] as Map)['u1'], {'p1': true, 'p2': true});
+
+        await repo.setUnitConsumer(
+          '$_ticketPath/lines/l1',
+          unit: 1,
+          participantId: 'p1',
+          selected: false,
+        );
+        assignment =
+            (await fake.doc('$_ticketPath/lines/l1').get())
+                    .data()!['assignment']
+                as Map<String, dynamic>;
+        expect((assignment['units'] as Map)['u1'], {'p2': true});
+      },
+    );
+
+    test(
+      'la conversión histórica es explícita y no reinterpreta pesos',
+      () async {
+        final fake = await _seed();
+        final repo = FirestoreSessionRepository(
+          firestore: fake,
+          uid: () => 'owner',
+          shareCodeFactory: () => 'X',
+        );
+
+        await repo.convertLineToUnitAssignment(
+          '$_ticketPath/lines/l3',
+          editorPid: 'p1',
+          unitCount: 3,
+        );
+
+        final data = (await fake.doc('$_ticketPath/lines/l3').get()).data()!;
+        final assignment = data['assignment'] as Map<String, dynamic>;
+        expect(data['unitIds'], ['u0', 'u1', 'u2']);
+        expect(assignment['schemaVersion'], 2);
+        expect(assignment['type'], 'units');
+        expect(assignment['units'], isEmpty);
+        expect(assignment.containsKey('participants'), isFalse);
+      },
+    );
 
     test('setLineAssignment escribe la misma forma que la web', () async {
       final fake = await _seed();
@@ -111,36 +206,36 @@ void main() {
       );
 
       // El creador reclama 1 unidad conservando la entrada de Alba.
-      await repo.setLineAssignment(
-        '$_ticketPath/lines/l2',
-        {'p2': 1, 'p1': 1},
-        editorPid: 'p1',
-      );
-      var assignment = (await fake.doc('$_ticketPath/lines/l2').get())
-          .data()!['assignment'] as Map<String, dynamic>;
+      await repo.setLineAssignment('$_ticketPath/lines/l3', {
+        'p2': 1,
+        'p1': 1,
+      }, editorPid: 'p1');
+      var assignment =
+          (await fake.doc('$_ticketPath/lines/l3').get()).data()!['assignment']
+              as Map<String, dynamic>;
       expect(assignment['type'], 'shared');
       expect(assignment['participants'], {'p2': 1, 'p1': 1});
       expect(assignment['lastEditorPid'], 'p1');
 
       // Quitarse (peso 0) limpia la entrada y recalcula el tipo.
-      await repo.setLineAssignment(
-        '$_ticketPath/lines/l2',
-        {'p2': 1, 'p1': 0},
-        editorPid: 'p1',
-      );
-      assignment = (await fake.doc('$_ticketPath/lines/l2').get())
-          .data()!['assignment'] as Map<String, dynamic>;
+      await repo.setLineAssignment('$_ticketPath/lines/l3', {
+        'p2': 1,
+        'p1': 0,
+      }, editorPid: 'p1');
+      assignment =
+          (await fake.doc('$_ticketPath/lines/l3').get()).data()!['assignment']
+              as Map<String, dynamic>;
       expect(assignment['type'], 'one');
       expect(assignment['participants'], {'p2': 1});
 
       // Nadie → unassigned (todo a 0).
-      await repo.setLineAssignment(
-        '$_ticketPath/lines/l2',
-        {'p2': 0, 'p1': 0},
-        editorPid: 'p1',
-      );
-      assignment = (await fake.doc('$_ticketPath/lines/l2').get())
-          .data()!['assignment'] as Map<String, dynamic>;
+      await repo.setLineAssignment('$_ticketPath/lines/l3', {
+        'p2': 0,
+        'p1': 0,
+      }, editorPid: 'p1');
+      assignment =
+          (await fake.doc('$_ticketPath/lines/l3').get()).data()!['assignment']
+              as Map<String, dynamic>;
       expect(assignment['type'], 'unassigned');
       expect(assignment['participants'], isEmpty);
     });
@@ -153,16 +248,17 @@ void main() {
       final fake = await _seed();
       await _pump(tester, fake);
 
-      // La pizza la tiene Alba; el creador se suma con un toque.
-      expect(find.text('Lo tiene Alba'), findsOneWidget);
+      // La pizza (unidad 1) la tiene Alba; el creador se suma con un toque.
+      expect(find.text('Unidad 1: Alba'), findsOneWidget);
       await tester.tap(find.text('Pizza'));
       await tester.pumpAndSettle();
 
-      final assignment = (await fake.doc('$_ticketPath/lines/l2').get())
-          .data()!['assignment'] as Map<String, dynamic>;
-      expect(assignment['type'], 'shared');
-      expect(assignment['participants'], {'p2': 1, 'p1': 1});
-      expect(find.text('Compartido con Alba'), findsOneWidget);
+      final assignment =
+          (await fake.doc('$_ticketPath/lines/l2').get()).data()!['assignment']
+              as Map<String, dynamic>;
+      expect(assignment['type'], 'units');
+      expect((assignment['units'] as Map)['u0'], {'p2': true, 'p1': true});
+      expect(find.text('Unidad 1: Alba, Edgar'), findsOneWidget);
     });
 
     testWidgets('línea multi-unidad: el stepper reclama unidades sueltas', (
@@ -171,29 +267,25 @@ void main() {
       final fake = await _seed();
       await _pump(tester, fake);
 
-      // 2 flautas: el creador reclama una con "+".
-      await tester.tap(find.byIcon(Icons.add_circle_outline).first);
+      // 2 flautas: el creador marca explícitamente la unidad 1.
+      await tester.tap(find.byType(FilterChip).first);
       await tester.pumpAndSettle();
 
-      var assignment = (await fake.doc('$_ticketPath/lines/l1').get())
-          .data()!['assignment'] as Map<String, dynamic>;
-      expect(assignment['participants'], {'p1': 1});
+      var assignment =
+          (await fake.doc('$_ticketPath/lines/l1').get()).data()!['assignment']
+              as Map<String, dynamic>;
+      expect((assignment['units'] as Map)['u0'], {'p1': true});
 
-      // Y la segunda: el peso es el número de unidades.
-      await tester.tap(find.byIcon(Icons.add_circle_outline).first);
+      // Y comparte la unidad 2 de forma independiente.
+      await tester.tap(find.byType(FilterChip).at(1));
       await tester.pumpAndSettle();
-      assignment = (await fake.doc('$_ticketPath/lines/l1').get())
-          .data()!['assignment'] as Map<String, dynamic>;
-      expect(assignment['participants'], {'p1': 2});
-
-      // El "+" queda deshabilitado al llegar al máximo de unidades.
-      final addButton = tester.widget<IconButton>(
-        find.ancestor(
-          of: find.byIcon(Icons.add_circle_outline).first,
-          matching: find.byType(IconButton),
-        ),
-      );
-      expect(addButton.onPressed, isNull);
+      assignment =
+          (await fake.doc('$_ticketPath/lines/l1').get()).data()!['assignment']
+              as Map<String, dynamic>;
+      expect((assignment['units'] as Map)['u0'], {'p1': true});
+      expect((assignment['units'] as Map)['u1'], {'p1': true});
+      expect(find.textContaining('Unidad 1: Edgar'), findsOneWidget);
+      expect(find.textContaining('Unidad 2: Edgar'), findsOneWidget);
     });
 
     testWidgets('sesión cerrada: sin selección posible', (tester) async {
@@ -201,7 +293,7 @@ void main() {
       await fake.doc('sessions/s1').update({'status': 'closed'});
       await _pump(tester, fake);
 
-      expect(find.byIcon(Icons.add_circle_outline), findsNothing);
+      expect(find.byType(FilterChip), findsNothing);
       expect(find.byIcon(Icons.circle_outlined), findsNothing);
     });
   });

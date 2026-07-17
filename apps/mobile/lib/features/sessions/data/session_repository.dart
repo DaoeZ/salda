@@ -47,6 +47,24 @@ abstract interface class SessionRepository {
     required String editorPid,
   });
 
+  /// Convierte EXPLÍCITAMENTE una asignación histórica al modelo P2.2. La
+  /// conversión parte vacía porque los pesos anteriores no identifican qué
+  /// unidad concreta se compartía.
+  Future<void> convertLineToUnitAssignment(
+    String linePath, {
+    required String editorPid,
+    required int unitCount,
+  });
+
+  /// Añade o quita un consumidor de UNA unidad mediante ruta punteada. Así
+  /// dos dispositivos pueden editar la misma unidad sin pisarse entre sí.
+  Future<void> setUnitConsumer(
+    String linePath, {
+    required int unit,
+    required String participantId,
+    required bool selected,
+  });
+
   /// Registra la ruta de Storage de la foto del ticket.
   Future<void> setTicketImage(String ticketPath, String storagePath);
 

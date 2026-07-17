@@ -270,7 +270,8 @@ service cloud.firestore {
             allow read: if canRead(sid);
             allow create, delete: if isOwner(sid) && isOpen(sid);
             allow update: if (isOwner(sid) && isOpen(sid))
-              || guestCanEditLine(sid, aid, tid);
+              || guestCanEditLine(sid, aid, tid)
+              || guestCanEditUnit(sid, aid, tid);
           }
         }
       }
@@ -354,6 +355,41 @@ service cloud.firestore {
         && claimedBy(sid, editor) == request.auth.uid
         // …y un invitado no puede convertir la línea en "todos".
         && request.resource.data.assignment.type in ['unassigned', 'one', 'shared'];
+    }
+
+    // P2.2: un invitado cambia únicamente SU pertenencia a UNA unidad. El
+    // mapa anidado permite que dos dispositivos compartan la misma unidad sin
+    // sobrescribirse; unitIds limita los identificadores creados por el owner.
+    function guestCanEditUnit(sid, aid, tid) {
+      let session = sessionData(sid);
+      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+      let assignment = request.resource.data.assignment;
+      let editor = assignment.get('lastEditorPid', '');
+      let unitKey = assignment.get('lastEditedUnit', '');
+      let oldUnits = resource.data.assignment.get('units', {});
+      let newUnits = assignment.get('units', {});
+      let oldMembers = oldUnits.get(unitKey, {});
+      let newMembers = newUnits.get(unitKey, {});
+      let selected = newMembers.get(editor, false);
+      return hasGuestAccess(sid)
+        && session.status == 'open'
+        && mode == 'byItem'
+        && resource.data.assignment.get('schemaVersion', 0) == 2
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['assignment'])
+        && assignment.keys().hasOnly([
+          'type', 'schemaVersion', 'units', 'lastEditorPid', 'lastEditedUnit'
+        ])
+        && assignment.type == 'units'
+        && assignment.schemaVersion == 2
+        && editor != ''
+        && unitKey != ''
+        && resource.data.get('unitIds', ['u0']).hasAny([unitKey])
+        && newUnits.diff(oldUnits).affectedKeys().hasOnly([unitKey])
+        && newMembers.diff(oldMembers).affectedKeys().hasOnly([editor])
+        && selected is bool
+        && claimedBy(sid, editor) == request.auth.uid;
     }
   }
 }

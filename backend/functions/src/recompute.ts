@@ -47,6 +47,8 @@ export interface LineDoc {
   assignment?: {
     type?: string;
     participants?: Record<string, number>;
+    schemaVersion?: number;
+    units?: Record<string, Record<string, boolean | number>>;
   };
 }
 
@@ -265,6 +267,36 @@ function sanitizeLine(
 ): SplitLine {
   const rawType = line.assignment?.type ?? 'unassigned';
   const units = unitsFromQuantityMilli(line.quantityMilli ?? 1000);
+
+  // P2.2 es opt-in por línea. La ausencia de schemaVersion conserva el
+  // reparto histórico/P2.1 sin reinterpretarlo silenciosamente.
+  if (line.assignment?.schemaVersion === 2 && rawType === 'units') {
+    const unitConsumers: Record<string, string[]> = {};
+    for (let unit = 0; unit < units; unit++) {
+      const members = line.assignment?.units?.[`u${unit}`] ?? {};
+      const consumers: string[] = [];
+      for (const [pid, selected] of Object.entries(members)) {
+        if (!selected) continue;
+        if (known.has(pid)) consumers.push(pid);
+        else {
+          logger.warn('Consumidor de unidad desconocido; se ignora', {
+            line: line.id,
+            unit,
+            pid,
+          });
+        }
+      }
+      if (consumers.length > 0) unitConsumers[String(unit)] = consumers;
+    }
+    return {
+      id: line.id,
+      totalPrice: line.totalPrice,
+      units,
+      unitConsumers,
+      // Ignorado por el motor cuando existe unitConsumers.
+      assignment: { type: 'unassigned', weights: {} },
+    };
+  }
 
   if (rawType === 'all') {
     return {

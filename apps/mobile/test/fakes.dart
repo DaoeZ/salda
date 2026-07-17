@@ -84,7 +84,10 @@ class FakeAuthRepository implements AuthRepository {
 
 /// Overrides estándar para tests de widgets: usuario logueado y Firestore
 /// falso en memoria (sin tocar Firebase real).
-List<Override> loggedInOverrides({FakeFirebaseFirestore? firestore}) {
+List<Override> loggedInOverrides({
+  FakeFirebaseFirestore? firestore,
+  SessionRepository? sessionRepository,
+}) {
   final fake = firestore ?? FakeFirebaseFirestore();
   return [
     authRepositoryProvider.overrideWithValue(
@@ -93,11 +96,12 @@ List<Override> loggedInOverrides({FakeFirebaseFirestore? firestore}) {
       ),
     ),
     sessionRepositoryProvider.overrideWithValue(
-      FirestoreSessionRepository(
-        firestore: fake,
-        uid: () => 'owner',
-        shareCodeFactory: () => 'TEST-CODE-1234567890',
-      ),
+      sessionRepository ??
+          FirestoreSessionRepository(
+            firestore: fake,
+            uid: () => 'owner',
+            shareCodeFactory: () => 'TEST-CODE-1234567890',
+          ),
     ),
     frequentPeopleRepositoryProvider.overrideWithValue(
       FrequentPeopleRepository(firestore: fake, uid: () => 'owner'),

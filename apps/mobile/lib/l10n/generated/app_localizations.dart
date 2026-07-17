@@ -1024,6 +1024,18 @@ abstract class AppLocalizations {
   /// **'Se borrará todo: tickets, fotos y pagos. Esta acción no se puede deshacer.'**
   String get deleteConfirmBody;
 
+  /// No description provided for @deleteInProgress.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminando cuenta'**
+  String get deleteInProgress;
+
+  /// No description provided for @deleteError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se ha podido eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.'**
+  String get deleteError;
+
   /// No description provided for @closedBanner.
   ///
   /// In es, this message translates to:
@@ -1363,7 +1375,7 @@ abstract class AppLocalizations {
   /// No description provided for @ticketPickHint.
   ///
   /// In es, this message translates to:
-  /// **'Toca lo que consumiste tú; en líneas de varias unidades usa + y −. Lo que nadie reclame corre a cargo de quien pagó.'**
+  /// **'Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.'**
   String get ticketPickHint;
 
   /// No description provided for @lineForAll.
@@ -1395,6 +1407,42 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Quitar una unidad'**
   String get lineRemoveUnit;
+
+  /// No description provided for @unitAssignment.
+  ///
+  /// In es, this message translates to:
+  /// **'Unidad {number}: {names}'**
+  String unitAssignment(int number, String names);
+
+  /// No description provided for @unitResidual.
+  ///
+  /// In es, this message translates to:
+  /// **'sin reclamar (para {payer})'**
+  String unitResidual(String payer);
+
+  /// No description provided for @unitCompactSummary.
+  ///
+  /// In es, this message translates to:
+  /// **'{selected} de {total} tuyas · {residual} sin reclamar'**
+  String unitCompactSummary(int selected, int total, int residual);
+
+  /// No description provided for @unitsUpgradeTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Actualizar el reparto por unidades'**
+  String get unitsUpgradeTitle;
+
+  /// No description provided for @unitsUpgradeBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Este producto usa el reparto anterior, que no identifica cada unidad. Al actualizarlo se borrarán sus selecciones actuales y podrás marcar cada unidad sin ambigüedad.'**
+  String get unitsUpgradeBody;
+
+  /// No description provided for @unitsUpgradeAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Repartir por unidades'**
+  String get unitsUpgradeAction;
 
   /// No description provided for @settlementAwaitsReceiver.
   ///

@@ -513,6 +513,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Se borrará todo: tickets, fotos y pagos. Esta acción no se puede deshacer.';
 
   @override
+  String get deleteInProgress => 'Eliminando cuenta';
+
+  @override
+  String get deleteError =>
+      'No se ha podido eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.';
+
+  @override
   String get closedBanner => 'Cuenta cerrada: solo lectura';
 
   @override
@@ -695,7 +702,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get ticketPickHint =>
-      'Toca lo que consumiste tú; en líneas de varias unidades usa + y −. Lo que nadie reclame corre a cargo de quien pagó.';
+      'Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.';
 
   @override
   String get lineForAll => 'Para todos';
@@ -715,6 +722,31 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lineRemoveUnit => 'Quitar una unidad';
+
+  @override
+  String unitAssignment(int number, String names) {
+    return 'Unidad $number: $names';
+  }
+
+  @override
+  String unitResidual(String payer) {
+    return 'sin reclamar (para $payer)';
+  }
+
+  @override
+  String unitCompactSummary(int selected, int total, int residual) {
+    return '$selected de $total tuyas · $residual sin reclamar';
+  }
+
+  @override
+  String get unitsUpgradeTitle => 'Actualizar el reparto por unidades';
+
+  @override
+  String get unitsUpgradeBody =>
+      'Este producto usa el reparto anterior, que no identifica cada unidad. Al actualizarlo se borrarán sus selecciones actuales y podrás marcar cada unidad sin ambigüedad.';
+
+  @override
+  String get unitsUpgradeAction => 'Repartir por unidades';
 
   @override
   String settlementAwaitsReceiver(String name) {

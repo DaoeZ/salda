@@ -27,20 +27,26 @@ void main() {
     ..createSync(recursive: true)
     ..writeAsStringSync(_generateCss(brand, tokens));
 
-  stdout.writeln('tokens.g.dart y tokens.g.css regenerados.');
+  File('$repoRoot/apps/guest_web/src/lib/brand.g.ts')
+    ..createSync(recursive: true)
+    ..writeAsStringSync(_generateTypeScriptBrand(brand));
+
+  stdout.writeln('tokens.g.dart, tokens.g.css y brand.g.ts regenerados.');
 }
 
 String _findRepoRoot() {
   var dir = Directory.current;
   while (true) {
-    if (File('${dir.path}/packages/design_tokens/assets/design_tokens.json')
-        .existsSync()) {
+    if (File(
+      '${dir.path}/packages/design_tokens/assets/design_tokens.json',
+    ).existsSync()) {
       return dir.path.replaceAll(r'\', '/');
     }
     final parent = dir.parent;
     if (parent.path == dir.path) {
       throw StateError(
-          'No se encontró la raíz del repo desde ${Directory.current.path}');
+        'No se encontró la raíz del repo desde ${Directory.current.path}',
+      );
     }
     dir = parent;
   }
@@ -57,6 +63,7 @@ String _kebab(String s) =>
     s.replaceAllMapped(RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}');
 
 String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
+  final hosting = brand['hostingDomains'] as Map<String, dynamic>;
   final color = t['color'] as Map<String, dynamic>;
   final semantic = color['semantic'] as Map<String, dynamic>;
   final avatars = (color['avatarPalette'] as List).cast<String>();
@@ -78,7 +85,12 @@ String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
     ..writeln("  static const String appName = '${brand['appName']}';")
     ..writeln("  static const String tagline = '${brand['tagline']}';")
     ..writeln('  static const bool provisional = ${brand['provisional']};')
-    ..writeln("  static const String hostingDomain = '${brand['hostingDomain']}';")
+    ..writeln(
+      "  static const String developmentHostingDomain = '${hosting['development']}';",
+    )
+    ..writeln(
+      "  static const String productionHostingDomain = '${hosting['production']}';",
+    )
     ..writeln('}')
     ..writeln()
     ..writeln('/// Colores como int ARGB; la app los envuelve en `Color(...)`.')
@@ -87,14 +99,20 @@ String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
   for (final entry in semantic.entries) {
     final v = entry.value as Map<String, dynamic>;
     b
-      ..writeln('  static const int ${entry.key}Light = '
-          '${_argb(v['light'] as String)};')
-      ..writeln('  static const int ${entry.key}Dark = '
-          '${_argb(v['dark'] as String)};');
+      ..writeln(
+        '  static const int ${entry.key}Light = '
+        '${_argb(v['light'] as String)};',
+      )
+      ..writeln(
+        '  static const int ${entry.key}Dark = '
+        '${_argb(v['dark'] as String)};',
+      );
   }
   b
-    ..writeln('  static const List<int> avatarPalette = ['
-        '${avatars.map(_argb).join(', ')}];')
+    ..writeln(
+      '  static const List<int> avatarPalette = ['
+      '${avatars.map(_argb).join(', ')}];',
+    )
     ..writeln('}')
     ..writeln()
     ..writeln('abstract final class TokenTypography {')
@@ -124,17 +142,23 @@ String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
     ..writeln()
     ..writeln('abstract final class TokenMotion {')
     ..writeln('  /// Curva M3 emphasized: cubic-bezier(x1, y1, x2, y2).')
-    ..writeln('  static const List<double> easingEmphasized = '
-        '[${easing.join(', ')}];');
+    ..writeln(
+      '  static const List<double> easingEmphasized = '
+      '[${easing.join(', ')}];',
+    );
   for (final e in durations.entries) {
     b.writeln('  static const int ${e.key} = ${e.value};');
   }
   b
     ..writeln('  static const int listStaggerMs = ${motion['listStaggerMs']};')
-    ..writeln('  static const int skeletonShimmerMs = '
-        '${motion['skeletonShimmerMs']};')
-    ..writeln('  static const int syncIndicatorDelayMs = '
-        '${motion['syncIndicatorDelayMs']};')
+    ..writeln(
+      '  static const int skeletonShimmerMs = '
+      '${motion['skeletonShimmerMs']};',
+    )
+    ..writeln(
+      '  static const int syncIndicatorDelayMs = '
+      '${motion['syncIndicatorDelayMs']};',
+    )
     ..writeln('}')
     ..writeln()
     ..writeln('abstract final class TokenLayout {');
@@ -143,6 +167,21 @@ String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
   }
   b.writeln('}');
   return b.toString();
+}
+
+String _generateTypeScriptBrand(Map<String, dynamic> brand) {
+  final hosting = brand['hostingDomains'] as Map<String, dynamic>;
+  return '''// GENERATED por design_tokens:generate — NO EDITAR A MANO.
+// Fuente: packages/design_tokens/assets/brand.json
+export const BRAND = {
+  appName: ${jsonEncode(brand['appName'])},
+  tagline: ${jsonEncode(brand['tagline'])},
+  hostingDomains: {
+    development: ${jsonEncode(hosting['development'])},
+    production: ${jsonEncode(hosting['production'])},
+  },
+} as const;
+''';
 }
 
 String _generateCss(Map<String, dynamic> brand, Map<String, dynamic> t) {
@@ -167,7 +206,8 @@ String _generateCss(Map<String, dynamic> brand, Map<String, dynamic> t) {
   final shared = StringBuffer();
   shared.writeln('  --color-seed: ${color['seed']};');
   shared.writeln(
-      "  --font-family: '${typo['fontFamily']}', system-ui, sans-serif;");
+    "  --font-family: '${typo['fontFamily']}', system-ui, sans-serif;",
+  );
   for (final e in spacing.entries) {
     shared.writeln('  --space-${e.key}: ${e.value}px;');
   }
@@ -177,7 +217,8 @@ String _generateCss(Map<String, dynamic> brand, Map<String, dynamic> t) {
   shared.writeln('  --easing-emphasized: cubic-bezier(${easing.join(', ')});');
   for (final e in durations.entries) {
     shared.writeln(
-        '  --duration-${_kebab(e.key).replaceAll('-ms', '')}: ${e.value}ms;');
+      '  --duration-${_kebab(e.key).replaceAll('-ms', '')}: ${e.value}ms;',
+    );
   }
 
   return '''

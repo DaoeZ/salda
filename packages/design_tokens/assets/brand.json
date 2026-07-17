@@ -3,6 +3,9 @@
   "appName": "Salda",
   "tagline": "Escanea el ticket, reparte y salda cuentas.",
   "provisional": true,
-  "hostingDomain": "salda-dev.web.app",
+  "hostingDomains": {
+    "development": "salda-dev.web.app",
+    "production": "salda-prod.web.app"
+  },
   "androidApplicationId": "dev.salda.app"
 }

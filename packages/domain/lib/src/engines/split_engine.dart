@@ -40,6 +40,7 @@ class SplitLine {
     required this.totalPrice,
     required this.assignment,
     this.units = 1,
+    this.unitConsumers,
   });
 
   final String id;
@@ -53,11 +54,19 @@ class SplitLine {
   /// histórico: cualquier selección reparte la línea completa.
   final int units;
 
+  /// Modelo P2.2 por unidades físicas: índice de unidad → consumidores.
+  ///
+  /// `null` conserva EXACTAMENTE la semántica histórica/P2.1 de [assignment].
+  /// Un mapa presente activa el modelo nuevo; una unidad ausente o con lista
+  /// vacía es residual y recae en el pagador. Los índices son implícitos y
+  /// estables (`0 .. units-1`), por lo que no hacen falta documentos extra.
+  final Map<int, List<String>>? unitConsumers;
+
   /// Unidades "reclamables" a partir de una cantidad ×1000.
   static int unitsFromQuantityMilli(int quantityMilli) =>
       quantityMilli >= 2000 && quantityMilli % 1000 == 0
-          ? quantityMilli ~/ 1000
-          : 1;
+      ? quantityMilli ~/ 1000
+      : 1;
 }
 
 /// Entrada del motor para un ticket.
@@ -104,8 +113,12 @@ abstract final class SplitEngine {
 
     final weights = switch (mode) {
       SplitMode.equal => List<int>.filled(participantIds.length, 1),
-      SplitMode.byItem =>
-        _lineWeights(participantIds, ticket.lines, unassignedPolicy, payerId),
+      SplitMode.byItem => _lineWeights(
+        participantIds,
+        ticket.lines,
+        unassignedPolicy,
+        payerId,
+      ),
     };
 
     // byItem sin consumo en líneas (ticket manual sin desglose): a medias.
@@ -137,6 +150,18 @@ abstract final class SplitEngine {
     final totals = List<int>.filled(participantIds.length, 0);
 
     for (final line in lines) {
+      if (line.unitConsumers != null) {
+        _addUnitShares(
+          line: line,
+          participantIds: participantIds,
+          index: index,
+          totals: totals,
+          unassignedPolicy: unassignedPolicy,
+          payerId: payerId,
+        );
+        continue;
+      }
+
       var type = line.assignment.type;
       if (type == AssignmentType.unassigned) {
         if (unassignedPolicy == UnassignedLinePolicy.error) {
@@ -150,9 +175,11 @@ abstract final class SplitEngine {
 
       final lineWeights = switch (type) {
         AssignmentType.all => List<int>.filled(participantIds.length, 1),
-        AssignmentType.one ||
-        AssignmentType.shared =>
-          _explicitWeights(line, index, participantIds.length),
+        AssignmentType.one || AssignmentType.shared => _explicitWeights(
+          line,
+          index,
+          participantIds.length,
+        ),
         AssignmentType.unassigned => throw StateError('resuelto arriba'),
       };
 
@@ -174,6 +201,62 @@ abstract final class SplitEngine {
       }
     }
     return totals;
+  }
+
+  /// Reparte primero el importe exacto de la línea entre unidades iguales y
+  /// después cada unidad entre sus consumidores. Ambos pasos usan resto mayor
+  /// y el orden estable de [participantIds], así que Dart y TS desempatan igual.
+  static void _addUnitShares({
+    required SplitLine line,
+    required List<String> participantIds,
+    required Map<String, int> index,
+    required List<int> totals,
+    required UnassignedLinePolicy unassignedPolicy,
+    required String? payerId,
+  }) {
+    if (line.units <= 0) {
+      throw DomainException(
+        DomainException.invalidWeights,
+        'Número de unidades inválido en la línea ${line.id}',
+      );
+    }
+    final unitAmounts = allocateProportionally(
+      line.totalPrice,
+      List<int>.filled(line.units, 1),
+    );
+    for (var unit = 0; unit < line.units; unit++) {
+      final requested = line.unitConsumers![unit] ?? const <String>[];
+      final consumers = <String>[];
+      for (final pid in requested) {
+        if (!index.containsKey(pid)) {
+          throw DomainException(
+            DomainException.unknownParticipant,
+            'Participante desconocido "$pid" en la unidad $unit '
+            'de la línea ${line.id}',
+          );
+        }
+        if (!consumers.contains(pid)) consumers.add(pid);
+      }
+      if (consumers.isEmpty) {
+        if (payerId != null && index.containsKey(payerId)) {
+          consumers.add(payerId);
+        } else if (unassignedPolicy == UnassignedLinePolicy.splitAmongAll) {
+          consumers.addAll(participantIds);
+        } else {
+          throw DomainException(
+            DomainException.unassignedLine,
+            'La unidad $unit de la línea ${line.id} no está asignada',
+          );
+        }
+      }
+      final unitWeights = <int>[
+        for (final pid in participantIds) consumers.contains(pid) ? 1 : 0,
+      ];
+      final shares = allocateProportionally(unitAmounts[unit], unitWeights);
+      for (var i = 0; i < shares.length; i++) {
+        totals[i] += shares[i].cents;
+      }
+    }
   }
 
   static List<int> _explicitWeights(

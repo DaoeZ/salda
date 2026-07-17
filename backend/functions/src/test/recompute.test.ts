@@ -596,6 +596,54 @@ test('P2.1 unidades: ticket antiguo sin quantityMilli se comporta igual', () => 
   assert.equal(r.balances.p1.consumed, 0);
 });
 
+test('P2.2 recompute: una unidad exclusiva y otra compartida son 3/4 y 1/4',
+    () => {
+  const r = computeAggregates(
+    byItem(418, [{
+      id: 'flautas',
+      totalPrice: 418,
+      quantityMilli: 2000,
+      assignment: {
+        type: 'units',
+        schemaVersion: 2,
+        units: {
+          u0: { p1: true },
+          u1: { p1: true, p2: true },
+        },
+      },
+    }]),
+  );
+  // 209 por unidad; en la compartida el céntimo impar favorece el orden p1.
+  assert.equal(r.balances.p1.consumed, 314);
+  assert.equal(r.balances.p2.consumed, 104);
+  assert.equal(r.balances.p3.consumed, 0);
+  assert.deepEqual(r.settlementSync.writes, [
+    { from: 'p2', to: 'p1', amount: 104 },
+  ]);
+});
+
+test('P2.2 recompute: edición repetida y concurrencia convergen sin duplicar',
+    () => {
+  const snapshot = byItem(600, [{
+    id: 'unidades',
+    totalPrice: 600,
+    quantityMilli: 3000,
+    assignment: {
+      type: 'units',
+      schemaVersion: 2,
+      units: { u0: { p2: true }, u1: { p2: true, p3: true } },
+    },
+  }]);
+  const first = computeAggregates(snapshot);
+  const second = computeAggregates(structuredClone(snapshot));
+  assert.deepEqual(second, first);
+  assert.equal(
+    Object.values(first.balances).reduce((sum, b) => sum + b.consumed, 0),
+    600,
+  );
+  assert.ok(Object.values(first.balances).every((b) => b.consumed >= 0));
+});
+
 test('P2.1 REGRESIÓN Alba/Pedro: tras confirmar el pago de Alba, lo nuevo ' +
     'de Pedro se lo debe a ALBA, no al creador', () => {
   // Edgar (p1) pagó 20 €. Alba (p2) consumió 10 y YA pagó (confirmada).
