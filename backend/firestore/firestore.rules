@@ -260,6 +260,177 @@ service cloud.firestore {
         );
     }
 
+    // ── Espacios compartidos (P4, ADR-028) ─────────────────────────────
+    // spaces/{id} + members/{uid} + spaceInvites/{spaceId_toUid}.
+    // Membresía ≠ amistad ≠ participación económica: expulsar o salir solo
+    // toca documentos sociales, jamás sesiones/tickets/balances/pagos.
+
+    function spaceData(spaceId) {
+      return get(/databases/$(database)/documents/spaces/$(spaceId)).data;
+    }
+
+    function isSpaceMember(spaceId) {
+      return exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
+    }
+
+    function isSpaceOwner(spaceId) {
+      return canUseSocial() && spaceData(spaceId).ownerUid == request.auth.uid;
+    }
+
+    function validSpaceShape(data) {
+      return data.keys().hasOnly([
+          'name', 'avatarEmoji', 'ownerUid', 'status',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.name is string
+        && data.name.size() >= 2
+        && data.name.size() <= 40
+        && (!('avatarEmoji' in data)
+          || (data.avatarEmoji is string && data.avatarEmoji.size() <= 8))
+        && data.status in ['active', 'archived']
+        && data.schemaVersion == 1
+        && data.updatedAt is timestamp;
+    }
+
+    // El ROL no se persiste: el propietario único es spaces.ownerUid (fuente
+    // única de verdad) y "miembro" es todo el que tiene doc de membresía.
+    // Así la transferencia es la actualización de UN documento — atómica por
+    // definición — y las reglas nunca necesitan get() sobre docs del mismo
+    // batch (que fallaría).
+    match /spaces/{spaceId} {
+      allow read: if canUseSocial() && isSpaceMember(spaceId);
+
+      // Alta atómica: espacio + SU membresía en el mismo batch.
+      allow create: if canUseSocial()
+        && validSpaceShape(request.resource.data)
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt is timestamp
+        && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+            .data.uid == request.auth.uid;
+
+      // `resource` es la pre-imagen: autoriza el owner ACTUAL sin get().
+      allow update: if canUseSocial()
+        && resource.data.ownerUid == request.auth.uid
+        && validSpaceShape(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (
+          // Editar nombre/avatar o archivar/reactivar: el owner no cambia.
+          (request.resource.data.ownerUid == resource.data.ownerUid)
+          // Transferencia a un miembro ACTIVO (su membresía no está en el
+          // batch, así que exists() es seguro).
+          || (
+            resource.data.status == 'active'
+            && request.resource.data.status == 'active'
+            && request.resource.data.ownerUid != request.auth.uid
+            && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.ownerUid))
+          )
+        );
+
+      // Sin delete en P4: archivar es la única "baja" (nada destructivo
+      // para espacios con actividad).
+      allow delete: if false;
+
+      match /members/{memberUid} {
+        // Cualquier miembro ve la lista de miembros.
+        allow read: if canUseSocial() && isSpaceMember(spaceId);
+
+        allow create: if canUseSocial()
+          && request.resource.data.keys().hasOnly(['uid', 'joinedAt'])
+          && request.resource.data.uid == memberUid
+          && request.resource.data.joinedAt is timestamp
+          && memberUid == request.auth.uid
+          && (
+            // (a) Fundador: su membresía al crear el espacio (mismo batch).
+            getAfter(/databases/$(database)/documents/spaces/$(spaceId))
+                .data.ownerUid == request.auth.uid
+            // (b) Aceptar invitación: el receptor se une y el MISMO batch
+            // resuelve la invitación a accepted.
+            || (spaceData(spaceId).status == 'active'
+              && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
+                  .data.status == 'accepted')
+          );
+
+        // La membresía no tiene campos mutables.
+        allow update: if false;
+
+        // Salir (nunca el owner: antes transfiere o archiva) o expulsión
+        // por el owner. Solo borra el acceso social futuro.
+        allow delete: if canUseSocial()
+          && resource.data.uid != spaceData(spaceId).ownerUid
+          && (memberUid == request.auth.uid || isSpaceOwner(spaceId));
+      }
+    }
+
+    match /spaceInvites/{inviteId} {
+      // Ve la invitación su receptor o el owner del espacio.
+      allow read: if canUseSocial()
+        && (resource.data.toUid == request.auth.uid
+          || resource.data.fromUid == request.auth.uid);
+
+      // Invita el owner de un espacio ACTIVO a una cuenta con perfil que
+      // aún no es miembro. El ID determinista impide duplicados activos.
+      allow create: if isSpaceOwner(request.resource.data.spaceId)
+        && spaceData(request.resource.data.spaceId).status == 'active'
+        && inviteId
+          == request.resource.data.spaceId + '_' + request.resource.data.toUid
+        && request.resource.data.keys().hasOnly([
+          'spaceId', 'spaceName', 'fromUid', 'toUid', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid != request.auth.uid
+        && request.resource.data.spaceName is string
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.toUid))
+        && !exists(/databases/$(database)/documents/spaces/$(request.resource.data.spaceId)/members/$(request.resource.data.toUid));
+
+      allow update: if canUseSocial()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedAt'])
+        && request.resource.data.updatedAt is timestamp
+        && (
+          // El RECEPTOR acepta (junto al alta de miembro en el batch,
+          // validada arriba) o rechaza. Cancelada ya no se puede aceptar.
+          (resource.data.toUid == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['accepted', 'rejected'])
+          // El owner cancela una pendiente o reenvía tras rechazo o
+          // cancelación (reutiliza el doc: sigue sin haber duplicados).
+          || (isSpaceOwner(resource.data.spaceId)
+            && (
+              (resource.data.status == 'pending'
+                && request.resource.data.status == 'cancelled')
+              || (resource.data.status in ['rejected', 'cancelled']
+                && request.resource.data.status == 'pending'
+                && spaceData(resource.data.spaceId).status == 'active'
+                && !exists(/databases/$(database)/documents/spaces/$(resource.data.spaceId)/members/$(resource.data.toUid)))
+            ))
+        );
+
+      // Limpieza por el owner (p. ej. invitación obsoleta ya resuelta).
+      allow delete: if isSpaceOwner(resource.data.spaceId)
+        && resource.data.status != 'pending';
+    }
+
+    // "Mis espacios": collection group SOLO sobre la propia membresía.
+    match /{path=**}/members/{memberUid} {
+      allow read: if canUseSocial()
+        && resource.data.uid == request.auth.uid;
+    }
+
+    // Tickets vinculados: un miembro del espacio ve el RESUMEN del ticket
+    // (doc del ticket; nunca líneas, foto ni el resto de la sesión — la
+    // política de privacidad de P4 mantiene el detalle para quien ya tiene
+    // acceso a la sesión por los cauces existentes).
+    match /{path=**}/tickets/{ticketId} {
+      allow read: if canUseSocial()
+        && resource.data.get('spaceId', '') != ''
+        && isSpaceMember(resource.data.spaceId);
+    }
+
     // ── Sesiones ────────────────────────────────────────────────────────
     match /sessions/{sid} {
 
@@ -344,9 +515,15 @@ service cloud.firestore {
 
         match /tickets/{tid} {
           allow read: if canRead(sid);
+          // spaceId (P4): un ticket pertenece a UN espacio como máximo y
+          // solo puede vincularlo el dueño de la sesión a un espacio del
+          // que sea miembro. '' o ausente = sin espacio (compatibilidad).
           allow create, update: if isOwner(sid) && isOpen(sid)
             && request.resource.data.grandTotal is int
-            && request.resource.data.paidByParticipantId is string;
+            && request.resource.data.paidByParticipantId is string
+            && (request.resource.data.get('spaceId', '') == ''
+              || (request.resource.data.spaceId is string
+                && isSpaceMember(request.resource.data.spaceId)));
           allow delete: if isOwner(sid) && isOpen(sid);
 
           match /lines/{lid} {

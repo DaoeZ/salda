@@ -169,6 +169,7 @@ class SessionTicket {
     required this.kind,
     this.imagePath,
     this.splitModeOverride,
+    this.spaceId,
   });
 
   final String id;
@@ -185,6 +186,13 @@ class SessionTicket {
   /// Modo forzado del ticket; null = hereda el de la sesión. Decide si las
   /// líneas son seleccionables en el detalle (P2.1).
   final SplitMode? splitModeOverride;
+
+  /// Espacio compartido al que pertenece (P4); null/'' = sin espacio. Un
+  /// ticket pertenece como máximo a UN espacio y vincularlo no cambia
+  /// participantes, asignaciones, balances ni pagos.
+  final String? spaceId;
+
+  bool get hasSpace => spaceId != null && spaceId!.isNotEmpty;
 }
 
 /// Línea VIVA de un ticket (P2.1): el creador ve y edita las asignaciones

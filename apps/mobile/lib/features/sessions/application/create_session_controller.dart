@@ -11,6 +11,7 @@ import '../../review/application/draft_store.dart';
 import '../../review/application/review_draft.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../settings/data/user_profile_repository.dart';
+import '../../spaces/data/spaces_repository.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
 import 'add_ticket_controller.dart';
@@ -55,6 +56,20 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
         final store = ref.read(receiptImageStoreProvider);
         await store.cacheLocalOriginal(created.ticketPath, imagePath);
         unawaited(store.upload(created.ticketPath));
+      }
+      // "Crear ticket desde el espacio" (P4): si el flujo partió de un
+      // espacio, el ticket recién creado se vincula a él. Best-effort: un
+      // fallo de vínculo no invalida el ticket ya guardado.
+      final pendingSpace =
+          ref.read(pendingSpaceLinkProvider.notifier).consume();
+      if (pendingSpace != null) {
+        try {
+          await ref
+              .read(spacesRepositoryProvider)
+              .linkTicket(created.ticketPath, pendingSpace.id);
+        } on Object {
+          // El usuario puede vincularlo a mano desde el detalle del ticket.
+        }
       }
       // Personas frecuentes: todas menos el anfitrión (índice 0).
       if (user?.isFullAccount ?? false) {

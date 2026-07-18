@@ -1450,6 +1450,258 @@ abstract class AppLocalizations {
   /// **'Confirmará {name} al recibir el dinero'**
   String settlementAwaitsReceiver(String name);
 
+  /// No description provided for @spacesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Espacios'**
+  String get spacesTitle;
+
+  /// No description provided for @spacesCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear espacio'**
+  String get spacesCreate;
+
+  /// No description provided for @spacesEmptyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no tienes espacios'**
+  String get spacesEmptyTitle;
+
+  /// No description provided for @spacesEmptyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Un espacio agrupa los gastos de un viaje, un piso, una pareja o una peña. Crea uno e invita a tus amigos.'**
+  String get spacesEmptyBody;
+
+  /// No description provided for @spacesLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudieron cargar los espacios. Comprueba la conexión.'**
+  String get spacesLoadError;
+
+  /// No description provided for @spacesArchivedSection.
+  ///
+  /// In es, this message translates to:
+  /// **'Archivados ({count})'**
+  String spacesArchivedSection(int count);
+
+  /// No description provided for @spaceNameLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre del espacio'**
+  String get spaceNameLabel;
+
+  /// No description provided for @spaceNameHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Viaje a Lisboa, Piso, Peña…'**
+  String get spaceNameHint;
+
+  /// No description provided for @spaceEmojiLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Emoji (opcional)'**
+  String get spaceEmojiLabel;
+
+  /// No description provided for @spaceOwnerBadge.
+  ///
+  /// In es, this message translates to:
+  /// **'Propietario'**
+  String get spaceOwnerBadge;
+
+  /// No description provided for @spaceGone.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya no tienes acceso a este espacio.'**
+  String get spaceGone;
+
+  /// No description provided for @spaceMembersTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Miembros'**
+  String get spaceMembersTitle;
+
+  /// No description provided for @spaceMembersCount.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{1 miembro} other{{count} miembros}}'**
+  String spaceMembersCount(int count);
+
+  /// No description provided for @spaceEditName.
+  ///
+  /// In es, this message translates to:
+  /// **'Editar espacio'**
+  String get spaceEditName;
+
+  /// No description provided for @spaceArchive.
+  ///
+  /// In es, this message translates to:
+  /// **'Archivar'**
+  String get spaceArchive;
+
+  /// No description provided for @spaceReactivate.
+  ///
+  /// In es, this message translates to:
+  /// **'Reactivar'**
+  String get spaceReactivate;
+
+  /// No description provided for @spaceLeave.
+  ///
+  /// In es, this message translates to:
+  /// **'Salir del espacio'**
+  String get spaceLeave;
+
+  /// No description provided for @spaceLeaveBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Dejarás de ver este espacio. Los tickets, pagos e historial no se tocan.'**
+  String get spaceLeaveBody;
+
+  /// No description provided for @spaceInviteAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitar'**
+  String get spaceInviteAction;
+
+  /// No description provided for @spaceInviteSheetTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitar a un amigo'**
+  String get spaceInviteSheetTitle;
+
+  /// No description provided for @spaceInviteNoFriends.
+  ///
+  /// In es, this message translates to:
+  /// **'Aún no tienes amigos en Salda. Añádelos desde Buscar personas.'**
+  String get spaceInviteNoFriends;
+
+  /// No description provided for @spaceAlreadyMember.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya es miembro'**
+  String get spaceAlreadyMember;
+
+  /// No description provided for @spaceAlreadyInvited.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitado'**
+  String get spaceAlreadyInvited;
+
+  /// No description provided for @spacePendingInvites.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitaciones pendientes'**
+  String get spacePendingInvites;
+
+  /// No description provided for @spaceInviteCancel.
+  ///
+  /// In es, this message translates to:
+  /// **'Cancelar invitación'**
+  String get spaceInviteCancel;
+
+  /// No description provided for @spaceInviteText.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} te invita al espacio \"{space}\"'**
+  String spaceInviteText(String name, String space);
+
+  /// No description provided for @spaceInviteAccept.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirme'**
+  String get spaceInviteAccept;
+
+  /// No description provided for @spaceInviteReject.
+  ///
+  /// In es, this message translates to:
+  /// **'Rechazar'**
+  String get spaceInviteReject;
+
+  /// No description provided for @spaceTransferTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Transferir propiedad'**
+  String get spaceTransferTitle;
+
+  /// No description provided for @spaceTransferBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} pasará a ser quien administre este espacio. Tú seguirás como miembro.'**
+  String spaceTransferBody(String name);
+
+  /// No description provided for @spaceRemoveMemberTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar del espacio'**
+  String get spaceRemoveMemberTitle;
+
+  /// No description provided for @spaceRemoveMemberBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} dejará de ver este espacio. Sus tickets, pagos e historial no se tocan.'**
+  String spaceRemoveMemberBody(String name);
+
+  /// No description provided for @spaceTicketsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tickets del espacio'**
+  String get spaceTicketsTitle;
+
+  /// No description provided for @spaceTicketsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Aún no hay tickets vinculados. Crea uno desde aquí o vincula uno existente desde su detalle.'**
+  String get spaceTicketsEmpty;
+
+  /// No description provided for @spaceTicketUntitled.
+  ///
+  /// In es, this message translates to:
+  /// **'Ticket'**
+  String get spaceTicketUntitled;
+
+  /// No description provided for @spaceAddTicket.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir ticket'**
+  String get spaceAddTicket;
+
+  /// No description provided for @spaceActionError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo completar la acción. Inténtalo de nuevo.'**
+  String get spaceActionError;
+
+  /// No description provided for @spaceLinkTooltip.
+  ///
+  /// In es, this message translates to:
+  /// **'Espacio compartido'**
+  String get spaceLinkTooltip;
+
+  /// No description provided for @spaceLinkTo.
+  ///
+  /// In es, this message translates to:
+  /// **'Vincular a {name}'**
+  String spaceLinkTo(String name);
+
+  /// No description provided for @spaceUnlink.
+  ///
+  /// In es, this message translates to:
+  /// **'Desvincular del espacio'**
+  String get spaceUnlink;
+
+  /// No description provided for @spaceLinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Ticket vinculado al espacio'**
+  String get spaceLinked;
+
+  /// No description provided for @spaceUnlinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Ticket desvinculado'**
+  String get spaceUnlinked;
+
   /// No description provided for @profileTitle.
   ///
   /// In es, this message translates to:

@@ -83,10 +83,19 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
 **Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
-pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)** y **P3
-(amistades)** completos a nivel de código. P3 (ADR-027) añade una única relación
+pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)**, **P3
+(amistades)** y **P4 (espacios compartidos)** completos a nivel de código.
+P4 (ADR-028, rama claude/p4-spaces) añade el contenedor social único:
+`spaces/{id}` + membresías por UID sin rol persistido (el propietario único es
+`ownerUid` → transferencia atómica de UN doc), invitaciones con ID determinista
+`{spaceId}_{toUid}` (aceptar une y resuelve en el mismo batch; cancelada no se
+puede aceptar), archivar como única baja, y tickets vinculables (`spaceId`,
+máx. uno, resumen visible para miembros vía collection group; líneas/foto
+siguen siendo privadas de la sesión). Membresía ≠ amistad ≠ participación ≠
+deuda; sin balances consolidados todavía. Contrato: `docs/ESPACIOS.md`.
+P3 (ADR-027) añade una única relación
 canónica por pareja de UID, solicitudes transaccionales e idempotentes, listas y
-perfil público en tiempo real y Rules de mínimo privilegio. No incluye espacios,
+perfil público en tiempo real y Rules de mínimo privilegio. No incluye
 grupos permanentes, chat, actividad ni notificaciones. Contrato:
 `docs/AMISTADES.md`. P2.2 (ADR-026) sustituye el peso ambiguo para documentos
 nuevos por
@@ -421,9 +430,11 @@ firebase CLI → keyring del SO del desarrollador.
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. Validar P1, P2 y P3 en un dispositivo Android: email real, deep link de verificación,
-   recuperación, Google, conversión de invitado sin cambio de UID, alta de perfil con
-   propuesta de username, edición, búsqueda y flujo de amistades entre dos cuentas.
+1. Revisar y fusionar el PR de P4 (rama claude/p4-spaces → main) y validar
+   P1–P4 en un dispositivo Android: email real, verificación, Google, conversión
+   de invitado, perfil con propuesta de username, búsqueda, amistades entre dos
+   cuentas y espacios (crear, invitar, aceptar, tickets vinculados, transferir,
+   archivar).
 2. Replicar en producción los proveedores Email/Password, Anonymous y Google ya
    verificados en `salda-dev`; registrar también las huellas de firma release/Play.
 3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca

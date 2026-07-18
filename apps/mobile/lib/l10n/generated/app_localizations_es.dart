@@ -754,6 +754,156 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get spacesTitle => 'Espacios';
+
+  @override
+  String get spacesCreate => 'Crear espacio';
+
+  @override
+  String get spacesEmptyTitle => 'Todavía no tienes espacios';
+
+  @override
+  String get spacesEmptyBody =>
+      'Un espacio agrupa los gastos de un viaje, un piso, una pareja o una peña. Crea uno e invita a tus amigos.';
+
+  @override
+  String get spacesLoadError =>
+      'No se pudieron cargar los espacios. Comprueba la conexión.';
+
+  @override
+  String spacesArchivedSection(int count) {
+    return 'Archivados ($count)';
+  }
+
+  @override
+  String get spaceNameLabel => 'Nombre del espacio';
+
+  @override
+  String get spaceNameHint => 'Viaje a Lisboa, Piso, Peña…';
+
+  @override
+  String get spaceEmojiLabel => 'Emoji (opcional)';
+
+  @override
+  String get spaceOwnerBadge => 'Propietario';
+
+  @override
+  String get spaceGone => 'Ya no tienes acceso a este espacio.';
+
+  @override
+  String get spaceMembersTitle => 'Miembros';
+
+  @override
+  String spaceMembersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count miembros',
+      one: '1 miembro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get spaceEditName => 'Editar espacio';
+
+  @override
+  String get spaceArchive => 'Archivar';
+
+  @override
+  String get spaceReactivate => 'Reactivar';
+
+  @override
+  String get spaceLeave => 'Salir del espacio';
+
+  @override
+  String get spaceLeaveBody =>
+      'Dejarás de ver este espacio. Los tickets, pagos e historial no se tocan.';
+
+  @override
+  String get spaceInviteAction => 'Invitar';
+
+  @override
+  String get spaceInviteSheetTitle => 'Invitar a un amigo';
+
+  @override
+  String get spaceInviteNoFriends =>
+      'Aún no tienes amigos en Salda. Añádelos desde Buscar personas.';
+
+  @override
+  String get spaceAlreadyMember => 'Ya es miembro';
+
+  @override
+  String get spaceAlreadyInvited => 'Invitado';
+
+  @override
+  String get spacePendingInvites => 'Invitaciones pendientes';
+
+  @override
+  String get spaceInviteCancel => 'Cancelar invitación';
+
+  @override
+  String spaceInviteText(String name, String space) {
+    return '$name te invita al espacio \"$space\"';
+  }
+
+  @override
+  String get spaceInviteAccept => 'Unirme';
+
+  @override
+  String get spaceInviteReject => 'Rechazar';
+
+  @override
+  String get spaceTransferTitle => 'Transferir propiedad';
+
+  @override
+  String spaceTransferBody(String name) {
+    return '$name pasará a ser quien administre este espacio. Tú seguirás como miembro.';
+  }
+
+  @override
+  String get spaceRemoveMemberTitle => 'Eliminar del espacio';
+
+  @override
+  String spaceRemoveMemberBody(String name) {
+    return '$name dejará de ver este espacio. Sus tickets, pagos e historial no se tocan.';
+  }
+
+  @override
+  String get spaceTicketsTitle => 'Tickets del espacio';
+
+  @override
+  String get spaceTicketsEmpty =>
+      'Aún no hay tickets vinculados. Crea uno desde aquí o vincula uno existente desde su detalle.';
+
+  @override
+  String get spaceTicketUntitled => 'Ticket';
+
+  @override
+  String get spaceAddTicket => 'Añadir ticket';
+
+  @override
+  String get spaceActionError =>
+      'No se pudo completar la acción. Inténtalo de nuevo.';
+
+  @override
+  String get spaceLinkTooltip => 'Espacio compartido';
+
+  @override
+  String spaceLinkTo(String name) {
+    return 'Vincular a $name';
+  }
+
+  @override
+  String get spaceUnlink => 'Desvincular del espacio';
+
+  @override
+  String get spaceLinked => 'Ticket vinculado al espacio';
+
+  @override
+  String get spaceUnlinked => 'Ticket desvinculado';
+
+  @override
   String get profileTitle => 'Perfil público';
 
   @override

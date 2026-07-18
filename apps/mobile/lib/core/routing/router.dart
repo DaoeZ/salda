@@ -14,6 +14,8 @@ import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
 import '../../features/sessions/presentation/ticket_detail_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/spaces/presentation/space_detail_screen.dart';
+import '../../features/spaces/presentation/spaces_screen.dart';
 
 /// Rutas ANIDADAS bajo /home: navegar con go() a cualquier destino construye
 /// la pila completa (home debajo), así SIEMPRE hay "atrás" y nunca se queda
@@ -43,7 +45,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             location == '/home/profile' ||
             location == '/home/friends' ||
             location == '/home/people' ||
-            location.startsWith('/home/person/');
+            location.startsWith('/home/person/') ||
+            location.startsWith('/home/spaces');
         if (isSocialRoute) return '/home';
         if (location == '/register' || location.startsWith('/home')) {
           return null;
@@ -89,6 +92,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: 'person/:uid',
             builder: (_, state) =>
                 PublicProfileScreen(profileUid: state.pathParameters['uid']!),
+          ),
+          GoRoute(
+            path: 'spaces',
+            builder: (_, _) => const SpacesScreen(),
+            routes: [
+              GoRoute(
+                path: ':sid',
+                builder: (_, state) => SpaceDetailScreen(
+                  spaceId: state.pathParameters['sid']!,
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: 'settings',

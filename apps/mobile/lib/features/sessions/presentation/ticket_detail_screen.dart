@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../scan/data/receipt_storage.dart';
+import '../../spaces/data/spaces_repository.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
@@ -39,7 +40,10 @@ class TicketDetailScreen extends ConsumerWidget {
     final t = ticket.ticket;
 
     return Scaffold(
-      appBar: AppBar(title: Text(t.merchantName)),
+      appBar: AppBar(
+        title: Text(t.merchantName),
+        actions: [_SpaceLinkAction(ticket: t)],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(TokenSpacing.lg),
         children: [
@@ -67,6 +71,80 @@ class TicketDetailScreen extends ConsumerWidget {
           _TicketLines(ticketRef: ticket),
         ],
       ),
+    );
+  }
+}
+
+/// Vincular/desvincular el ticket a un espacio compartido (P4). Solo cambia
+/// el campo `spaceId` del ticket: participantes, asignaciones, balances y
+/// pagos quedan intactos. Máximo un espacio por ticket (el campo sobrescribe).
+class _SpaceLinkAction extends ConsumerStatefulWidget {
+  const _SpaceLinkAction({required this.ticket});
+
+  final SessionTicket ticket;
+
+  @override
+  ConsumerState<_SpaceLinkAction> createState() => _SpaceLinkActionState();
+}
+
+class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
+  // El TicketRef llega por `extra` (estático): reflejamos aquí el vínculo
+  // actual para que la acción responda sin recargar la pantalla.
+  String? _spaceId;
+
+  @override
+  void initState() {
+    super.initState();
+    _spaceId = widget.ticket.spaceId;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final spaces = ref.watch(mySpacesProvider).value ?? const [];
+    if (spaces.isEmpty && (_spaceId == null || _spaceId!.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    final linked = _spaceId != null && _spaceId!.isNotEmpty;
+    return PopupMenuButton<String>(
+      icon: Icon(
+        linked ? Icons.group_work : Icons.group_work_outlined,
+        color: linked ? Theme.of(context).colorScheme.primary : null,
+      ),
+      tooltip: l10n.spaceLinkTooltip,
+      onSelected: (value) async {
+        final messenger = ScaffoldMessenger.of(context);
+        final repo = ref.read(spacesRepositoryProvider);
+        try {
+          if (value == 'unlink') {
+            await repo.unlinkTicket(widget.ticket.path);
+            setState(() => _spaceId = null);
+            messenger.showSnackBar(
+              SnackBar(content: Text(l10n.spaceUnlinked)),
+            );
+          } else {
+            await repo.linkTicket(widget.ticket.path, value);
+            setState(() => _spaceId = value);
+            messenger.showSnackBar(SnackBar(content: Text(l10n.spaceLinked)));
+          }
+        } on Object {
+          messenger
+              .showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+        }
+      },
+      itemBuilder: (_) => [
+        for (final space in spaces)
+          if (space.isActive && space.id != _spaceId)
+            PopupMenuItem(
+              value: space.id,
+              child: Text(l10n.spaceLinkTo(space.name)),
+            ),
+        if (linked)
+          PopupMenuItem(
+            value: 'unlink',
+            child: Text(l10n.spaceUnlink),
+          ),
+      ],
     );
   }
 }

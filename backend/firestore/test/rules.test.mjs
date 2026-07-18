@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tests de la matriz de autorización de ESPECIFICACION.md §13.2 contra el
  * Emulator Suite. Cada celda de la matriz tiene su caso positivo y negativo.
  *
@@ -17,6 +17,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -38,6 +39,8 @@ const OTHER = 'other-guest-uid'; // anónimo que reclamó p3
 const STRANGER = 'stranger-uid'; // autenticado SIN guestAccess
 const UNVERIFIED = 'unverified-owner-uid';
 const SOCIAL_OUTSIDER = 'social-outsider-uid';
+const THIRD = 'third-uid'; // verificado con perfil, invitado a sp1 (P4)
+const FOURTH = 'fourth-uid'; // verificado con perfil, sin relación con sp1
 const CODE = 'SECRET-CODE-16CHARS';
 
 const authClaims = (uid) =>
@@ -170,6 +173,56 @@ async function seed() {
     });
     await setDoc(doc(f, 'usernames/alba'), {
       uid: STRANGER, createdAt: serverTimestamp(),
+    });
+    // P4: perfiles adicionales y espacios de prueba. El propietario de los
+    // espacios sembrados es SOCIAL_OUTSIDER (verificado CON perfil); OWNER
+    // se mantiene sin perfil para no interferir con los tests de P2.
+    for (const [uid, username] of [
+      [THIRD, 'tercero'], [FOURTH, 'cuarto'],
+    ]) {
+      await setDoc(doc(f, `profiles/${uid}`), {
+        displayName: username, displayNameLower: username,
+        username, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+      await setDoc(doc(f, `usernames/${username}`), {
+        uid, createdAt: serverTimestamp(),
+      });
+    }
+    // sp1: activo; SOCIAL_OUTSIDER propietario, STRANGER y OWNER miembros.
+    await setDoc(doc(f, 'spaces/sp1'), {
+      name: 'Viaje', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 1,
+    });
+    await setDoc(doc(f, 'spaces/sp1/members/' + SOCIAL_OUTSIDER), {
+      uid: SOCIAL_OUTSIDER, joinedAt: serverTimestamp(),
+    });
+    await setDoc(doc(f, 'spaces/sp1/members/' + STRANGER), {
+      uid: STRANGER, joinedAt: serverTimestamp(),
+    });
+    await setDoc(doc(f, 'spaces/sp1/members/' + OWNER), {
+      uid: OWNER, joinedAt: serverTimestamp(),
+    });
+    // sp2: archivado (mismo owner).
+    await setDoc(doc(f, 'spaces/sp2'), {
+      name: 'Antiguo', ownerUid: SOCIAL_OUTSIDER, status: 'archived',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 1,
+    });
+    await setDoc(doc(f, 'spaces/sp2/members/' + SOCIAL_OUTSIDER), {
+      uid: SOCIAL_OUTSIDER, joinedAt: serverTimestamp(),
+    });
+    // Invitación pendiente a THIRD para sp1.
+    await setDoc(doc(f, `spaceInvites/sp1_${THIRD}`), {
+      spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+      toUid: THIRD, status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    // Ticket ya vinculado a sp1 (lectura de miembros vía collection group).
+    await setDoc(doc(f, `${S}/accounts/a1/tickets/t3`), {
+      kind: 'manual', grandTotal: 700, paidByParticipantId: 'p1',
+      spaceId: 'sp1', merchant: { name: 'Cena grupo' },
     });
   });
 }
@@ -874,6 +927,209 @@ describe('users', () => {
       { displayName: 'Pendiente' }));
     await assertSucceeds(setDoc(doc(db(STRANGER), `users/${STRANGER}`),
       { displayName: 'Verificada' }));
+  });
+});
+
+// ─── Espacios compartidos (P4) ──────────────────────────────────────────
+describe('spaces', () => {
+  // El owner de los espacios sembrados necesita su perfil público (P3 lo
+  // siembra igual en sus suites): canUseSocial lo exige.
+  beforeEach(seedSocialProfiles);
+
+  const spaceDoc = () => ({
+    name: 'Piso',
+    ownerUid: FOURTH,
+    status: 'active',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+  });
+
+  const createSpace = (f, uid, spaceId, overrides = {}) => {
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${spaceId}`),
+      { ...spaceDoc(), ownerUid: uid, ...overrides });
+    batch.set(doc(f, `spaces/${spaceId}/members/${uid}`), {
+      uid, joinedAt: serverTimestamp(),
+    });
+    return batch.commit();
+  };
+
+  it('cuenta completa crea espacio + membresía owner en batch', () =>
+    assertSucceeds(createSpace(db(FOURTH), FOURTH, 'nuevo')));
+
+  it('espacio sin membresía owner en el batch: denegado', () =>
+    assertFails(setDoc(doc(db(FOURTH), 'spaces/suelto'), spaceDoc())));
+
+  it('anónimos, no verificados y cuentas sin perfil no crean espacios',
+      async () => {
+    await assertFails(createSpace(db(GUEST), GUEST, 'gx'));
+    await assertFails(createSpace(db(UNVERIFIED), UNVERIFIED, 'ux'));
+    await assertFails(
+      createSpace(db('noprofile-uid'), 'noprofile-uid', 'nx'));
+  });
+
+  it('lee un espacio SOLO quien es miembro', async () => {
+    await assertSucceeds(getDoc(doc(db(SOCIAL_OUTSIDER), 'spaces/sp1')));
+    await assertSucceeds(getDoc(doc(db(STRANGER), 'spaces/sp1')));
+    await assertFails(getDoc(doc(db(FOURTH), 'spaces/sp1')));
+  });
+
+  it('collection group: cada uno lista SOLO sus membresías', async () => {
+    await assertSucceeds(getDocs(query(
+      collectionGroup(db(STRANGER), 'members'),
+      where('uid', '==', STRANGER))));
+    await assertFails(getDocs(query(
+      collectionGroup(db(FOURTH), 'members'),
+      where('uid', '==', STRANGER))));
+  });
+
+  it('el owner edita nombre y archiva/reactiva; un miembro no', async () => {
+    const owner = db(SOCIAL_OUTSIDER);
+    await assertSucceeds(updateDoc(doc(owner, 'spaces/sp1'),
+      { name: 'Viaje 2026', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(owner, 'spaces/sp1'),
+      { status: 'archived', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(owner, 'spaces/sp1'),
+      { status: 'active', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(STRANGER), 'spaces/sp1'),
+      { name: 'Golpe', updatedAt: serverTimestamp() }));
+  });
+
+  it('transferencia atómica (un doc: ownerUid) a un miembro activo', async () => {
+    await assertSucceeds(updateDoc(doc(db(SOCIAL_OUTSIDER), 'spaces/sp1'),
+      { ownerUid: STRANGER, updatedAt: serverTimestamp() }));
+    // El anterior owner ya no puede administrar; el nuevo, sí.
+    await assertFails(updateDoc(doc(db(SOCIAL_OUTSIDER), 'spaces/sp1'),
+      { name: 'Golpe', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(db(STRANGER), 'spaces/sp1'),
+      { name: 'Nuevo rumbo', updatedAt: serverTimestamp() }));
+  });
+
+  it('transferencia a un NO-miembro o por un no-owner: denegada', async () => {
+    await assertFails(updateDoc(doc(db(SOCIAL_OUTSIDER), 'spaces/sp1'),
+      { ownerUid: FOURTH, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(STRANGER), 'spaces/sp1'),
+      { ownerUid: STRANGER, updatedAt: serverTimestamp() }));
+  });
+
+  it('no hay borrado de espacios (archivar es la única baja)', () =>
+    assertFails(deleteDoc(doc(db(SOCIAL_OUTSIDER), 'spaces/sp1'))));
+
+  it('el owner invita a una cuenta con perfil que no es miembro', () =>
+    assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${FOURTH}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: FOURTH, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })));
+
+  it('invitaciones inválidas: id no canónico, miembro, no-owner, archivado',
+      async () => {
+    const base = {
+      spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+      toUid: FOURTH, status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceInvites/otro-id'), base));
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${STRANGER}`),
+      { ...base, toUid: STRANGER }));
+    await assertFails(setDoc(
+      doc(db(STRANGER), `spaceInvites/sp1_${FOURTH}`),
+      { ...base, fromUid: STRANGER }));
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp2_${FOURTH}`),
+      { ...base, spaceId: 'sp2', spaceName: 'Antiguo' }));
+  });
+
+  it('aceptar: el receptor resuelve la invitación Y se une en el batch',
+      async () => {
+    const f = db(THIRD);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/sp1_${THIRD}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${THIRD}`), {
+      uid: THIRD, joinedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('unirse sin resolver la invitación (o sin invitación): denegado',
+      async () => {
+    await assertFails(setDoc(doc(db(THIRD), `spaces/sp1/members/${THIRD}`), {
+      uid: THIRD, joinedAt: serverTimestamp(),
+    }));
+    await assertFails(setDoc(doc(db(FOURTH), `spaces/sp1/members/${FOURTH}`), {
+      uid: FOURTH, joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('nadie acepta ni rechaza una invitación ajena', async () => {
+    await assertFails(updateDoc(doc(db(STRANGER), `spaceInvites/sp1_${THIRD}`),
+      { status: 'rejected', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
+      { status: 'accepted', updatedAt: serverTimestamp() }));
+  });
+
+  it('rechazo del receptor, cancelación del owner y reenvío', async () => {
+    await assertSucceeds(updateDoc(doc(db(THIRD), `spaceInvites/sp1_${THIRD}`),
+      { status: 'rejected', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
+      { status: 'pending', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
+      { status: 'cancelled', updatedAt: serverTimestamp() }));
+    // Cancelada: el receptor ya no puede aceptarla (ni unirse).
+    const f = db(THIRD);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/sp1_${THIRD}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${THIRD}`), {
+      uid: THIRD, joinedAt: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+  });
+
+  it('salir (miembro), expulsión (owner) y límites', async () => {
+    // El miembro sale por sí mismo.
+    await assertSucceeds(
+      deleteDoc(doc(db(STRANGER), `spaces/sp1/members/${STRANGER}`)));
+    // El owner NO puede borrarse a sí mismo (transferir antes).
+    await assertFails(deleteDoc(doc(
+      db(SOCIAL_OUTSIDER), `spaces/sp1/members/${SOCIAL_OUTSIDER}`)));
+    // Un tercero no expulsa a nadie.
+    await assertFails(
+      deleteDoc(doc(db(FOURTH), `spaces/sp1/members/${STRANGER}`)));
+  });
+
+  it('el owner expulsa a un miembro', () =>
+    assertSucceeds(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${STRANGER}`))));
+
+  it('tickets vinculados: los miembros del espacio leen el resumen', async () => {
+    await assertSucceeds(getDocs(query(
+      collectionGroup(db(STRANGER), 'tickets'),
+      where('spaceId', '==', 'sp1'))));
+    await assertFails(getDocs(query(
+      collectionGroup(db(FOURTH), 'tickets'),
+      where('spaceId', '==', 'sp1'))));
+  });
+
+  it('vincular ticket: solo a un espacio del que el dueño es miembro',
+      async () => {
+    await assertSucceeds(updateDoc(
+      doc(db(OWNER), `${S}/accounts/a1/tickets/t1`), { spaceId: 'sp1' }));
+    // Desvincular siempre es seguro.
+    await assertSucceeds(updateDoc(
+      doc(db(OWNER), `${S}/accounts/a1/tickets/t1`), { spaceId: '' }));
+    // Espacio del que NO es miembro: denegado.
+    await assertSucceeds(createSpace(db(FOURTH), FOURTH, 'ajeno'));
+    await assertFails(updateDoc(
+      doc(db(OWNER), `${S}/accounts/a1/tickets/t1`), { spaceId: 'ajeno' }));
   });
 });
 

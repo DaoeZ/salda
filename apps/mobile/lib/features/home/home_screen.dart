@@ -35,12 +35,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text(Brand.appName),
         actions: [
-          if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false)
+          if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false) ...[
+            IconButton(
+              tooltip: l10n.spacesTitle,
+              onPressed: () => context.push('/home/spaces'),
+              icon: const Icon(Icons.group_work_outlined),
+            ),
             IconButton(
               tooltip: l10n.friendsTitle,
               onPressed: () => context.push('/home/friends'),
               icon: const Icon(Icons.people_outline),
             ),
+          ],
           IconButton(
             tooltip: l10n.settingsTitle,
             onPressed: () => context.push('/home/settings'),

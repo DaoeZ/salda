@@ -299,6 +299,7 @@ class FirestoreSessionRepository implements SessionRepository {
                 'byItem' => SplitMode.byItem,
                 _ => null,
               },
+              spaceId: d.data()['spaceId'] as String?,
             ),
         ],
       );

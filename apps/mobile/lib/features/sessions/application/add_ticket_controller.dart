@@ -7,6 +7,7 @@ import '../../ai/application/ai_analysis_controller.dart'
 import '../../review/application/draft_store.dart';
 import '../../review/application/review_draft.dart';
 import '../../scan/data/receipt_storage.dart';
+import '../../spaces/data/spaces_repository.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
 
@@ -73,6 +74,18 @@ class AddTicketController extends Notifier<AsyncValue<void>> {
         final store = ref.read(receiptImageStoreProvider);
         await store.cacheLocalOriginal(ticketPath, imagePath);
         unawaited(store.upload(ticketPath));
+      }
+      // Vínculo diferido "desde el espacio" (P4), igual que al crear sesión.
+      final pendingSpace =
+          ref.read(pendingSpaceLinkProvider.notifier).consume();
+      if (pendingSpace != null) {
+        try {
+          await ref
+              .read(spacesRepositoryProvider)
+              .linkTicket(ticketPath, pendingSpace.id);
+        } on Object {
+          // Vinculable a mano desde el detalle del ticket.
+        }
       }
       ref.read(reviewDraftProvider.notifier).discard();
       ref.invalidate(savedDraftProvider);

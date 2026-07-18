@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.6 · **Fecha:** 2026-07-18 · **Changelog:** v1.6 — P3 amistades
+**Versión:** 1.7 · **Fecha:** 2026-07-18 · **Changelog:** v1.7 — P4 espacios
+compartidos: contenedor social único con propietario en un solo campo,
+invitaciones deterministas y tickets vinculables (ADR-028). v1.6 — P3 amistades
 canónicas por pareja de UID, transacciones idempotentes y seguridad social
 (ADR-027). v1.5 — P2.2 unidades
 físicas independientes, compatibilidad versionada y configuración dev/release
@@ -1183,6 +1185,36 @@ tickets, balances o pagos. Grupos permanentes, chat, actividad y notificaciones
 siguen fuera. Contrato detallado en `docs/AMISTADES.md`.
 **Revisión:** cuando se implemente la eliminación definitiva de cuentas, añadir
 limpieza autoritativa de relaciones canónicas sin tocar el historial económico.
+
+### ADR-028: Espacios compartidos con propietario en un solo campo
+**Estado:** Aceptada · **Fecha:** 2026-07-18 (P4)
+**Contexto:** hace falta un contenedor social para organizar tickets entre
+varias personas (pareja, piso, viaje, peña) con UN único modelo, sin duplicar
+sistemas para relaciones de dos y sin acoplar membresía, amistad,
+participación en tickets ni deuda.
+**Decisión:** [HECHO] `spaces/{id}` (name, avatarEmoji?, ownerUid, status
+active|archived, timestamps, schemaVersion) + `members/{uid}` ({uid,
+joinedAt}) + `spaceInvites/{spaceId}_{toUid}` con ID determinista y estados
+pending|accepted|rejected|cancelled. **El rol no se persiste**: el
+propietario único es `ownerUid` y "miembro" es tener doc de membresía —
+transferir es actualizar UN documento (atómico por definición, a miembro
+activo validado por Rules); un rol persistido exigiría batches multi-doc
+imposibles de validar (get() sobre docs del propio batch falla en Rules).
+Aceptar invitación une y resuelve en el mismo batch (getAfter); cancelada no
+se puede aceptar; reenvío reutiliza el doc. El owner no sale sin transferir
+o archivar; archivar es la única baja (sin borrados destructivos). Tickets:
+`spaceId` opcional en el doc del ticket (máx. un espacio, compatibilidad
+total con tickets antiguos); los miembros leen el RESUMEN vía collection
+group en tiempo real; líneas/foto/sesión siguen siendo privadas de quien ya
+tiene acceso; vincula solo el dueño de la sesión si es miembro del espacio.
+Dos fieldOverrides de collection group (members.uid, tickets.spaceId).
+**Consecuencias:** todo por UID (renombrar username no toca nada); eliminar
+amistad no expulsa de espacios ni viceversa; salir/expulsar borra solo la
+membresía y jamás datos económicos; P4 no calcula dinero — los balances
+consolidados por espacio serán un cambio de recompute en su propia fase.
+Contrato en `docs/ESPACIOS.md`.
+**Revisión:** al llegar los balances consolidados, decidir si el espacio
+referencia sesiones completas además de tickets sueltos.
 
 ---
 
