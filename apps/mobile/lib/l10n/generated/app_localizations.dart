@@ -1954,6 +1954,54 @@ abstract class AppLocalizations {
   /// **'No se pudo actualizar la relación. Comprueba tu conexión e inténtalo de nuevo.'**
   String get friendActionError;
 
+  /// No description provided for @friendErrorUnverified.
+  ///
+  /// In es, this message translates to:
+  /// **'Verifica tu correo antes de usar las amistades.'**
+  String get friendErrorUnverified;
+
+  /// No description provided for @friendErrorProfileRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Completa tu perfil antes de enviar solicitudes.'**
+  String get friendErrorProfileRequired;
+
+  /// No description provided for @friendErrorRequestExists.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya existe una solicitud de amistad entre estas cuentas.'**
+  String get friendErrorRequestExists;
+
+  /// No description provided for @friendErrorAlreadyFriends.
+  ///
+  /// In es, this message translates to:
+  /// **'Estas cuentas ya son amigas.'**
+  String get friendErrorAlreadyFriends;
+
+  /// No description provided for @friendErrorPermissionDenied.
+  ///
+  /// In es, this message translates to:
+  /// **'Firebase ha rechazado la operación. Actualiza la app o vuelve a iniciar sesión.'**
+  String get friendErrorPermissionDenied;
+
+  /// No description provided for @friendErrorServiceUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'El servicio de amistades no está disponible en este entorno.'**
+  String get friendErrorServiceUnavailable;
+
+  /// No description provided for @friendErrorNetwork.
+  ///
+  /// In es, this message translates to:
+  /// **'No hay conexión con Firebase. Revisa tu red e inténtalo de nuevo.'**
+  String get friendErrorNetwork;
+
+  /// No description provided for @friendErrorUnexpected.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo actualizar la relación por un error inesperado.'**
+  String get friendErrorUnexpected;
+
   /// No description provided for @friendProfileUnavailable.
   ///
   /// In es, this message translates to:

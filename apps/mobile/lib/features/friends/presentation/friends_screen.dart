@@ -9,6 +9,7 @@ import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/profile_avatar.dart';
 import '../data/friendship_repository.dart';
 import '../domain/friendship.dart';
+import 'friendship_error_text.dart';
 
 class FriendsScreen extends ConsumerWidget {
   const FriendsScreen({super.key});
@@ -214,10 +215,14 @@ class _RelationshipCardState extends ConsumerState<_RelationshipCard> {
     setState(() => _busy = true);
     try {
       await action();
-    } on Object {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).friendActionError)),
+        SnackBar(
+          content: Text(
+            friendshipErrorText(AppLocalizations.of(context), error),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

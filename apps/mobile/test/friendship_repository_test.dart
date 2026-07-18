@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/features/friends/data/friendship_repository.dart';
@@ -182,5 +183,60 @@ void main() {
         );
       },
     );
+  });
+  group('errores operativos', () {
+    test('refresca el token antes de crear una solicitud', () async {
+      var refreshes = 0;
+      final repository = FriendshipRepository(
+        firestore: firestore,
+        uid: () => 'uid-a',
+        isFullAccount: () => true,
+        refreshAccount: () async {
+          refreshes++;
+          return true;
+        },
+      );
+
+      await repository.sendRequest('uid-b');
+
+      expect(refreshes, 1);
+    });
+
+    test('bloquea una escritura si el token sigue sin verificar', () async {
+      final repository = FriendshipRepository(
+        firestore: firestore,
+        uid: () => 'uid-a',
+        isFullAccount: () => true,
+        refreshAccount: () async => false,
+      );
+
+      await expectLater(
+        repository.sendRequest('uid-b'),
+        throwsA(
+          isA<FriendshipFailure>().having(
+            (failure) => failure.code,
+            'code',
+            FriendshipFailureCode.unverifiedAccount,
+          ),
+        ),
+      );
+    });
+
+    test('permission-denied conserva el diagnóstico real', () {
+      final failure = mapFriendshipFirebaseFailure(
+        FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'),
+      );
+
+      expect(failure.code, FriendshipFailureCode.permissionDenied);
+      expect(failure.technicalCode, 'permission-denied');
+    });
+
+    test('unavailable se presenta como red y no como permisos', () {
+      final failure = mapFriendshipFirebaseFailure(
+        FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
+      );
+
+      expect(failure.code, FriendshipFailureCode.network);
+    });
   });
 }

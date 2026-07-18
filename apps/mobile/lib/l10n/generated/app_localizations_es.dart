@@ -1037,6 +1037,37 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo actualizar la relación. Comprueba tu conexión e inténtalo de nuevo.';
 
   @override
+  String get friendErrorUnverified =>
+      'Verifica tu correo antes de usar las amistades.';
+
+  @override
+  String get friendErrorProfileRequired =>
+      'Completa tu perfil antes de enviar solicitudes.';
+
+  @override
+  String get friendErrorRequestExists =>
+      'Ya existe una solicitud de amistad entre estas cuentas.';
+
+  @override
+  String get friendErrorAlreadyFriends => 'Estas cuentas ya son amigas.';
+
+  @override
+  String get friendErrorPermissionDenied =>
+      'Firebase ha rechazado la operación. Actualiza la app o vuelve a iniciar sesión.';
+
+  @override
+  String get friendErrorServiceUnavailable =>
+      'El servicio de amistades no está disponible en este entorno.';
+
+  @override
+  String get friendErrorNetwork =>
+      'No hay conexión con Firebase. Revisa tu red e inténtalo de nuevo.';
+
+  @override
+  String get friendErrorUnexpected =>
+      'No se pudo actualizar la relación por un error inesperado.';
+
+  @override
   String get friendProfileUnavailable => 'Perfil no disponible';
 
   @override

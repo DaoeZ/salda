@@ -6,17 +6,27 @@ import '../domain/friendship.dart';
 
 enum FriendshipFailureCode {
   accountRequired,
+  unverifiedAccount,
   profileRequired,
   targetUnavailable,
   selfRequest,
+  requestAlreadyExists,
+  alreadyFriends,
+  permissionDenied,
+  serviceUnavailable,
+  network,
   notAllowed,
   malformedData,
+  unexpected,
 }
 
 class FriendshipFailure implements Exception {
-  const FriendshipFailure(this.code);
+  const FriendshipFailure(this.code, {this.technicalCode});
 
   final FriendshipFailureCode code;
+
+  /// Código estable del SDK, útil para soporte sin registrar datos personales.
+  final String? technicalCode;
 }
 
 /// Fuente única de verdad social: `friendships/{uidMenor}~{uidMayor}`.
@@ -28,11 +38,18 @@ class FriendshipRepository {
     required this.firestore,
     required this.uid,
     required this.isFullAccount,
+    this.refreshAccount,
   });
 
   final FirebaseFirestore firestore;
   final String Function() uid;
   final bool Function() isFullAccount;
+
+  /// Refresca el usuario y su ID token antes de una escritura social.
+  ///
+  /// Firebase Auth puede conocer localmente que el correo está verificado y
+  /// mantener todavía un token anterior. Las Rules solo ven el token.
+  final Future<bool> Function()? refreshAccount;
 
   CollectionReference<Map<String, dynamic>> get _collection =>
       firestore.collection('friendships');
@@ -60,8 +77,11 @@ class FriendshipRepository {
         });
   }
 
-  Future<void> sendRequest(String otherUid) async {
-    _requireAccount();
+  Future<void> sendRequest(String otherUid) =>
+      _guard(() => _sendRequest(otherUid));
+
+  Future<void> _sendRequest(String otherUid) async {
+    await _prepareWrite();
     final currentUid = uid();
     if (currentUid == otherUid) {
       throw const FriendshipFailure(FriendshipFailureCode.selfRequest);
@@ -115,21 +135,24 @@ class FriendshipRepository {
     });
   }
 
-  Future<void> acceptRequest(String otherUid) =>
-      _resolvePending(otherUid, requireReceiver: true, accept: true);
+  Future<void> acceptRequest(String otherUid) => _guard(
+    () => _resolvePending(otherUid, requireReceiver: true, accept: true),
+  );
 
-  Future<void> rejectRequest(String otherUid) =>
-      _resolvePending(otherUid, requireReceiver: true, accept: false);
+  Future<void> rejectRequest(String otherUid) => _guard(
+    () => _resolvePending(otherUid, requireReceiver: true, accept: false),
+  );
 
-  Future<void> cancelRequest(String otherUid) =>
-      _resolvePending(otherUid, requireReceiver: false, accept: false);
+  Future<void> cancelRequest(String otherUid) => _guard(
+    () => _resolvePending(otherUid, requireReceiver: false, accept: false),
+  );
 
   Future<void> _resolvePending(
     String otherUid, {
     required bool requireReceiver,
     required bool accept,
   }) async {
-    _requireAccount();
+    await _prepareWrite();
     final currentUid = uid();
     final relationship = _document(otherUid);
     await firestore.runTransaction((transaction) async {
@@ -155,8 +178,11 @@ class FriendshipRepository {
     });
   }
 
-  Future<void> removeFriend(String otherUid) async {
-    _requireAccount();
+  Future<void> removeFriend(String otherUid) =>
+      _guard(() => _removeFriend(otherUid));
+
+  Future<void> _removeFriend(String otherUid) async {
+    await _prepareWrite();
     final currentUid = uid();
     final relationship = _document(otherUid);
     await firestore.runTransaction((transaction) async {
@@ -174,6 +200,46 @@ class FriendshipRepository {
   void _requireAccount() {
     if (!isFullAccount()) {
       throw const FriendshipFailure(FriendshipFailureCode.accountRequired);
+    }
+  }
+
+  Future<void> _prepareWrite() async {
+    _requireAccount();
+    final refresh = refreshAccount;
+    if (refresh == null) return;
+    try {
+      if (!await refresh()) {
+        throw const FriendshipFailure(FriendshipFailureCode.unverifiedAccount);
+      }
+    } on AuthFailure catch (error, stackTrace) {
+      final mapped = FriendshipFailure(
+        error.code == AuthFailureCode.network
+            ? FriendshipFailureCode.network
+            : FriendshipFailureCode.unexpected,
+        technicalCode: error.code.name,
+      );
+      Error.throwWithStackTrace(mapped, stackTrace);
+    }
+  }
+
+  Future<T> _guard<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on FriendshipFailure {
+      rethrow;
+    } on FirebaseException catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        mapFriendshipFirebaseFailure(error),
+        stackTrace,
+      );
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        FriendshipFailure(
+          FriendshipFailureCode.unexpected,
+          technicalCode: error.runtimeType.toString(),
+        ),
+        stackTrace,
+      );
     }
   }
 
@@ -220,8 +286,26 @@ final friendshipRepositoryProvider = Provider<FriendshipRepository>((ref) {
     firestore: FirebaseFirestore.instance,
     uid: () => user.uid,
     isFullAccount: () => user.isFullAccount,
+    refreshAccount: () =>
+        ref.read(authRepositoryProvider).refreshEmailVerification(),
   );
 });
+
+/// Traduce los códigos reales de Firestore sin disfrazar permisos como red.
+FriendshipFailure mapFriendshipFirebaseFailure(FirebaseException error) {
+  final code = switch (error.code) {
+    'unauthenticated' => FriendshipFailureCode.unverifiedAccount,
+    'permission-denied' => FriendshipFailureCode.permissionDenied,
+    'already-exists' => FriendshipFailureCode.requestAlreadyExists,
+    'unavailable' ||
+    'deadline-exceeded' ||
+    'network-request-failed' => FriendshipFailureCode.network,
+    'failed-precondition' ||
+    'unimplemented' => FriendshipFailureCode.serviceUnavailable,
+    _ => FriendshipFailureCode.unexpected,
+  };
+  return FriendshipFailure(code, technicalCode: error.code);
+}
 
 final friendshipsProvider = StreamProvider.autoDispose<List<Friendship>>((ref) {
   final user = ref.watch(currentAppUserProvider);
