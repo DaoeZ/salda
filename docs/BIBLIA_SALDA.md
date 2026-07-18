@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.5 · **Fecha:** 2026-07-17 · **Changelog:** v1.5 — P2.2 unidades
+**Versión:** 1.6 · **Fecha:** 2026-07-18 · **Changelog:** v1.6 — P3 amistades
+canónicas por pareja de UID, transacciones idempotentes y seguridad social
+(ADR-027). v1.5 — P2.2 unidades
 físicas independientes, compatibilidad versionada y configuración dev/release
 (ADR-026). v1.4 — P2.1 reparto
 por unidades (peso = unidades reclamadas, residual al pagador), selección del
@@ -901,8 +903,9 @@ a TODAS.
 16. Grupos persistentes: crear grupo sin gasto inicial; añadir gasto a grupo
     desde el FAB global (selector de grupo reciente) · M.
 17. Timeline enriquecido (quién marcó, quién editó, quién entró) · M.
-18. Perfil de usuario + avatar · S. 19. Amigos = personas frecuentes elevadas
-    (sugerencias entre grupos) · M.
+18. Perfil de usuario + avatar · S · **HECHO P2**. 19. Amistades canónicas por
+    UID, independientes de personas frecuentes y de relaciones económicas · M ·
+    **HECHO P3** (ADR-027).
 20. [Evaluar tras uso real] chat ligero por grupo (Firestore está hecho para
     esto; decidir con el principio de simplicidad en la mano).
 
@@ -1156,6 +1159,30 @@ sigue siendo autoritativo y los vectores dorados compartidos garantizan suma
 exacta y paridad. Contrato detallado en `docs/REPARTO_POR_UNIDADES.md`.
 **Revisión:** si una futura importación ofrece identificadores de lote/unidad
 reales, mapearlos a los ids estables existentes sin cambiar el motor.
+
+### ADR-027: Una relación social canónica por pareja de UID
+**Estado:** Aceptada · **Fecha:** 2026-07-18 (P3)
+**Contexto:** solicitudes separadas de una amistad final o documentos duplicados
+por usuario facilitan estados cruzados, requieren sincronización y permiten crear
+dos relaciones A↔B. Username y displayName son mutables y no son identidad.
+**Decisión:** [HECHO] una única fuente de verdad
+`friendships/{canonicalFriendshipId(uidA, uidB)}` con `memberUids` ordenados,
+roles requester/receiver, estado `pending|friends`, timestamps y
+`schemaVersion: 1`. El ID es la codificación hexadecimal de una serialización
+UTF-8 prefijada por longitudes; cliente y Rules la recalculan. Todas las
+mutaciones usan transacciones idempotentes. Una solicitud inversa acepta la
+pendiente existente; el receptor acepta/rechaza, el emisor cancela y cualquiera
+de los miembros elimina una amistad. La única query usa `arrayContains` sobre
+`memberUids`; perfiles y usernames se resuelven en tiempo real sin snapshots.
+**Seguridad:** solo cuentas no anónimas, verificadas y con perfil público pueden
+actuar. Rules valida ID, pareja, roles, campos, timestamps, transición e
+inmutabilidad; terceros no leen ni escriben. No se confía en la UI.
+**Consecuencias:** unicidad y simetría sin denormalización mutable ni índice
+compuesto. Eliminar el vínculo no borra ni modifica sesiones, participantes,
+tickets, balances o pagos. Grupos permanentes, chat, actividad y notificaciones
+siguen fuera. Contrato detallado en `docs/AMISTADES.md`.
+**Revisión:** cuando se implemente la eliminación definitiva de cuentas, añadir
+limpieza autoritativa de relaciones canónicas sin tocar el historial económico.
 
 ---
 

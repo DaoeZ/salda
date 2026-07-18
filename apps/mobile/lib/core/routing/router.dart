@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/ai/presentation/ai_providers_screen.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/friends/presentation/friends_screen.dart';
+import '../../features/friends/presentation/public_profile_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/profile/presentation/people_search_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -37,6 +39,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return location == '/verify-email' ? null : '/verify-email';
       }
       if (user.isAnonymous) {
+        final isSocialRoute =
+            location == '/home/profile' ||
+            location == '/home/friends' ||
+            location == '/home/people' ||
+            location.startsWith('/home/person/');
+        if (isSocialRoute) return '/home';
         if (location == '/register' || location.startsWith('/home')) {
           return null;
         }
@@ -72,9 +80,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: 'review', builder: (_, _) => const ReviewScreen()),
           GoRoute(path: 'profile', builder: (_, _) => const ProfileScreen()),
+          GoRoute(path: 'friends', builder: (_, _) => const FriendsScreen()),
           GoRoute(
             path: 'people',
             builder: (_, _) => const PeopleSearchScreen(),
+          ),
+          GoRoute(
+            path: 'person/:uid',
+            builder: (_, state) =>
+                PublicProfileScreen(profileUid: state.pathParameters['uid']!),
           ),
           GoRoute(
             path: 'settings',

@@ -1,7 +1,8 @@
 # Identidad y autenticación
 
 Estado: P1 implementado (2026-07-16); P2 identidad pública implementada
-(2026-07-17). Este documento describe el contrato operativo vigente;
+(2026-07-17); P3 amistades implementado a nivel de código (2026-07-18). Este
+documento describe el contrato operativo vigente;
 `docs/ESPECIFICACION.md` continúa congelada.
 
 ## Tipos de identidad
@@ -81,11 +82,23 @@ edgar_cantera) están en `packages/domain/lib/src/identity/`. El avatar sin foto
 se deriva siempre (iniciales + color FNV-1a del uid sobre `avatarPalette`). La
 búsqueda de personas (por @username o nombre) son dos queries de prefijo de
 campo único, sin índices compuestos. El detalle completo está en ADR-024 de la
-Biblia. Amigos, solicitudes y espacios compartidos quedan expresamente fuera:
-las reglas rechazan cualquier campo del perfil que aún no tenga fase.
+Biblia. P3 añade amistades sin introducir campos sociales en el perfil ni usar
+el username como clave; los espacios compartidos siguen fuera.
+
+## Amistades (P3)
+
+Solo una cuenta completa con perfil público puede usar amistades. Existe un único
+`friendships/{canonicalId}` por pareja de UID, con estados `pending` y `friends`.
+El emisor, receptor y los dos miembros se expresan siempre con UID; nombres y
+usernames se leen desde `profiles/{uid}` en tiempo real. Solicitudes cruzadas
+convergen de forma transaccional en amistad, y todas las resoluciones son
+idempotentes. Eliminar una amistad no toca ningún dato económico. Modelo,
+concurrencia, matriz de Rules y alcance están detallados en `docs/AMISTADES.md` y
+ADR-027 de la Biblia.
 
 ## Pruebas
 
-`auth_repository_test.dart`, `auth_screens_test.dart` y `app_smoke_test.dart`
-cubren operaciones, UX y router. La suite de Rules contrasta identidades verificada,
-pendiente y anónima, lectura heredada y agregados iniciales manipulados.
+`auth_repository_test.dart`, `auth_screens_test.dart`, `app_smoke_test.dart`,
+`friendship_repository_test.dart` y `friends_screen_test.dart` cubren operaciones,
+UX y router. La suite de Rules contrasta identidades verificada, pendiente y
+anónima, perfiles, relaciones sociales, lectura heredada y agregados manipulados.

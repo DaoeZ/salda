@@ -37,9 +37,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false)
             IconButton(
-              tooltip: l10n.searchPeopleTitle,
-              onPressed: () => context.push('/home/people'),
-              icon: const Icon(Icons.person_search_outlined),
+              tooltip: l10n.friendsTitle,
+              onPressed: () => context.push('/home/friends'),
+              icon: const Icon(Icons.people_outline),
             ),
           IconButton(
             tooltip: l10n.settingsTitle,

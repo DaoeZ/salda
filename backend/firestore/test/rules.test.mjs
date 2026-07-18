@@ -37,6 +37,7 @@ const GUEST = 'guest-uid'; // anónimo con guestAccess concedido
 const OTHER = 'other-guest-uid'; // anónimo que reclamó p3
 const STRANGER = 'stranger-uid'; // autenticado SIN guestAccess
 const UNVERIFIED = 'unverified-owner-uid';
+const SOCIAL_OUTSIDER = 'social-outsider-uid';
 const CODE = 'SECRET-CODE-16CHARS';
 
 const authClaims = (uid) =>
@@ -54,6 +55,23 @@ const db = (uid) =>
     : env.authenticatedContext(uid, authClaims(uid)).firestore();
 
 const S = 'sessions/s1';
+
+const friendshipId = (firstUid, secondUid) => {
+  const members = [firstUid, secondUid].sort();
+  const serialized = members.map((uid) => `${[...uid].length}:${uid}`).join('');
+  return Buffer.from(serialized, 'utf8').toString('hex');
+};
+
+const friendshipData = (requesterUid, receiverUid, overrides = {}) => ({
+  memberUids: [requesterUid, receiverUid].sort(),
+  requesterUid,
+  receiverUid,
+  status: 'pending',
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+  schemaVersion: 1,
+  ...overrides,
+});
 
 async function seed() {
   await env.clearFirestore();
@@ -152,6 +170,20 @@ async function seed() {
     });
     await setDoc(doc(f, 'usernames/alba'), {
       uid: STRANGER, createdAt: serverTimestamp(),
+    });
+  });
+}
+
+async function seedSocialProfiles() {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const f = ctx.firestore();
+    await setDoc(doc(f, `profiles/${OWNER}`), {
+      displayName: 'Edgar', displayNameLower: 'edgar', username: 'edgar',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), schemaVersion: 1,
+    });
+    await setDoc(doc(f, `profiles/${SOCIAL_OUTSIDER}`), {
+      displayName: 'Pedro', displayNameLower: 'pedro', username: 'pedro',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), schemaVersion: 1,
     });
   });
 }
@@ -272,6 +304,136 @@ describe('profiles/usernames', () => {
     await assertFails(deleteDoc(doc(db(OWNER), 'usernames/alba')));
     await assertFails(updateDoc(doc(db(STRANGER), 'usernames/alba'),
       { uid: STRANGER }));
+  });
+});
+
+// ─── Amistades (P3): relación canónica por pareja UID ─────────────────
+describe('friendships', () => {
+  beforeEach(seedSocialProfiles);
+
+  const id = () => friendshipId(OWNER, STRANGER);
+  const refFor = (uid = OWNER) => doc(db(uid), `friendships/${id()}`);
+
+  it('una cuenta completa con perfil crea una solicitud canónica', async () => {
+    await assertSucceeds(setDoc(refFor(), friendshipData(OWNER, STRANGER)));
+    const saved = await getDoc(refFor());
+    assert.equal(saved.data().status, 'pending');
+    assert.deepEqual(saved.data().memberUids, [OWNER, STRANGER].sort());
+  });
+
+  it('solo los participantes completos leen y la query exige arrayContains',
+      async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(
+      doc(ctx.firestore(), `friendships/${id()}`),
+      { ...friendshipData(OWNER, STRANGER), createdAt: new Date(), updatedAt: new Date() },
+    ));
+    await assertSucceeds(getDoc(refFor(OWNER)));
+    await assertSucceeds(getDoc(refFor(STRANGER)));
+    await assertFails(getDoc(refFor(SOCIAL_OUTSIDER)));
+    await assertFails(getDoc(refFor(GUEST)));
+    await assertSucceeds(getDocs(query(
+      collection(db(OWNER), 'friendships'),
+      where('memberUids', 'array-contains', OWNER),
+    )));
+    await assertFails(getDocs(collection(db(OWNER), 'friendships')));
+  });
+
+  it('el receptor acepta sin poder alterar la identidad del vínculo', async () => {
+    await assertSucceeds(setDoc(refFor(), friendshipData(OWNER, STRANGER)));
+    await assertSucceeds(updateDoc(refFor(STRANGER), {
+      status: 'friends', acceptedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(refFor(OWNER), {
+      status: 'pending', updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(refFor(STRANGER), {
+      requesterUid: STRANGER,
+      status: 'friends', acceptedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+  });
+
+  it('solo el receptor acepta; emisor y tercero no', async () => {
+    await assertSucceeds(setDoc(refFor(), friendshipData(OWNER, STRANGER)));
+    const change = {
+      status: 'friends', acceptedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    };
+    await assertFails(updateDoc(refFor(OWNER), change));
+    await assertFails(updateDoc(refFor(SOCIAL_OUTSIDER), change));
+  });
+
+  it('emisor cancela, receptor rechaza y roles ajenos no borran', async () => {
+    await assertSucceeds(setDoc(refFor(), friendshipData(OWNER, STRANGER)));
+    await assertFails(deleteDoc(refFor(SOCIAL_OUTSIDER)));
+    await assertSucceeds(deleteDoc(refFor(OWNER)));
+    await assertSucceeds(setDoc(refFor(), friendshipData(OWNER, STRANGER)));
+    await assertSucceeds(deleteDoc(refFor(STRANGER)));
+  });
+
+  it('cualquiera de los dos elimina la amistad y después se puede reenviar',
+      async () => {
+    await assertSucceeds(setDoc(refFor(), friendshipData(OWNER, STRANGER)));
+    await assertSucceeds(updateDoc(refFor(STRANGER), {
+      status: 'friends', acceptedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(deleteDoc(refFor(OWNER)));
+    await assertSucceeds(setDoc(refFor(STRANGER), friendshipData(STRANGER, OWNER)));
+  });
+
+  it('deniega anónimo, pendiente, cuenta sin perfil y suplantación', async () => {
+    await assertFails(setDoc(refFor(GUEST), friendshipData(GUEST, STRANGER)));
+    await assertFails(setDoc(refFor(UNVERIFIED), friendshipData(UNVERIFIED, STRANGER)));
+    await assertFails(setDoc(refFor(), friendshipData(STRANGER, OWNER)));
+    const noProfileId = friendshipId('verified-no-profile', STRANGER);
+    await assertFails(setDoc(
+      doc(db('verified-no-profile'), `friendships/${noProfileId}`),
+      friendshipData('verified-no-profile', STRANGER),
+    ));
+  });
+
+  it('deniega auto-solicitud, ID alternativo, miembros desordenados y extra',
+      async () => {
+    const selfId = friendshipId(OWNER, OWNER + '-other');
+    await assertFails(setDoc(
+      doc(db(OWNER), `friendships/${selfId}`),
+      friendshipData(OWNER, OWNER, { memberUids: [OWNER, OWNER] }),
+    ));
+    await assertFails(setDoc(
+      doc(db(OWNER), 'friendships/no-canonico'),
+      friendshipData(OWNER, STRANGER),
+    ));
+    await assertFails(setDoc(refFor(), friendshipData(OWNER, STRANGER, {
+      memberUids: [STRANGER, OWNER],
+    })));
+    await assertFails(setDoc(refFor(), friendshipData(OWNER, STRANGER, {
+      unexpected: true,
+    })));
+  });
+
+  it('deniega crear amistad directa, timestamps falsos y receptor sin perfil',
+      async () => {
+    await assertFails(setDoc(refFor(), friendshipData(OWNER, STRANGER, {
+      status: 'friends', acceptedAt: serverTimestamp(),
+    })));
+    await assertFails(setDoc(refFor(), friendshipData(OWNER, STRANGER, {
+      createdAt: new Date(0), updatedAt: new Date(0),
+    })));
+    const missing = 'missing-profile-uid';
+    await assertFails(setDoc(
+      doc(db(OWNER), `friendships/${friendshipId(OWNER, missing)}`),
+      friendshipData(OWNER, missing),
+    ));
+  });
+
+  it('invitados y no verificados no actualizan ni eliminan relaciones',
+      async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(
+      doc(ctx.firestore(), `friendships/${id()}`),
+      { ...friendshipData(OWNER, STRANGER), createdAt: new Date(), updatedAt: new Date() },
+    ));
+    await assertFails(updateDoc(refFor(GUEST), {
+      status: 'friends', acceptedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+    await assertFails(deleteDoc(refFor(UNVERIFIED)));
   });
 });
 

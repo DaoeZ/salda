@@ -43,6 +43,9 @@ la Emulator Suite con el proyecto `demo-salda` (no requiere proyecto real ni cre
 La política de identidad, conversión de invitados, configuración de Google y rollout
 de App Check se documentan en [docs/AUTENTICACION.md](docs/AUTENTICACION.md).
 
+El contrato canónico de solicitudes y amistades está en
+[docs/AMISTADES.md](docs/AMISTADES.md).
+
 El contrato de unidades físicas y compatibilidad está en
 [docs/REPARTO_POR_UNIDADES.md](docs/REPARTO_POR_UNIDADES.md). La separación de
 branding, URLs y builds dev/release está en [docs/ENTORNOS.md](docs/ENTORNOS.md).
