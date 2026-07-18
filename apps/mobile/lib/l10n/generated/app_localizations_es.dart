@@ -826,4 +826,79 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get searchPeopleEmpty => 'Sin resultados';
+
+  @override
+  String get searchPeopleError => 'No se pudo completar la búsqueda';
+
+  @override
+  String get friendsTitle => 'Amigos';
+
+  @override
+  String get friendsTabFriends => 'Amigos';
+
+  @override
+  String get friendsTabReceived => 'Recibidas';
+
+  @override
+  String get friendsTabSent => 'Enviadas';
+
+  @override
+  String get friendsEmpty => 'Todavía no tienes amigos';
+
+  @override
+  String get friendsEmptyBody => 'Busca personas y envía tu primera solicitud';
+
+  @override
+  String get friendRequestsReceivedEmpty => 'No tienes solicitudes pendientes';
+
+  @override
+  String get friendRequestsSentEmpty => 'No has enviado solicitudes';
+
+  @override
+  String get friendAdd => 'Añadir amigo';
+
+  @override
+  String get friendRequestSent => 'Solicitud enviada';
+
+  @override
+  String get friendAccept => 'Aceptar';
+
+  @override
+  String get friendReject => 'Rechazar';
+
+  @override
+  String get friendCancelRequest => 'Cancelar solicitud';
+
+  @override
+  String get friendFriendsStatus => 'Amigos';
+
+  @override
+  String get friendRemove => 'Eliminar amistad';
+
+  @override
+  String get friendRemoveTitle => '¿Eliminar esta amistad?';
+
+  @override
+  String get friendRemoveBody =>
+      'Solo se eliminará la relación social. Los tickets, balances y pagos no cambiarán.';
+
+  @override
+  String get friendActionError =>
+      'No se pudo actualizar la relación. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get friendProfileUnavailable => 'Perfil no disponible';
+
+  @override
+  String get friendProfileRequired =>
+      'Completa tu perfil antes de usar las amistades';
+
+  @override
+  String get friendProfileRequiredAction => 'Crear perfil';
+
+  @override
+  String get friendEditOwnProfile => 'Editar perfil';
+
+  @override
+  String get commonRetry => 'Reintentar';
 }

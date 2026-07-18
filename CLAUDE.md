@@ -82,8 +82,13 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 ## 2. Por dónde vamos: punto exacto y última sesión paso a paso
 
 **Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
-pública)**, **P2.1** y **P2.2 (unidades físicas + estabilidad)** completos a nivel
-de código. P2.2 (ADR-026) sustituye el peso ambiguo para documentos nuevos por
+pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)** y **P3
+(amistades)** completos a nivel de código. P3 (ADR-027) añade una única relación
+canónica por pareja de UID, solicitudes transaccionales e idempotentes, listas y
+perfil público en tiempo real y Rules de mínimo privilegio. No incluye espacios,
+grupos permanentes, chat, actividad ni notificaciones. Contrato:
+`docs/AMISTADES.md`. P2.2 (ADR-026) sustituye el peso ambiguo para documentos
+nuevos por
 unidades independientes (`assignment.schemaVersion: 2`), conserva P2.1 como
 lector histórico, corrige borrado/navegación, branding visible y separación de
 URLs dev/release. Contratos: `docs/REPARTO_POR_UNIDADES.md` y `docs/ENTORNOS.md`.
@@ -100,10 +105,11 @@ construcción, batch atómico validado con getAfter, reservados en domain y regl
 propuestas naturales de username en el registro (edgar → edgar27 → edgar_cantera),
 avatar derivado (iniciales + color FNV-1a del uid sobre avatarPalette), búsqueda por
 prefijo de @username y nombre (queries de campo único, sin composites) y pantallas
-/home/profile y /home/people + banner de Home para completar el perfil. Amigos,
-solicitudes, espacios compartidos, grupos, actividad y chat quedan expresamente FUERA
-(las reglas rechazan campos sin fase). El contrato vigente está en
-`docs/AUTENTICACION.md` (§Identidad pública) y ADR-024 de la Biblia.
+/home/profile y /home/people + banner de Home para completar el perfil. P3 reutiliza
+esa identidad pública para amistades basadas exclusivamente en UID; espacios
+compartidos, grupos permanentes, actividad y chat quedan expresamente fuera. Los
+contratos vigentes están en `docs/AUTENTICACION.md`, `docs/AMISTADES.md` y los
+ADR-024/ADR-027 de la Biblia.
 
 **Qué se hizo en la última sesión de trabajo, en orden:**
 1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
@@ -410,18 +416,19 @@ firebase CLI → keyring del SO del desarrollador.
 | `backend/firestore/firestore.rules` | Hoy deny-all; en M3, la matriz §13.2 |
 | `firebase.json` / `.firebaserc` | Emuladores, hosting, rutas de reglas; proyectos dev/prod |
 | `.github/workflows/ci.yml` | Qué verifica la CI (incluida la frescura de los `.g.`) |
+| `docs/AMISTADES.md` | Contrato P3: identidad canónica, concurrencia, UX y seguridad social |
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. Validar P1 y P2 en un dispositivo Android: email real, deep link de verificación,
+1. Validar P1, P2 y P3 en un dispositivo Android: email real, deep link de verificación,
    recuperación, Google, conversión de invitado sin cambio de UID, alta de perfil con
-   propuesta de username, edición y búsqueda de personas.
+   propuesta de username, edición, búsqueda y flujo de amistades entre dos cuentas.
 2. Replicar en producción los proveedores Email/Password, Anonymous y Google ya
    verificados en `salda-dev`; registrar también las huellas de firma release/Play.
 3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
    activar enforcement únicamente para un cliente.
-4. Siguiente fase social (P3, PENDIENTE DE APROBACIÓN): amistades y espacios
-   compartidos sobre la identidad pública de P2. No empezar sin revisión del usuario.
+4. Siguiente fase de producto: decidir con el usuario si priorizar espacios/grupos
+   permanentes u otra mejora. No extender P3 a chat o actividad por inercia.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 

@@ -92,6 +92,9 @@ class ProfileRepository {
   Stream<PublicProfile?> watchMyProfile() =>
       _profileDoc(uid()).snapshots().map(PublicProfile.fromSnapshot);
 
+  Stream<PublicProfile?> watchProfile(String profileUid) =>
+      _profileDoc(profileUid).snapshots().map(PublicProfile.fromSnapshot);
+
   Future<PublicProfile?> fetchProfile(String profileUid) async =>
       PublicProfile.fromSnapshot(await _profileDoc(profileUid).get());
 
@@ -198,15 +201,14 @@ class ProfileRepository {
   Future<QuerySnapshot<Map<String, dynamic>>> _prefixQuery(
     String field,
     String prefix,
-  ) =>
-      firestore
-          .collection('profiles')
-          .orderBy(field)
-          .startAt([prefix])
-          // \uf8ff (último code point útil): cierre del rango de prefijo.
-          .endAt(['$prefix\uf8ff'])
-          .limit(searchLimit)
-          .get();
+  ) => firestore
+      .collection('profiles')
+      .orderBy(field)
+      .startAt([prefix])
+      // \uf8ff (último code point útil): cierre del rango de prefijo.
+      .endAt(['$prefix\uf8ff'])
+      .limit(searchLimit)
+      .get();
 
   void _requireValid(String username) {
     final error = validateUsername(username);
@@ -231,3 +233,10 @@ final myProfileProvider = StreamProvider.autoDispose<PublicProfile?>((ref) {
   if (user == null || !user.isFullAccount) return Stream.value(null);
   return ref.watch(profileRepositoryProvider).watchMyProfile();
 });
+
+/// Perfil público ajeno en tiempo real. Los cambios de nombre o username se
+/// reflejan sin copiar snapshots en la relación de amistad.
+final publicProfileProvider = StreamProvider.autoDispose
+    .family<PublicProfile?, String>((ref, profileUid) {
+      return ref.watch(profileRepositoryProvider).watchProfile(profileUid);
+    });

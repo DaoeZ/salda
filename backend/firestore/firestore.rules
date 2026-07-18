@@ -41,6 +41,15 @@ service cloud.firestore {
       return isAnonymous() || isVerifiedAccount();
     }
 
+    // P3 social: verificación real + perfil público. La comprobación explícita
+    // de anónimo es defensa en profundidad aunque sus tokens normales nunca
+    // incluyan email_verified=true.
+    function canUseSocial() {
+      return isVerifiedAccount()
+        && !isAnonymous()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    }
+
     function sessionData(sid) {
       return get(/databases/$(database)/documents/sessions/$(sid)).data;
     }
@@ -175,6 +184,80 @@ service cloud.firestore {
       allow delete: if isVerifiedAccount()
         && resource.data.uid == request.auth.uid;
       allow update: if false;
+    }
+
+    // ── Amistades (P3): una fuente de verdad por pareja de UID ─────────
+    // El ID es el UTF-8 hexadecimal de los UID ordenados y serializados con
+    // longitud. Es reversible, no secreto: su objetivo es evitar colisiones.
+    // Cliente y Rules reproducen el mismo valor: no cabe una segunda relación
+    // A↔B con otro orden ni se confía en username/displayName.
+    function validFriendshipMembers(data, friendshipId) {
+      return data.memberUids is list
+        && data.memberUids.size() == 2
+        && data.memberUids[0] is string
+        && data.memberUids[1] is string
+        && data.memberUids[0].size() >= 1
+        && data.memberUids[0].size() <= 128
+        && data.memberUids[1].size() >= 1
+        && data.memberUids[1].size() <= 128
+        && data.memberUids[0] < data.memberUids[1]
+        && friendshipId == (
+          string(data.memberUids[0].size()) + ':' + data.memberUids[0]
+          + string(data.memberUids[1].size()) + ':' + data.memberUids[1]
+        ).toUtf8().toHexString().lower()
+        && data.requesterUid in data.memberUids
+        && data.receiverUid in data.memberUids
+        && data.requesterUid != data.receiverUid;
+    }
+
+    function validPendingFriendship(friendshipId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'memberUids', 'requesterUid', 'receiverUid', 'status',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'memberUids', 'requesterUid', 'receiverUid', 'status',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && validFriendshipMembers(data, friendshipId)
+        && data.status == 'pending'
+        && data.schemaVersion == 1
+        && data.requesterUid == request.auth.uid
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/profiles/$(data.receiverUid));
+    }
+
+    match /friendships/{friendshipId} {
+      allow read: if canUseSocial()
+        && request.auth.uid in resource.data.memberUids;
+
+      allow create: if canUseSocial()
+        && validPendingFriendship(friendshipId);
+
+      // Aceptar resuelve la solicitud en el MISMO documento. No existe una
+      // segunda amistad ni una vista mutable que pueda quedar desincronizada.
+      allow update: if canUseSocial()
+        && resource.data.status == 'pending'
+        && resource.data.receiverUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'acceptedAt', 'updatedAt'])
+        && request.resource.data.status == 'friends'
+        && request.resource.data.acceptedAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Pending: emisor cancela o receptor rechaza. Friends: cualquiera de
+      // los dos elimina solo el vínculo social, nunca datos económicos.
+      allow delete: if canUseSocial()
+        && (
+          (resource.data.status == 'pending'
+            && request.auth.uid in [
+              resource.data.requesterUid, resource.data.receiverUid
+            ])
+          || (resource.data.status == 'friends'
+            && request.auth.uid in resource.data.memberUids)
+        );
     }
 
     // ── Sesiones ────────────────────────────────────────────────────────

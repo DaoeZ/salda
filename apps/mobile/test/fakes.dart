@@ -4,6 +4,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 // flutter_riverpod no re-exporta Override en v3: viene del core.
 import 'package:riverpod/misc.dart' show Override;
 import 'package:salda_mobile/features/auth/data/auth_repository.dart';
+import 'package:salda_mobile/features/friends/data/friendship_repository.dart';
 import 'package:salda_mobile/features/people/data/frequent_people_repository.dart';
 import 'package:salda_mobile/features/profile/data/profile_repository.dart';
 import 'package:salda_mobile/features/sessions/data/firestore_session_repository.dart';
@@ -108,6 +109,13 @@ List<Override> loggedInOverrides({
     ),
     profileRepositoryProvider.overrideWithValue(
       ProfileRepository(firestore: fake, uid: () => 'owner'),
+    ),
+    friendshipRepositoryProvider.overrideWithValue(
+      FriendshipRepository(
+        firestore: fake,
+        uid: () => 'owner',
+        isFullAccount: () => true,
+      ),
     ),
   ];
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/profile_repository.dart';
@@ -15,8 +16,7 @@ class PeopleSearchScreen extends ConsumerStatefulWidget {
   const PeopleSearchScreen({super.key});
 
   @override
-  ConsumerState<PeopleSearchScreen> createState() =>
-      _PeopleSearchScreenState();
+  ConsumerState<PeopleSearchScreen> createState() => _PeopleSearchScreenState();
 }
 
 class _PeopleSearchScreenState extends ConsumerState<PeopleSearchScreen> {
@@ -24,6 +24,7 @@ class _PeopleSearchScreenState extends ConsumerState<PeopleSearchScreen> {
   Timer? _debounce;
   var _searching = false;
   var _searched = false;
+  var _searchFailed = false;
   List<PublicProfile> _results = const [];
 
   @override
@@ -40,19 +41,32 @@ class _PeopleSearchScreenState extends ConsumerState<PeopleSearchScreen> {
         _results = const [];
         _searched = false;
         _searching = false;
+        _searchFailed = false;
       });
       return;
     }
-    setState(() => _searching = true);
+    setState(() {
+      _searching = true;
+      _searchFailed = false;
+    });
     _debounce = Timer(const Duration(milliseconds: 350), () async {
-      final results =
-          await ref.read(profileRepositoryProvider).search(value);
-      if (!mounted || _query.text != value) return;
-      setState(() {
-        _results = results;
-        _searching = false;
-        _searched = true;
-      });
+      try {
+        final results = await ref.read(profileRepositoryProvider).search(value);
+        if (!mounted || _query.text != value) return;
+        setState(() {
+          _results = results;
+          _searching = false;
+          _searched = true;
+        });
+      } on Object {
+        if (!mounted || _query.text != value) return;
+        setState(() {
+          _results = const [];
+          _searching = false;
+          _searched = true;
+          _searchFailed = true;
+        });
+      }
     });
   }
 
@@ -79,35 +93,49 @@ class _PeopleSearchScreenState extends ConsumerState<PeopleSearchScreen> {
               )
             : null,
       ),
-      body: !_searched
+      body: _searchFailed
+          ? _Hint(
+              icon: Icons.cloud_off_outlined,
+              text: l10n.searchPeopleError,
+              theme: theme,
+            )
+          : !_searched
           ? _Hint(
               icon: Icons.person_search_outlined,
               text: l10n.searchPeopleStart,
               theme: theme,
             )
           : _results.isEmpty
-              ? _Hint(
-                  icon: Icons.search_off_outlined,
-                  text: l10n.searchPeopleEmpty,
-                  theme: theme,
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: TokenSpacing.sm,
+          ? _Hint(
+              icon: Icons.search_off_outlined,
+              text: l10n.searchPeopleEmpty,
+              theme: theme,
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: TokenSpacing.sm),
+              itemCount: _results.length,
+              itemBuilder: (_, index) {
+                final profile = _results[index];
+                return ListTile(
+                  onTap: () => context.push('/home/person/${profile.uid}'),
+                  leading: ProfileAvatar(
+                    seed: profile.uid,
+                    displayName: profile.displayName,
                   ),
-                  itemCount: _results.length,
-                  itemBuilder: (_, index) {
-                    final profile = _results[index];
-                    return ListTile(
-                      leading: ProfileAvatar(
-                        seed: profile.uid,
-                        displayName: profile.displayName,
-                      ),
-                      title: Text(profile.displayName),
-                      subtitle: Text('@${profile.username}'),
-                    );
-                  },
-                ),
+                  title: Text(
+                    profile.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '@${profile.username}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                );
+              },
+            ),
     );
   }
 }
@@ -121,22 +149,22 @@ class _Hint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(TokenSpacing.xl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 56, color: theme.colorScheme.outline),
-              const SizedBox(height: TokenSpacing.md),
-              Text(
-                text,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(TokenSpacing.xl),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 56, color: theme.colorScheme.outline),
+          const SizedBox(height: TokenSpacing.md),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    ),
+  );
 }

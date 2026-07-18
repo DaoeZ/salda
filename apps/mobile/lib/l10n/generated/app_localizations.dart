@@ -1587,6 +1587,150 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Sin resultados'**
   String get searchPeopleEmpty;
+
+  /// No description provided for @searchPeopleError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo completar la búsqueda'**
+  String get searchPeopleError;
+
+  /// No description provided for @friendsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Amigos'**
+  String get friendsTitle;
+
+  /// No description provided for @friendsTabFriends.
+  ///
+  /// In es, this message translates to:
+  /// **'Amigos'**
+  String get friendsTabFriends;
+
+  /// No description provided for @friendsTabReceived.
+  ///
+  /// In es, this message translates to:
+  /// **'Recibidas'**
+  String get friendsTabReceived;
+
+  /// No description provided for @friendsTabSent.
+  ///
+  /// In es, this message translates to:
+  /// **'Enviadas'**
+  String get friendsTabSent;
+
+  /// No description provided for @friendsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no tienes amigos'**
+  String get friendsEmpty;
+
+  /// No description provided for @friendsEmptyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Busca personas y envía tu primera solicitud'**
+  String get friendsEmptyBody;
+
+  /// No description provided for @friendRequestsReceivedEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'No tienes solicitudes pendientes'**
+  String get friendRequestsReceivedEmpty;
+
+  /// No description provided for @friendRequestsSentEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'No has enviado solicitudes'**
+  String get friendRequestsSentEmpty;
+
+  /// No description provided for @friendAdd.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir amigo'**
+  String get friendAdd;
+
+  /// No description provided for @friendRequestSent.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitud enviada'**
+  String get friendRequestSent;
+
+  /// No description provided for @friendAccept.
+  ///
+  /// In es, this message translates to:
+  /// **'Aceptar'**
+  String get friendAccept;
+
+  /// No description provided for @friendReject.
+  ///
+  /// In es, this message translates to:
+  /// **'Rechazar'**
+  String get friendReject;
+
+  /// No description provided for @friendCancelRequest.
+  ///
+  /// In es, this message translates to:
+  /// **'Cancelar solicitud'**
+  String get friendCancelRequest;
+
+  /// No description provided for @friendFriendsStatus.
+  ///
+  /// In es, this message translates to:
+  /// **'Amigos'**
+  String get friendFriendsStatus;
+
+  /// No description provided for @friendRemove.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar amistad'**
+  String get friendRemove;
+
+  /// No description provided for @friendRemoveTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Eliminar esta amistad?'**
+  String get friendRemoveTitle;
+
+  /// No description provided for @friendRemoveBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Solo se eliminará la relación social. Los tickets, balances y pagos no cambiarán.'**
+  String get friendRemoveBody;
+
+  /// No description provided for @friendActionError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo actualizar la relación. Comprueba tu conexión e inténtalo de nuevo.'**
+  String get friendActionError;
+
+  /// No description provided for @friendProfileUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'Perfil no disponible'**
+  String get friendProfileUnavailable;
+
+  /// No description provided for @friendProfileRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Completa tu perfil antes de usar las amistades'**
+  String get friendProfileRequired;
+
+  /// No description provided for @friendProfileRequiredAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear perfil'**
+  String get friendProfileRequiredAction;
+
+  /// No description provided for @friendEditOwnProfile.
+  ///
+  /// In es, this message translates to:
+  /// **'Editar perfil'**
+  String get friendEditOwnProfile;
+
+  /// No description provided for @commonRetry.
+  ///
+  /// In es, this message translates to:
+  /// **'Reintentar'**
+  String get commonRetry;
 }
 
 class _AppLocalizationsDelegate
