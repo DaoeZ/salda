@@ -1189,5 +1189,76 @@ describe('economic relations', () => {
   });
 });
 
+// ─── Actividad (P6): proyección de auditoría ────────────────────────────
+describe('activityEvents', () => {
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      // Evento con audiencia congelada: STRANGER y SOCIAL_OUTSIDER.
+      await setDoc(doc(f, 'activityEvents/ev1'), {
+        type: 'space_created', actorUid: SOCIAL_OUTSIDER,
+        memberUids: [SOCIAL_OUTSIDER, STRANGER], spaceId: 'sp1',
+        summary: { spaceName: 'Viaje' }, at: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'activityEvents/ev2'), {
+        type: 'payment_confirmed', actorUid: STRANGER,
+        memberUids: [STRANGER, THIRD], paymentId: 'pay1',
+        summary: { amount: 500, currency: 'EUR' }, at: serverTimestamp(),
+        schemaVersion: 1,
+      });
+    });
+  });
+
+  it('lee un evento SOLO quien está en su audiencia congelada', async () => {
+    await assertSucceeds(getDoc(doc(db(STRANGER), 'activityEvents/ev1')));
+    await assertSucceeds(getDoc(doc(db(THIRD), 'activityEvents/ev2')));
+    // THIRD es miembro actual de nada en ev1: fuera de audiencia, fuera.
+    await assertFails(getDoc(doc(db(THIRD), 'activityEvents/ev1')));
+    await assertFails(getDoc(doc(db(FOURTH), 'activityEvents/ev2')));
+  });
+
+  it('la query global (array-contains propio + orden) es demostrable', () =>
+    assertSucceeds(getDocs(query(
+      collection(db(STRANGER), 'activityEvents'),
+      where('memberUids', 'array-contains', STRANGER)))));
+
+  it('anónimos y no verificados no leen actividad', async () => {
+    await assertFails(getDoc(doc(db(GUEST), 'activityEvents/ev1')));
+    await assertFails(getDoc(doc(db(UNVERIFIED), 'activityEvents/ev1')));
+  });
+
+  it('ningún cliente escribe eventos (ni fraudulentos a nombre de otro)',
+      async () => {
+    await assertFails(setDoc(doc(db(STRANGER), 'activityEvents/falso'), {
+      type: 'payment_confirmed', actorUid: THIRD,
+      memberUids: [STRANGER, THIRD], summary: {},
+      at: serverTimestamp(), schemaVersion: 1,
+    }));
+    await assertFails(updateDoc(doc(db(STRANGER), 'activityEvents/ev1'),
+      { actorUid: STRANGER }));
+    await assertFails(deleteDoc(doc(db(STRANGER), 'activityEvents/ev1')));
+  });
+
+  it('P6: el owner marca removedBy antes de expulsar; nadie más', async () => {
+    // El owner del espacio sembrado (SOCIAL_OUTSIDER) marca a STRANGER.
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${STRANGER}`),
+      { removedBy: SOCIAL_OUTSIDER }));
+    // No puede marcarse a sí mismo (el owner no se expulsa).
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${SOCIAL_OUTSIDER}`),
+      { removedBy: SOCIAL_OUTSIDER }));
+    // Un miembro no marca a otro, ni con uid falso.
+    await assertFails(updateDoc(
+      doc(db(STRANGER), `spaces/sp1/members/${OWNER}`),
+      { removedBy: STRANGER }));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${STRANGER}`),
+      { removedBy: STRANGER }));
+  });
+});
+
 // Nota: assert está importado para fallos explícitos en helpers futuros.
 void assert;

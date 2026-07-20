@@ -275,6 +275,18 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // ── Actividad (P6, ADR-030): proyección de auditoría ───────────────
+    // La generan SOLO los triggers Admin; ningún cliente escribe ni puede
+    // fabricar eventos a nombre de otro. La audiencia va congelada en
+    // memberUids: expulsados conservan sus hechos, los miembros nuevos no
+    // heredan actividad anterior. Las queries siempre incluyen
+    // array-contains sobre el propio uid (así la regla es demostrable).
+    match /activityEvents/{eventId} {
+      allow read: if canUseSocial()
+        && request.auth.uid in resource.data.memberUids;
+      allow create, update, delete: if false;
+    }
+
     // ── Espacios compartidos (P4, ADR-028) ─────────────────────────────
     // spaces/{id} + members/{uid} + spaceInvites/{spaceId_toUid}.
     // Membresía ≠ amistad ≠ participación económica: expulsar o salir solo
@@ -366,8 +378,14 @@ service cloud.firestore {
                   .data.status == 'accepted')
           );
 
-        // La membresía no tiene campos mutables.
-        allow update: if false;
+        // Única mutación: el owner marca `removedBy` en el MISMO batch del
+        // borrado (P6 distingue así expulsión de salida voluntaria; Rules
+        // garantiza que el marcador es él y nunca el propio expulsado).
+        allow update: if isSpaceOwner(spaceId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['removedBy'])
+          && request.resource.data.removedBy == request.auth.uid
+          && memberUid != request.auth.uid;
 
         // Salir (nunca el owner: antes transfiere o archiva) o expulsión
         // por el owner. Solo borra el acceso social futuro.
