@@ -1,6 +1,7 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.7 · **Fecha:** 2026-07-18 · **Changelog:** v1.7 — P4 espacios
+**Versión:** 1.8 · **Fecha:** 2026-07-19 · **Changelog:** v1.8 — P5 relaciones
+económicas explicables, neteo bilateral y pagos confirmados (ADR-029). v1.7 — P4 espacios
 compartidos: contenedor social único con propietario en un solo campo,
 invitaciones deterministas y tickets vinculables (ADR-028). v1.6 — P3 amistades
 canónicas por pareja de UID, transacciones idempotentes y seguridad social
@@ -1216,6 +1217,32 @@ Contrato en `docs/ESPACIOS.md`.
 **Revisión:** al llegar los balances consolidados, decidir si el espacio
 referencia sesiones completas además de tickets sueltos.
 
+### ADR-029: Obligaciones derivadas y pagos bilaterales autoritativos
+**Estado:** Aceptada · **Fecha:** 2026-07-19 (P5)
+**Contexto:** los balances internos de una sesión usan participantes locales y
+simplificación multilateral. Un usuario registrado necesita una vista global
+por UID que sobreviva a cambios sociales y explique cada cifra sin crear otra
+verdad económica ni reescribir tickets al pagar.
+**Decisión:** [HECHO] `recompute` materializa `economicEntries` por ticket,
+pareja de UID y moneda desde el resultado final de SplitEngine. Es una vista
+reconstruible, con id determinista y escritura exclusiva Admin. `EconomicLedger`
+(Dart + espejo TypeScript + golden común) conserva deuda bruta en ambos sentidos,
+resta únicamente pagos confirmados y produce neteo bilateral, nunca multilateral.
+Los pagos humanos viven en `economicPayments`: creación y resolución mediante
+callables transaccionales, idempotencia, reserva de pendientes, pago parcial,
+asignación determinista a tickets y confirmación exclusiva del receptor. Un
+trigger congela el pago confirmado en las sesiones afectadas para que la UI
+legacy y P5 no permitan doble pago. Rules deja ambos roots en solo lectura para
+los UID participantes y exige cuenta completa; un owner de espacio no obtiene
+privilegios económicos.
+**Consecuencias:** amistad, username, membresía y deuda quedan desacoplados;
+salir o ser expulsado conserva historial. Las monedas se muestran por separado.
+Las proyecciones pueden repararse desde tickets y eventos, a costa de lecturas
+adicionales en recompute y dos callables dentro del techo global existente.
+Contrato detallado en `docs/RELACIONES_ECONOMICAS.md`.
+**Revisión:** medir coste/latencia antes de añadir índices o materializar un
+documento de saldo por usuario; P5 calcula esa vista en el cliente.
+
 ---
 
 <a name="parte-x"></a>
@@ -1251,6 +1278,7 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 |---|---|---|---|---|
 | Motor de reparto | spec §8, Biblia §26, `docs/REPARTO_POR_UNIDADES.md` | 006, 007, 025, 026 | `packages/domain/.../split_engine.dart` + espejo `backend/functions/src/domain/splitEngine.ts` | golden `split_engine.json`, propiedades en `split_engine_test.dart`, recompute y Rules |
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
+| Relaciones económicas | `docs/RELACIONES_ECONOMICAS.md` | 029 | `economic_ledger.dart` + `economicLedger.ts`, `economicPayments.ts`, `features/economy/**` | golden `economic_ledger.json`, tests de dominio/Functions/Flutter/Rules |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |
 | Contrato IA | spec §9, Biblia §29 | 011 | `packages/ai_providers/**` + `features/ai/**` | `ai_providers_test.dart` (10) + `ai_feature_test.dart` (6) |

@@ -1,7 +1,8 @@
 # Identidad y autenticación
 
 Estado: P1 implementado (2026-07-16); P2 identidad pública implementada
-(2026-07-17); P3 amistades implementado a nivel de código (2026-07-18). Este
+(2026-07-17); P3 amistades implementado y escritura robustecida contra tokens
+de verificación obsoletos (2026-07-19). Este
 documento describe el contrato operativo vigente;
 `docs/ESPECIFICACION.md` continúa congelada.
 

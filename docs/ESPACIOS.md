@@ -1,8 +1,8 @@
 # Espacios compartidos (P4)
 
-Estado: implementado a nivel de código (2026-07-18). Contrato vigente del
-contenedor social de gastos. No incluye balances consolidados, simplificación
-de deudas entre espacios, actividad, chat ni notificaciones (fases futuras).
+Estado: P4 validado y P5 integrado (2026-07-19). Contrato vigente del
+contenedor social de gastos. Los balances explicables por espacio se describen
+en `docs/RELACIONES_ECONOMICAS.md`; actividad, chat y notificaciones siguen fuera.
 
 ## Concepto
 
@@ -18,8 +18,9 @@ Separación estricta de conceptos:
 - **Membresía ≠ participación económica.** Los tickets siguen viviendo en
   sesiones con sus participantes por nombre; pertenecer a un espacio no te
   añade a ningún reparto.
-- **Membresía ≠ deuda.** P4 no calcula nada: el dinero sigue siendo de los
-  motores y `recompute`.
+- **Membresía ≠ deuda.** El dinero sigue siendo de los motores y `recompute`.
+  P5 filtra sus obligaciones derivadas por `spaceId`, pero salir, ser expulsado
+  o archivar nunca elimina la relación económica ni su historial.
 
 Todas las claves relacionales son UID. Username, nombre visible y avatar se
 leen de `profiles/{uid}` en tiempo real: cambiarlos no altera membresías ni
@@ -60,6 +61,9 @@ Decisiones clave:
 - **Archivar** oculta el espacio de la lista principal, conserva miembros,
   tickets e historial, bloquea invitaciones/edición/vínculos nuevos y es
   reversible. No existe el borrado de espacios en P4 (nada destructivo).
+  P5 permite consultar y liquidar una deuda ya originada porque el pago es
+  bilateral y no muta el espacio; no se pueden crear tickets nuevos mientras
+  el espacio permanezca archivado.
 - **Sin administradores**: solo propietario y miembro. No hay necesidad real
   todavía (lista negra de sobre-ingeniería de la Biblia).
 

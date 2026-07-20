@@ -2026,6 +2026,216 @@ abstract class AppLocalizations {
   /// **'Editar perfil'**
   String get friendEditOwnProfile;
 
+  /// No description provided for @economyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Economía'**
+  String get economyTitle;
+
+  /// No description provided for @economySummaryTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu balance'**
+  String get economySummaryTitle;
+
+  /// No description provided for @economyOwedToMe.
+  ///
+  /// In es, this message translates to:
+  /// **'Te deben'**
+  String get economyOwedToMe;
+
+  /// No description provided for @economyIOwe.
+  ///
+  /// In es, this message translates to:
+  /// **'Debes'**
+  String get economyIOwe;
+
+  /// No description provided for @economyNet.
+  ///
+  /// In es, this message translates to:
+  /// **'Saldo neto'**
+  String get economyNet;
+
+  /// No description provided for @economyRelationsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Relaciones abiertas'**
+  String get economyRelationsTitle;
+
+  /// No description provided for @economyEmptyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'No tienes saldos pendientes'**
+  String get economyEmptyTitle;
+
+  /// No description provided for @economyEmptyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuando un ticket vincule dos cuentas registradas, aquí podrás ver y explicar cada importe.'**
+  String get economyEmptyBody;
+
+  /// No description provided for @economyLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo cargar tu balance. Revisa la conexión y vuelve a intentarlo.'**
+  String get economyLoadError;
+
+  /// No description provided for @economyYouOwe.
+  ///
+  /// In es, this message translates to:
+  /// **'Debes a {name}'**
+  String economyYouOwe(String name);
+
+  /// No description provided for @economyOwesYou.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} te debe'**
+  String economyOwesYou(String name);
+
+  /// No description provided for @economySettledWith.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin saldo pendiente con {name}'**
+  String economySettledWith(String name);
+
+  /// No description provided for @economyDetailTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Balance con {name}'**
+  String economyDetailTitle(String name);
+
+  /// No description provided for @economyOriginalDebt.
+  ///
+  /// In es, this message translates to:
+  /// **'Deuda original'**
+  String get economyOriginalDebt;
+
+  /// No description provided for @economyTicketsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tickets que explican el saldo'**
+  String get economyTicketsTitle;
+
+  /// No description provided for @economyPaymentsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Pagos y liquidaciones'**
+  String get economyPaymentsTitle;
+
+  /// No description provided for @economyOutsideSpace.
+  ///
+  /// In es, this message translates to:
+  /// **'Fuera de espacios'**
+  String get economyOutsideSpace;
+
+  /// No description provided for @economyInSpace.
+  ///
+  /// In es, this message translates to:
+  /// **'Espacio vinculado'**
+  String get economyInSpace;
+
+  /// No description provided for @economyMarkPaid.
+  ///
+  /// In es, this message translates to:
+  /// **'Marcar como pagado'**
+  String get economyMarkPaid;
+
+  /// No description provided for @economyPaymentAmount.
+  ///
+  /// In es, this message translates to:
+  /// **'Importe pagado'**
+  String get economyPaymentAmount;
+
+  /// No description provided for @economyPaymentPending.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente de confirmación'**
+  String get economyPaymentPending;
+
+  /// No description provided for @economyPaymentConfirmed.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmado por el receptor'**
+  String get economyPaymentConfirmed;
+
+  /// No description provided for @economyPaymentCancelled.
+  ///
+  /// In es, this message translates to:
+  /// **'Cancelado'**
+  String get economyPaymentCancelled;
+
+  /// No description provided for @economyConfirmPayment.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmar recepción'**
+  String get economyConfirmPayment;
+
+  /// No description provided for @economyRejectPayment.
+  ///
+  /// In es, this message translates to:
+  /// **'Rechazar'**
+  String get economyRejectPayment;
+
+  /// No description provided for @economyCancelPayment.
+  ///
+  /// In es, this message translates to:
+  /// **'Cancelar aviso'**
+  String get economyCancelPayment;
+
+  /// No description provided for @economyPaymentSuccess.
+  ///
+  /// In es, this message translates to:
+  /// **'Pago pendiente enviado al receptor.'**
+  String get economyPaymentSuccess;
+
+  /// No description provided for @economyPaymentErrorOver.
+  ///
+  /// In es, this message translates to:
+  /// **'El importe supera el saldo pendiente o ya está reservado por otro pago.'**
+  String get economyPaymentErrorOver;
+
+  /// No description provided for @economyPaymentErrorPermission.
+  ///
+  /// In es, this message translates to:
+  /// **'Solo el deudor crea el pago y solo el receptor puede confirmarlo.'**
+  String get economyPaymentErrorPermission;
+
+  /// No description provided for @economyPaymentErrorNetwork.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo contactar con el servicio de pagos.'**
+  String get economyPaymentErrorNetwork;
+
+  /// No description provided for @economyPaymentErrorUnexpected.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo actualizar el pago.'**
+  String get economyPaymentErrorUnexpected;
+
+  /// No description provided for @economyPendingConfirmations.
+  ///
+  /// In es, this message translates to:
+  /// **'Pagos por confirmar'**
+  String get economyPendingConfirmations;
+
+  /// No description provided for @economyOpenDetail.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver desglose'**
+  String get economyOpenDetail;
+
+  /// No description provided for @spaceEconomicTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu balance en este espacio'**
+  String get spaceEconomicTitle;
+
+  /// No description provided for @spaceEconomicEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no tienes movimientos económicos identificados en este espacio.'**
+  String get spaceEconomicEmpty;
+
   /// No description provided for @commonRetry.
   ///
   /// In es, this message translates to:

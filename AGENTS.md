@@ -84,7 +84,14 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 **Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
 pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)**, **P3
-(amistades)** y **P4 (espacios compartidos)** completos a nivel de código.
+(amistades)**, **P4 (espacios compartidos)** y **P5 (relaciones económicas)**
+completos a nivel de código.
+P5 (ADR-029) deriva obligaciones explicables por ticket en `economicEntries`,
+consolida bilateralmente por UID y moneda con `EconomicLedger` Dart/TypeScript,
+y registra pagos parciales idempotentes en `economicPayments`: el deudor marca y
+solo el receptor económico confirma. Las proyecciones son reconstruibles y solo
+Admin puede escribirlas; amistad, username y membresía no condicionan la deuda.
+Contrato: `docs/RELACIONES_ECONOMICAS.md`.
 P4 (ADR-028, rama claude/p4-spaces) añade el contenedor social único:
 `spaces/{id}` + membresías por UID sin rol persistido (el propietario único es
 `ownerUid` → transferencia atómica de UN doc), invitaciones con ID determinista
@@ -92,7 +99,7 @@ P4 (ADR-028, rama claude/p4-spaces) añade el contenedor social único:
 puede aceptar), archivar como única baja, y tickets vinculables (`spaceId`,
 máx. uno, resumen visible para miembros vía collection group; líneas/foto
 siguen siendo privadas de la sesión). Membresía ≠ amistad ≠ participación ≠
-deuda; sin balances consolidados todavía. Contrato: `docs/ESPACIOS.md`.
+deuda. Contrato: `docs/ESPACIOS.md`.
 P3 (ADR-027) añade una única relación
 canónica por pareja de UID, solicitudes transaccionales e idempotentes, listas y
 perfil público en tiempo real y Rules de mínimo privilegio. No incluye
@@ -116,10 +123,11 @@ propuestas naturales de username en el registro (edgar → edgar27 → edgar_can
 avatar derivado (iniciales + color FNV-1a del uid sobre avatarPalette), búsqueda por
 prefijo de @username y nombre (queries de campo único, sin composites) y pantallas
 /home/profile y /home/people + banner de Home para completar el perfil. P3 reutiliza
-esa identidad pública para amistades basadas exclusivamente en UID; espacios
-compartidos, grupos permanentes, actividad y chat quedan expresamente fuera. Los
-contratos vigentes están en `docs/AUTENTICACION.md`, `docs/AMISTADES.md` y los
-ADR-024/ADR-027 de la Biblia.
+esa identidad pública para amistades basadas exclusivamente en UID. P4 añade
+espacios y P5 mantiene deuda, amistad y membresía como conceptos independientes;
+actividad y chat quedan fuera. Los contratos vigentes están en
+`docs/AUTENTICACION.md`, `docs/AMISTADES.md`, `docs/ESPACIOS.md` y
+`docs/RELACIONES_ECONOMICAS.md`.
 
 **Qué se hizo en la última sesión de trabajo, en orden:**
 1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
@@ -308,6 +316,8 @@ registra tanto `dev.salda.app` como el paquete compatible del APK existente
 ```
 users/{uid}                  perfil, paymentMethods, aiPolicy (JAMÁS API keys aquí)
 users/{uid}/frequentPeople   personas frecuentes del anfitrión
+economicEntries/{id}         obligación derivada por ticket y pareja UID (solo Admin)
+economicPayments/{id}        pago humano pending|confirmed|cancelled (solo Functions)
 sessions/{id}                ownerUid, kind, shareCode 128 bits, status, splitModeDefault,
                              paymentMethodsSnapshot, agregados desnormalizados (totals,
                              balances, computeVersion) ← SOLO los escribe la function
@@ -427,6 +437,7 @@ firebase CLI → keyring del SO del desarrollador.
 | `firebase.json` / `.firebaserc` | Emuladores, hosting, rutas de reglas; proyectos dev/prod |
 | `.github/workflows/ci.yml` | Qué verifica la CI (incluida la frescura de los `.g.`) |
 | `docs/AMISTADES.md` | Contrato P3: identidad canónica, concurrencia, UX y seguridad social |
+| `docs/RELACIONES_ECONOMICAS.md` | Contrato P5: fuente de verdad, neteo bilateral, pagos y privacidad |
 
 ## 11. Próximos pasos concretos (en orden)
 
@@ -439,8 +450,8 @@ firebase CLI → keyring del SO del desarrollador.
    verificados en `salda-dev`; registrar también las huellas de firma release/Play.
 3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
    activar enforcement únicamente para un cliente.
-4. Siguiente fase de producto: decidir con el usuario si priorizar espacios/grupos
-   permanentes u otra mejora. No extender P3 a chat o actividad por inercia.
+4. Validar P5 manualmente con tres cuentas y revisar/fusionar su PR. No empezar P6,
+   chat ni actividad hasta una decisión expresa del usuario.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 

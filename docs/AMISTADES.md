@@ -13,6 +13,12 @@ Una cuenta puede usar amistades solo cuando cumple las tres condiciones:
    (por ejemplo Google): `AppUser.isFullAccount`.
 3. Existe su perfil público `profiles/{uid}`.
 
+Antes de cada mutación, el repositorio recarga el usuario y fuerza un token ID
+nuevo. Así el `emailVerified` local y el claim evaluado por Rules no divergen.
+Los fallos conservan un código estable y distinguen cuenta sin verificar,
+perfil incompleto, solicitud/amistad existente, permisos, Function, red y error
+inesperado; nunca se presenta automáticamente un permiso denegado como conexión.
+
 Los invitados conservan todos los flujos económicos existentes, pero no pueden
 leer ni escribir relaciones sociales. Firestore Rules aplica esta política sin
 confiar en la interfaz.

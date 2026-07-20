@@ -53,23 +53,29 @@ abstract final class AppTheme {
 extension SemanticColors on ColorScheme {
   bool get _dark => brightness == Brightness.dark;
 
-  Color get settlementPending => Color(_dark
-      ? TokenColors.settlementPendingDark
-      : TokenColors.settlementPendingLight);
+  Color get settlementPending => Color(
+    _dark
+        ? TokenColors.settlementPendingDark
+        : TokenColors.settlementPendingLight,
+  );
 
-  Color get settlementMarked => Color(_dark
-      ? TokenColors.settlementMarkedDark
-      : TokenColors.settlementMarkedLight);
+  Color get settlementMarked => Color(
+    _dark
+        ? TokenColors.settlementMarkedDark
+        : TokenColors.settlementMarkedLight,
+  );
 
-  Color get settlementConfirmed => Color(_dark
-      ? TokenColors.settlementConfirmedDark
-      : TokenColors.settlementConfirmedLight);
+  Color get settlementConfirmed => Color(
+    _dark
+        ? TokenColors.settlementConfirmedDark
+        : TokenColors.settlementConfirmedLight,
+  );
 
-  Color get balancePositive => Color(_dark
-      ? TokenColors.balancePositiveDark
-      : TokenColors.balancePositiveLight);
+  Color get balancePositive => Color(
+    _dark ? TokenColors.balancePositiveDark : TokenColors.balancePositiveLight,
+  );
 
-  Color get balanceNegative => Color(_dark
-      ? TokenColors.balanceNegativeDark
-      : TokenColors.balanceNegativeLight);
+  Color get balanceNegative => Color(
+    _dark ? TokenColors.balanceNegativeDark : TokenColors.balanceNegativeLight,
+  );
 }

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../auth/data/auth_repository.dart';
+import '../economy/presentation/economic_overview_screen.dart';
 import '../profile/data/profile_repository.dart';
 import '../review/application/draft_store.dart';
 import '../review/application/review_draft.dart';
@@ -36,6 +37,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: const Text(Brand.appName),
         actions: [
           if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false) ...[
+            IconButton(
+              tooltip: l10n.economyTitle,
+              onPressed: () => context.push('/home/economy'),
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+            ),
             IconButton(
               tooltip: l10n.spacesTitle,
               onPressed: () => context.push('/home/spaces'),
@@ -155,13 +161,13 @@ class _DraftBanner extends ConsumerWidget {
   }
 }
 
-class _SessionsList extends StatelessWidget {
+class _SessionsList extends ConsumerWidget {
   const _SessionsList({required this.sessions});
 
   final List<SessionSummary> sessions;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     // Archivadas al final (spec §4.1).
     final visible = [
@@ -182,7 +188,10 @@ class _SessionsList extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(TokenSpacing.lg),
       children: [
-        if (owedToMe > 0 || iOwe > 0) ...[
+        if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false) ...[
+          const EconomicHomeCard(),
+          const SizedBox(height: TokenSpacing.md),
+        ] else if (owedToMe > 0 || iOwe > 0) ...[
           _TotalsHeader(owedToMe: Money(owedToMe), iOwe: Money(iOwe)),
           const SizedBox(height: TokenSpacing.md),
         ],

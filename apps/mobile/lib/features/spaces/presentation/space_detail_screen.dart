@@ -8,6 +8,7 @@ import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../friends/data/friendship_repository.dart';
 import '../../friends/domain/friendship.dart';
+import '../../economy/presentation/space_economic_summary.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/profile_avatar.dart';
 import '../../scan/presentation/scan_flow.dart';
@@ -36,8 +37,9 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
       await action();
     } on Object {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
       }
     }
   }
@@ -82,18 +84,17 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
             onSelected: (action) => switch (action) {
               'edit' => _editName(space),
               'archive' => _guarded(
-                  () => repo.setStatus(space.id, SpaceStatus.archived)),
+                () => repo.setStatus(space.id, SpaceStatus.archived),
+              ),
               'reactivate' => _guarded(
-                  () => repo.setStatus(space.id, SpaceStatus.active)),
+                () => repo.setStatus(space.id, SpaceStatus.active),
+              ),
               'leave' => _leave(),
               _ => null,
             },
             itemBuilder: (_) => [
               if (amOwner) ...[
-                PopupMenuItem(
-                  value: 'edit',
-                  child: Text(l10n.spaceEditName),
-                ),
+                PopupMenuItem(value: 'edit', child: Text(l10n.spaceEditName)),
                 if (space.isActive)
                   PopupMenuItem(
                     value: 'archive',
@@ -165,14 +166,17 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
                     amOwner: amOwner,
                     isMe: member.uid == myUid,
                     onTransfer: () => _guarded(
-                        () => repo.transferOwnership(space.id, member.uid)),
-                    onRemove: () => _guarded(
-                        () => repo.removeMember(space.id, member.uid)),
+                      () => repo.transferOwnership(space.id, member.uid),
+                    ),
+                    onRemove: () =>
+                        _guarded(() => repo.removeMember(space.id, member.uid)),
                   ),
               ],
             ),
           ),
           if (amOwner) _PendingInvites(spaceId: space.id),
+          const SizedBox(height: TokenSpacing.xl),
+          SpaceEconomicSummary(spaceId: space.id),
           const SizedBox(height: TokenSpacing.xl),
           Text(l10n.spaceTicketsTitle, style: theme.textTheme.titleMedium),
           const SizedBox(height: TokenSpacing.sm),
@@ -242,11 +246,11 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
               final name = controller.text.trim();
               if (name.length < 2) return;
               Navigator.of(dialogContext).pop();
-              _guarded(() => ref.read(spacesRepositoryProvider).rename(
-                    space.id,
-                    name,
-                    avatarEmoji: emoji.text.trim(),
-                  ));
+              _guarded(
+                () => ref
+                    .read(spacesRepositoryProvider)
+                    .rename(space.id, name, avatarEmoji: emoji.text.trim()),
+              );
             },
             child: Text(l10n.commonSave),
           ),
@@ -277,7 +281,8 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
     if (confirmed != true || !mounted) return;
     final router = GoRouter.of(context);
     await _guarded(
-        () => ref.read(spacesRepositoryProvider).leave(widget.spaceId));
+      () => ref.read(spacesRepositoryProvider).leave(widget.spaceId),
+    );
     if (mounted) router.go('/home/spaces');
   }
 
@@ -335,8 +340,8 @@ class _MemberTile extends ConsumerWidget {
         isOwnerMember
             ? l10n.spaceOwnerBadge
             : profile == null
-                ? ''
-                : '@${profile.username}',
+            ? ''
+            : '@${profile.username}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -344,17 +349,17 @@ class _MemberTile extends ConsumerWidget {
           ? PopupMenuButton<String>(
               onSelected: (action) => switch (action) {
                 'transfer' => _confirm(
-                    context,
-                    l10n.spaceTransferTitle,
-                    l10n.spaceTransferBody(profile?.displayName ?? ''),
-                    onTransfer,
-                  ),
+                  context,
+                  l10n.spaceTransferTitle,
+                  l10n.spaceTransferBody(profile?.displayName ?? ''),
+                  onTransfer,
+                ),
                 'remove' => _confirm(
-                    context,
-                    l10n.spaceRemoveMemberTitle,
-                    l10n.spaceRemoveMemberBody(profile?.displayName ?? ''),
-                    onRemove,
-                  ),
+                  context,
+                  l10n.spaceRemoveMemberTitle,
+                  l10n.spaceRemoveMemberBody(profile?.displayName ?? ''),
+                  onRemove,
+                ),
                 _ => null,
               },
               itemBuilder: (_) => [
@@ -420,8 +425,7 @@ class _PendingInvites extends ConsumerWidget {
         Card(
           child: Column(
             children: [
-              for (final invite in invites)
-                _PendingInviteTile(invite: invite),
+              for (final invite in invites) _PendingInviteTile(invite: invite),
             ],
           ),
         ),
@@ -465,10 +469,8 @@ class _InviteFriendsSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final friendships = ref.watch(friendshipsProvider).value ?? const [];
     final myUid = ref.watch(currentUserIdFromSpacesProvider);
-    final members =
-        ref.watch(spaceMembersProvider(space.id)).value ?? const [];
-    final invites =
-        ref.watch(spaceInvitesProvider(space.id)).value ?? const [];
+    final members = ref.watch(spaceMembersProvider(space.id)).value ?? const [];
+    final invites = ref.watch(spaceInvitesProvider(space.id)).value ?? const [];
     final memberUids = {for (final m in members) m.uid};
     final invitedUids = {for (final i in invites) i.toUid};
     final friends = [
@@ -548,22 +550,22 @@ class _InviteCandidateTile extends ConsumerWidget {
       trailing: alreadyMember
           ? Text(l10n.spaceAlreadyMember)
           : alreadyInvited
-              ? Text(l10n.spaceAlreadyInvited)
-              : FilledButton.tonal(
-                  onPressed: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    try {
-                      await ref
-                          .read(spacesRepositoryProvider)
-                          .invite(space.id, space.name, friendUid);
-                    } on Object {
-                      messenger.showSnackBar(
-                        SnackBar(content: Text(l10n.spaceActionError)),
-                      );
-                    }
-                  },
-                  child: Text(l10n.spaceInviteAction),
-                ),
+          ? Text(l10n.spaceAlreadyInvited)
+          : FilledButton.tonal(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await ref
+                      .read(spacesRepositoryProvider)
+                      .invite(space.id, space.name, friendUid);
+                } on Object {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(l10n.spaceActionError)),
+                  );
+                }
+              },
+              child: Text(l10n.spaceInviteAction),
+            ),
     );
   }
 }
@@ -613,8 +615,7 @@ class _SpaceTickets extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      subtitle:
-                          ticket.date == null ? null : Text(ticket.date!),
+                      subtitle: ticket.date == null ? null : Text(ticket.date!),
                       trailing: Text(
                         formatMoney(Money(ticket.grandTotalCents)),
                         style: const TextStyle(

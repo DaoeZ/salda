@@ -1081,5 +1081,124 @@ class AppLocalizationsEs extends AppLocalizations {
   String get friendEditOwnProfile => 'Editar perfil';
 
   @override
+  String get economyTitle => 'Economía';
+
+  @override
+  String get economySummaryTitle => 'Tu balance';
+
+  @override
+  String get economyOwedToMe => 'Te deben';
+
+  @override
+  String get economyIOwe => 'Debes';
+
+  @override
+  String get economyNet => 'Saldo neto';
+
+  @override
+  String get economyRelationsTitle => 'Relaciones abiertas';
+
+  @override
+  String get economyEmptyTitle => 'No tienes saldos pendientes';
+
+  @override
+  String get economyEmptyBody =>
+      'Cuando un ticket vincule dos cuentas registradas, aquí podrás ver y explicar cada importe.';
+
+  @override
+  String get economyLoadError =>
+      'No se pudo cargar tu balance. Revisa la conexión y vuelve a intentarlo.';
+
+  @override
+  String economyYouOwe(String name) {
+    return 'Debes a $name';
+  }
+
+  @override
+  String economyOwesYou(String name) {
+    return '$name te debe';
+  }
+
+  @override
+  String economySettledWith(String name) {
+    return 'Sin saldo pendiente con $name';
+  }
+
+  @override
+  String economyDetailTitle(String name) {
+    return 'Balance con $name';
+  }
+
+  @override
+  String get economyOriginalDebt => 'Deuda original';
+
+  @override
+  String get economyTicketsTitle => 'Tickets que explican el saldo';
+
+  @override
+  String get economyPaymentsTitle => 'Pagos y liquidaciones';
+
+  @override
+  String get economyOutsideSpace => 'Fuera de espacios';
+
+  @override
+  String get economyInSpace => 'Espacio vinculado';
+
+  @override
+  String get economyMarkPaid => 'Marcar como pagado';
+
+  @override
+  String get economyPaymentAmount => 'Importe pagado';
+
+  @override
+  String get economyPaymentPending => 'Pendiente de confirmación';
+
+  @override
+  String get economyPaymentConfirmed => 'Confirmado por el receptor';
+
+  @override
+  String get economyPaymentCancelled => 'Cancelado';
+
+  @override
+  String get economyConfirmPayment => 'Confirmar recepción';
+
+  @override
+  String get economyRejectPayment => 'Rechazar';
+
+  @override
+  String get economyCancelPayment => 'Cancelar aviso';
+
+  @override
+  String get economyPaymentSuccess => 'Pago pendiente enviado al receptor.';
+
+  @override
+  String get economyPaymentErrorOver =>
+      'El importe supera el saldo pendiente o ya está reservado por otro pago.';
+
+  @override
+  String get economyPaymentErrorPermission =>
+      'Solo el deudor crea el pago y solo el receptor puede confirmarlo.';
+
+  @override
+  String get economyPaymentErrorNetwork =>
+      'No se pudo contactar con el servicio de pagos.';
+
+  @override
+  String get economyPaymentErrorUnexpected => 'No se pudo actualizar el pago.';
+
+  @override
+  String get economyPendingConfirmations => 'Pagos por confirmar';
+
+  @override
+  String get economyOpenDetail => 'Ver desglose';
+
+  @override
+  String get spaceEconomicTitle => 'Tu balance en este espacio';
+
+  @override
+  String get spaceEconomicEmpty =>
+      'Todavía no tienes movimientos económicos identificados en este espacio.';
+
+  @override
   String get commonRetry => 'Reintentar';
 }

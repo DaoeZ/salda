@@ -38,6 +38,8 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   firebase_storage: 13.4.3
   path_provider: ^2.1.6
+  cloud_functions: ^6.3.3
+  uuid: ^4.5.3
 
 dev_dependencies:
   flutter_test:
