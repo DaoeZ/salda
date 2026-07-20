@@ -1133,5 +1133,61 @@ describe('spaces', () => {
   });
 });
 
+// ─── Relaciones económicas (P5): solo participantes, solo lectura ──────
+describe('economic relations', () => {
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'economicEntries/e1'), {
+        memberUids: [OWNER, STRANGER].sort(),
+        debtorUid: STRANGER, creditorUid: OWNER,
+        amount: 1000, currency: 'EUR', sessionId: 's1',
+        accountId: 'a1', ticketId: 't1', ticketName: 'Cena',
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'economicPayments/p1'), {
+        memberUids: [OWNER, STRANGER].sort(), pairId: 'pair',
+        payerUid: STRANGER, receiverUid: OWNER,
+        amount: 400, currency: 'EUR', status: 'confirmed',
+        source: 'user', schemaVersion: 1,
+      });
+    });
+  });
+
+  it('cada participante lee su deuda y pagos; terceros no', async () => {
+    await assertSucceeds(getDoc(doc(db(OWNER), 'economicEntries/e1')));
+    await assertSucceeds(getDoc(doc(db(STRANGER), 'economicPayments/p1')));
+    await assertFails(getDoc(doc(db(SOCIAL_OUTSIDER), 'economicEntries/e1')));
+    await assertFails(getDoc(doc(db(GUEST), 'economicEntries/e1')));
+    await assertFails(getDoc(doc(db(UNVERIFIED), 'economicPayments/p1')));
+  });
+
+  it('las queries están acotadas por arrayContains al UID propio', async () => {
+    await assertSucceeds(getDocs(query(
+      collection(db(OWNER), 'economicEntries'),
+      where('memberUids', 'array-contains', OWNER),
+    )));
+    await assertFails(getDocs(collection(db(OWNER), 'economicEntries')));
+    await assertFails(getDocs(query(
+      collection(db(OWNER), 'economicEntries'),
+      where('memberUids', 'array-contains', STRANGER),
+    )));
+  });
+
+  it('ningún cliente escribe saldos ni pagos, aunque sea participante', async () => {
+    await assertFails(setDoc(doc(db(OWNER), 'economicEntries/hack'), {
+      memberUids: [OWNER, STRANGER].sort(), amount: 1,
+    }));
+    await assertFails(updateDoc(doc(db(OWNER), 'economicEntries/e1'), {
+      amount: 1,
+    }));
+    await assertFails(setDoc(doc(db(STRANGER), 'economicPayments/hack'), {
+      memberUids: [OWNER, STRANGER].sort(), amount: 1,
+    }));
+    await assertFails(deleteDoc(doc(db(OWNER), 'economicPayments/p1')));
+  });
+});
+
 // Nota: assert está importado para fallos explícitos en helpers futuros.
 void assert;

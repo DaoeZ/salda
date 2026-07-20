@@ -260,6 +260,21 @@ service cloud.firestore {
         );
     }
 
+    // ── P5 economía global: vistas derivadas + pagos autoritativos ──────
+    // Ambos recursos los escribe exclusivamente Admin SDK (recompute o
+    // callables). El cliente solo consulta los pares en los que participa.
+    match /economicEntries/{entryId} {
+      allow read: if canUseSocial()
+        && request.auth.uid in resource.data.memberUids;
+      allow create, update, delete: if false;
+    }
+
+    match /economicPayments/{paymentId} {
+      allow read: if canUseSocial()
+        && request.auth.uid in resource.data.memberUids;
+      allow create, update, delete: if false;
+    }
+
     // ── Espacios compartidos (P4, ADR-028) ─────────────────────────────
     // spaces/{id} + members/{uid} + spaceInvites/{spaceId_toUid}.
     // Membresía ≠ amistad ≠ participación económica: expulsar o salir solo
@@ -485,7 +500,8 @@ service cloud.firestore {
       // ── Participantes ──────────────────────────────────────────────────
       match /participants/{pid} {
         allow read: if canRead(sid);
-        allow create, delete: if isOwner(sid) && isOpen(sid);
+        allow create: if isOwner(sid) && isOpen(sid);
+        allow delete: if isOwner(sid) && isOpen(sid);
         allow update: if
           (isOwner(sid) && isOpen(sid))
           || (

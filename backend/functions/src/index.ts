@@ -23,9 +23,15 @@ initializeApp();
 
 export {
   recomputeOnLine,
+  recomputeOnEconomicPayment,
   recomputeOnParticipant,
   recomputeOnSettlement,
   recomputeOnTicket,
+  rebuildMyEconomicRelations,
 } from './recompute.js';
 export { notifyOnSettlement } from './notify.js';
 export { cleanupOnSessionDelete } from './cleanup.js';
+export {
+  createEconomicPayment,
+  resolveEconomicPayment,
+} from './economicPayments.js';

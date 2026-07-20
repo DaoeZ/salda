@@ -14,6 +14,7 @@
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import {
   computeBalance,
@@ -37,6 +38,9 @@ export interface ParticipantDoc {
   isOwner?: boolean;
   active?: boolean;
   order?: number;
+  /** P5: identidad registrada estable. No confundir con claimedByDevice. */
+  userUid?: string;
+  claimedByDevice?: string;
 }
 
 export interface LineDoc {
@@ -57,11 +61,15 @@ export interface TicketDoc {
   grandTotal: Cents;
   paidByParticipantId: string;
   splitModeOverride?: SplitMode;
+  merchantName?: string;
+  date?: string;
+  spaceId?: string;
   lines: LineDoc[];
 }
 
 export interface AccountDoc {
   id: string;
+  name?: string;
   tickets: TicketDoc[];
 }
 
@@ -75,9 +83,13 @@ export interface SettlementDoc {
 
 export interface SessionSnapshot {
   splitModeDefault: SplitMode;
+  ownerUid?: string;
+  currency?: string;
   participants: ParticipantDoc[];
   accounts: AccountDoc[];
   settlements: SettlementDoc[];
+  /** Pagos P5 confirmados que afectan a tickets de esta sesión. */
+  externalConfirmed?: Array<{ from: string; to: string; amount: Cents }>;
 }
 
 export interface RecomputeResult {
@@ -110,11 +122,48 @@ export interface RecomputeResult {
      * (incluye docs legacy con id aleatorio). */
     removals: string[];
   };
+  /** Obligaciones originales por ticket, reconstruibles y explicables. */
+  economicEntries: EconomicEntryDraft[];
+  /** Espejo de pagos legacy confirmados/pendientes con participantes UID. */
+  legacyPayments: LegacyPaymentDraft[];
+}
+
+export interface EconomicEntryDraft {
+  id: string;
+  memberUids: [string, string];
+  debtorUid: string;
+  creditorUid: string;
+  amount: Cents;
+  currency: string;
+  accountId: string;
+  ticketId: string;
+  ticketName: string;
+  ticketDate?: string;
+  spaceId?: string;
+}
+
+export interface LegacyPaymentDraft {
+  id: string;
+  memberUids: [string, string];
+  payerUid: string;
+  receiverUid: string;
+  amount: Cents;
+  currency: string;
+  status: 'pending' | 'confirmed';
+  settlementId: string;
 }
 
 /** Id determinista de una liquidación pendiente. */
 export const settlementId = (draft: SettlementDraft): string =>
     `pending_${draft.from}_${draft.to}`;
+
+const orderedUids = (left: string, right: string): [string, string] =>
+  left < right ? [left, right] : [right, left];
+
+const encodedPair = (left: string, right: string): string =>
+  orderedUids(left, right)
+    .map((uid) => Buffer.from(uid, 'utf8').toString('hex'))
+    .join('_');
 
 /**
  * Núcleo puro del recompute (testeable sin Firestore).
@@ -135,9 +184,17 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
   const known = new Set(activeIds);
   const fallbackPayer =
     participants.find((p) => p.isOwner)?.id ?? activeIds[0];
+  const currency = s.currency ?? 'EUR';
+  const uidByPid = new Map<string, string>();
+  for (const participant of participants) {
+    const resolved = participant.userUid ??
+      (participant.isOwner ? s.ownerUid : undefined);
+    if (resolved) uidByPid.set(participant.id, resolved);
+  }
 
   const accountTotals: RecomputeResult['accountTotals'] = {};
   const contributions: TicketContribution[] = [];
+  const economicEntries: EconomicEntryDraft[] = [];
 
   for (const account of s.accounts) {
     let accountTotal = 0;
@@ -180,13 +237,64 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         grandTotal: ticket.grandTotal,
         consumption,
       });
+
+      // P5 conserva la deuda ORIGINAL por ticket. Una sesión puede seguir
+      // teniendo nombres sin cuenta: solo se publican pares con dos UID
+      // registrados, sin inventar identidad a partir del nombre.
+      const payerUid = uidByPid.get(paidBy);
+      if (payerUid) {
+        const byDebtor = new Map<string, Cents>();
+        for (const [pid, amount] of Object.entries(consumption)) {
+          const debtorUid = uidByPid.get(pid);
+          if (!debtorUid || debtorUid === payerUid || amount <= 0) continue;
+          byDebtor.set(debtorUid, (byDebtor.get(debtorUid) ?? 0) + amount);
+        }
+        for (const [debtorUid, amount] of [...byDebtor.entries()]
+          .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+          economicEntries.push({
+            id: `${account.id}_${ticket.id}_${encodedPair(debtorUid, payerUid)}`,
+            memberUids: orderedUids(debtorUid, payerUid),
+            debtorUid,
+            creditorUid: payerUid,
+            amount,
+            currency,
+            accountId: account.id,
+            ticketId: ticket.id,
+            ticketName: ticket.merchantName ?? account.name ?? ticket.id,
+            ticketDate: ticket.date,
+            spaceId: ticket.spaceId,
+          });
+        }
+      }
     }
     accountTotals[account.id] = { grandTotal: accountTotal };
   }
 
   const frozen: FrozenSettlement[] = s.settlements
     .filter((st) => st.state === 'confirmed')
-    .map((st) => ({ from: st.from, to: st.to, amount: st.amount }));
+    .map((st) => ({ from: st.from, to: st.to, amount: st.amount }))
+    .concat(s.externalConfirmed ?? []);
+
+  const legacyPayments: LegacyPaymentDraft[] = [];
+  for (const settlement of s.settlements) {
+    // `pending` es una sugerencia de recompute, no un pago humano. Solo
+    // `marked` (el deudor dice que pagó) y `confirmed` son movimientos.
+    if (settlement.state === 'pending') continue;
+    const payerUid = uidByPid.get(settlement.from);
+    const receiverUid = uidByPid.get(settlement.to);
+    if (!payerUid || !receiverUid || payerUid === receiverUid ||
+        settlement.amount <= 0) continue;
+    legacyPayments.push({
+      id: `legacy_${settlement.id}`,
+      memberUids: orderedUids(payerUid, receiverUid),
+      payerUid,
+      receiverUid,
+      amount: settlement.amount,
+      currency,
+      status: settlement.state === 'confirmed' ? 'confirmed' : 'pending',
+      settlementId: settlement.id,
+    });
+  }
 
   const balance = computeBalance({
     participantIds: activeIds,
@@ -228,6 +336,8 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
       settledMarked += st.amount;
     }
   }
+  settledConfirmed += (s.externalConfirmed ?? [])
+    .reduce((sum, settlement) => sum + settlement.amount, 0);
   const settlementRequired =
     settledConfirmed +
     balance.settlements.reduce((total, st) => total + st.amount, 0);
@@ -247,6 +357,8 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         (st) => st.state === 'marked' && untouched.includes(st.id),
       ).length,
     settlementSync: { writes, untouched, removals },
+    economicEntries,
+    legacyPayments,
   };
 }
 
@@ -347,10 +459,20 @@ export async function recomputeSession(sid: string): Promise<void> {
   const sessionSnap = await sessionRef.get();
   if (!sessionSnap.exists) return; // borrada: cleanup se encarga
 
-  const [participantsSnap, accountsSnap, settlementsSnap] = await Promise.all([
+  const [
+    participantsSnap,
+    accountsSnap,
+    settlementsSnap,
+    economicEntriesSnap,
+    economicPaymentsSnap,
+    externalPaymentsSnap,
+  ] = await Promise.all([
     sessionRef.collection('participants').get(),
     sessionRef.collection('accounts').get(),
     sessionRef.collection('settlements').get(),
+    db.collection('economicEntries').where('sessionId', '==', sid).get(),
+    db.collection('economicPayments').where('sourceSessionId', '==', sid).get(),
+    db.collection('economicPayments').where('sessionIds', 'array-contains', sid).get(),
   ]);
 
   const accounts: AccountDoc[] = await Promise.all(
@@ -367,6 +489,11 @@ export async function recomputeSession(sid: string): Promise<void> {
             splitModeOverride: ticketDoc.data().splitModeOverride as
               | SplitMode
               | undefined,
+            merchantName:
+              (ticketDoc.data().merchant as { name?: string } | undefined)
+                ?.name,
+            date: ticketDoc.data().date as string | undefined,
+            spaceId: ticketDoc.data().spaceId as string | undefined,
             lines: linesSnap.docs.map((l) => ({
               id: l.id,
               totalPrice: (l.data().totalPrice as number) ?? 0,
@@ -376,19 +503,79 @@ export async function recomputeSession(sid: string): Promise<void> {
           };
         }),
       );
-      return { id: accountDoc.id, tickets };
+      return {
+        id: accountDoc.id,
+        name: accountDoc.data().name as string | undefined,
+        tickets,
+      };
     }),
   );
+
+  // `claimedByDevice` también identifica invitados anónimos. Solo se eleva
+  // a identidad económica si existe un perfil público registrado con ese UID.
+  const claimedUids = [
+    ...new Set(
+      participantsSnap.docs
+        .map((p) => p.data().claimedByDevice as string | undefined)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  const claimedProfiles = claimedUids.length === 0
+    ? []
+    : await db.getAll(
+      ...claimedUids.map((claimedUid) => db.doc(`profiles/${claimedUid}`)),
+    );
+  const registeredClaims = new Set(
+    claimedProfiles.filter((profile) => profile.exists).map((profile) => profile.id),
+  );
+  const sessionOwnerUid = sessionSnap.data()?.ownerUid as string | undefined;
+  const pidByUid = new Map<string, string>();
+  for (const participant of participantsSnap.docs) {
+    const data = participant.data();
+    const claimed = data.claimedByDevice as string | undefined;
+    const uid = data.isOwner === true
+      ? sessionOwnerUid
+      : claimed && registeredClaims.has(claimed)
+      ? claimed
+      : undefined;
+    if (uid) pidByUid.set(uid, participant.id);
+  }
+  const currentEntryIds = new Set(economicEntriesSnap.docs.map((doc) => doc.id));
+  const externalConfirmed: Array<{ from: string; to: string; amount: Cents }> = [];
+  for (const payment of externalPaymentsSnap.docs) {
+    const data = payment.data();
+    if (data.source !== 'user' || data.status !== 'confirmed') continue;
+    const from = pidByUid.get(data.payerUid as string);
+    const to = pidByUid.get(data.receiverUid as string);
+    if (!from || !to || from === to) continue;
+    const allocations = data.allocations as Record<string, number> | undefined;
+    const amount = Object.entries(allocations ?? {})
+      .filter(([entryId]) => currentEntryIds.has(entryId))
+      .reduce((sum, [, cents]) => sum + cents, 0);
+    if (amount > 0) externalConfirmed.push({ from, to, amount });
+  }
 
   const snapshot: SessionSnapshot = {
     splitModeDefault:
       (sessionSnap.data()?.splitModeDefault as SplitMode) ?? 'equal',
-    participants: participantsSnap.docs.map((p) => ({
-      id: p.id,
-      isOwner: p.data().isOwner as boolean | undefined,
-      active: p.data().active as boolean | undefined,
-      order: p.data().order as number | undefined,
-    })),
+    ownerUid: sessionOwnerUid,
+    currency: (sessionSnap.data()?.currency as string | undefined) ?? 'EUR',
+    participants: participantsSnap.docs.map((p) => {
+      const isOwner = p.data().isOwner as boolean | undefined;
+      const claimed = p.data().claimedByDevice as string | undefined;
+      return {
+        id: p.id,
+        isOwner,
+        active: p.data().active as boolean | undefined,
+        order: p.data().order as number | undefined,
+        userUid: isOwner
+          ? sessionOwnerUid
+          : claimed && registeredClaims.has(claimed)
+          ? claimed
+          : undefined,
+        claimedByDevice: claimed,
+      };
+    }),
     accounts,
     settlements: settlementsSnap.docs.map((st) => ({
       id: st.id,
@@ -397,11 +584,78 @@ export async function recomputeSession(sid: string): Promise<void> {
       amount: st.data().amount as number,
       state: st.data().state as SettlementDoc['state'],
     })),
+    externalConfirmed,
   };
 
   if (snapshot.participants.length === 0) return; // sesión a medio crear
 
   const result = computeAggregates(snapshot);
+
+  const entryData = (entry: EconomicEntryDraft): Record<string, unknown> => ({
+    memberUids: entry.memberUids,
+    debtorUid: entry.debtorUid,
+    creditorUid: entry.creditorUid,
+    amount: entry.amount,
+    currency: entry.currency,
+    sessionId: sid,
+    accountId: entry.accountId,
+    ticketId: entry.ticketId,
+    ticketName: entry.ticketName,
+    ...(entry.ticketDate ? { ticketDate: entry.ticketDate } : {}),
+    ...(entry.spaceId ? { spaceId: entry.spaceId } : {}),
+    schemaVersion: 1,
+  });
+  const legacyPaymentData = (
+    payment: LegacyPaymentDraft,
+  ): Record<string, unknown> => ({
+    memberUids: payment.memberUids,
+    pairId: encodedPair(payment.payerUid, payment.receiverUid),
+    payerUid: payment.payerUid,
+    receiverUid: payment.receiverUid,
+    amount: payment.amount,
+    currency: payment.currency,
+    status: payment.status,
+    source: 'legacySettlement',
+    sourceSessionId: sid,
+    settlementId: payment.settlementId,
+    schemaVersion: 1,
+  });
+  const desiredEntries = new Map(
+    result.economicEntries.map((entry) => [
+      `${sid}_${entry.id}`,
+      entryData(entry),
+    ]),
+  );
+  const desiredLegacyPayments = new Map(
+    result.legacyPayments.map((payment) => [
+      `${sid}_${payment.id}`,
+      legacyPaymentData(payment),
+    ]),
+  );
+  const comparable = (data: Record<string, unknown>): string => {
+    const copy = { ...data };
+    delete copy.createdAt;
+    delete copy.updatedAt;
+    delete copy.confirmedAt;
+    return JSON.stringify(copy);
+  };
+  const economicEntriesUnchanged =
+    economicEntriesSnap.size === desiredEntries.size &&
+    economicEntriesSnap.docs.every((doc) => {
+      const desired = desiredEntries.get(doc.id);
+      return desired !== undefined &&
+        comparable(doc.data()) === comparable(desired);
+    });
+  const legacyDocs = economicPaymentsSnap.docs.filter(
+    (doc) => doc.data().source === 'legacySettlement',
+  );
+  const legacyPaymentsUnchanged =
+    legacyDocs.length === desiredLegacyPayments.size &&
+    legacyDocs.every((doc) => {
+      const desired = desiredLegacyPayments.get(doc.id);
+      return desired !== undefined &&
+        comparable(doc.data()) === comparable(desired);
+    });
 
   // ¿Cambió algo? Comparación con lo persistido para evitar escrituras
   // (y notificaciones/lecturas de listeners) innecesarias.
@@ -412,6 +666,8 @@ export async function recomputeSession(sid: string): Promise<void> {
     current.pendingSettlements === result.pendingSettlements &&
     result.settlementSync.writes.length === 0 &&
     result.settlementSync.removals.length === 0 &&
+    economicEntriesUnchanged &&
+    legacyPaymentsUnchanged &&
     accountsSnap.docs.every(
       (a) =>
         JSON.stringify(a.data().totals) ===
@@ -448,6 +704,33 @@ export async function recomputeSession(sid: string): Promise<void> {
       updatedAt: FieldValue.serverTimestamp(),
     });
   }
+  for (const doc of economicEntriesSnap.docs) {
+    if (!desiredEntries.has(doc.id)) batch.delete(doc.ref);
+  }
+  for (const [id, data] of desiredEntries) {
+    const existing = economicEntriesSnap.docs.find((doc) => doc.id === id);
+    if (existing && comparable(existing.data()) === comparable(data)) continue;
+    batch.set(db.collection('economicEntries').doc(id), {
+      ...data,
+      createdAt: existing?.data().createdAt ?? FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+  for (const doc of legacyDocs) {
+    if (!desiredLegacyPayments.has(doc.id)) batch.delete(doc.ref);
+  }
+  for (const [id, data] of desiredLegacyPayments) {
+    const existing = legacyDocs.find((doc) => doc.id === id);
+    if (existing && comparable(existing.data()) === comparable(data)) continue;
+    batch.set(db.collection('economicPayments').doc(id), {
+      ...data,
+      createdAt: existing?.data().createdAt ?? FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      ...(data.status === 'confirmed'
+        ? { confirmedAt: FieldValue.serverTimestamp() }
+        : {}),
+    });
+  }
   await batch.commit();
   logger.info('Sesión recalculada', {
     sid,
@@ -481,3 +764,61 @@ export const recomputeOnSettlement = onDocumentWritten(
   'sessions/{sid}/settlements/{stid}',
   (event) => recomputeSession(event.params.sid),
 );
+
+// Un pago P5 confirmado también debe congelarse en los balances legacy de
+// sus sesiones. Así ambas vistas se derivan del mismo evento y no permiten
+// volver a pagar desde el detalle antiguo de la cuenta.
+export const recomputeOnEconomicPayment = onDocumentWritten(
+  'economicPayments/{paymentId}',
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (before?.status === after?.status) return;
+    if (before?.status !== 'confirmed' && after?.status !== 'confirmed') return;
+    const sessionIds = new Set<string>([
+      ...((before?.sessionIds as string[] | undefined) ?? []),
+      ...((after?.sessionIds as string[] | undefined) ?? []),
+    ]);
+    await Promise.all([...sessionIds].map(recomputeSession));
+  },
+);
+
+/** Migración perezosa y reconstruible para sesiones creadas antes de P5. */
+export const rebuildMyEconomicRelations = onCall(async (request) => {
+  const auth = request.auth;
+  if (!auth) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+  if (
+    auth.token.email_verified !== true ||
+    auth.token.firebase?.sign_in_provider === 'anonymous'
+  ) {
+    throw new HttpsError('permission-denied', 'VERIFIED_ACCOUNT_REQUIRED');
+  }
+  const uid = auth.uid;
+  const db = getFirestore();
+  const markerRef = db.doc(`users/${uid}`);
+  const marker = await markerRef.get();
+  if (marker.data()?.economicProjectionVersion === 1) {
+    return { rebuilt: 0, version: 1 };
+  }
+
+  const [owned, claimed] = await Promise.all([
+    db.collection('sessions').where('ownerUid', '==', uid).limit(201).get(),
+    db.collectionGroup('participants')
+      .where('claimedByDevice', '==', uid).limit(201).get(),
+  ]);
+  if (owned.size > 200 || claimed.size > 200) {
+    throw new HttpsError('resource-exhausted', 'ECONOMIC_REBUILD_TOO_LARGE');
+  }
+  const sessionIds = new Set(owned.docs.map((doc) => doc.id));
+  for (const participant of claimed.docs) {
+    const session = participant.ref.parent.parent;
+    if (session) sessionIds.add(session.id);
+  }
+  // Secuencial: evita picos de lecturas/CPU y respeta el techo de coste.
+  for (const sid of [...sessionIds].sort()) await recomputeSession(sid);
+  await markerRef.set({
+    economicProjectionVersion: 1,
+    economicProjectionUpdatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { rebuilt: sessionIds.size, version: 1 };
+});

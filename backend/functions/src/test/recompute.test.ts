@@ -644,6 +644,67 @@ test('P2.2 recompute: edición repetida y concurrencia convergen sin duplicar',
   assert.ok(Object.values(first.balances).every((b) => b.consumed >= 0));
 });
 
+test('P5 publica obligaciones por ticket solo para participantes con UID', () => {
+  const snapshot = base();
+  snapshot.ownerUid = 'uid-edgar';
+  snapshot.currency = 'EUR';
+  snapshot.participants = [
+    { id: 'p1', isOwner: true, order: 0, userUid: 'uid-edgar' },
+    { id: 'p2', order: 1, userUid: 'uid-alba' },
+    { id: 'p3', order: 2 }, // nombre histórico sin identidad registrada
+  ];
+
+  const result = computeAggregates(snapshot);
+
+  assert.ok(result.economicEntries.length > 0);
+  assert.ok(result.economicEntries.every((entry) =>
+    entry.memberUids.includes('uid-edgar') &&
+    !entry.memberUids.includes('p3')));
+  assert.equal(
+    result.economicEntries.reduce((sum, entry) => sum + entry.amount, 0),
+    result.balances.p2.consumed,
+  );
+});
+
+test('P5 solo espeja marked/confirmed; pending sigue siendo sugerencia', () => {
+  const snapshot = base();
+  snapshot.ownerUid = 'uid-edgar';
+  snapshot.participants = [
+    { id: 'p1', isOwner: true, order: 0, userUid: 'uid-edgar' },
+    { id: 'p2', order: 1, userUid: 'uid-alba' },
+    { id: 'p3', order: 2, userUid: 'uid-pedro' },
+  ];
+  snapshot.settlements = [
+    { id: 'suggestion', from: 'p2', to: 'p1', amount: 600, state: 'pending' },
+    { id: 'marked', from: 'p3', to: 'p1', amount: 500, state: 'marked' },
+    { id: 'confirmed', from: 'p2', to: 'p1', amount: 100, state: 'confirmed' },
+  ];
+
+  const result = computeAggregates(snapshot);
+
+  assert.deepEqual(result.legacyPayments.map((payment) => [
+    payment.settlementId,
+    payment.status,
+  ]), [
+    ['marked', 'pending'],
+    ['confirmed', 'confirmed'],
+  ]);
+});
+
+test('P5 congela un pago global confirmado también en la sesión de origen', () => {
+  const snapshot = base();
+  snapshot.externalConfirmed = [{ from: 'p2', to: 'p1', amount: 100 }];
+
+  const result = computeAggregates(snapshot);
+
+  assert.equal(result.sessionTotals.settledConfirmed, 100);
+  assert.equal(
+    result.settlementSync.writes.reduce((sum, settlement) =>
+      sum + settlement.amount, 0),
+    result.sessionTotals.settlementRequired - 100,
+  );
+});
+
 test('P2.1 REGRESIÓN Alba/Pedro: tras confirmar el pago de Alba, lo nuevo ' +
     'de Pedro se lo debe a ALBA, no al creador', () => {
   // Edgar (p1) pagó 20 €. Alba (p2) consumió 10 y YA pagó (confirmada).
