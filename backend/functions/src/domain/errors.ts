@@ -8,7 +8,8 @@ export type DomainErrorCode =
   | 'unknownParticipant'
   | 'emptyParticipants'
   | 'consumptionMismatch'
-  | 'invalidWeights';
+  | 'invalidWeights'
+  | 'invalidEconomicRecord';
 
 export class DomainError extends Error {
   constructor(

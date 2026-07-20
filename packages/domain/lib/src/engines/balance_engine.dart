@@ -195,14 +195,17 @@ abstract final class BalanceEngine {
       debtors.sort(byAmountThenOrder);
       final creditor = creditors.first;
       final debtor = debtors.first;
-      final amount =
-          creditor.value < debtor.value ? creditor.value : debtor.value;
+      final amount = creditor.value < debtor.value
+          ? creditor.value
+          : debtor.value;
 
-      result.add(SettlementDraft(
-        from: debtor.key,
-        to: creditor.key,
-        amount: Money(amount),
-      ));
+      result.add(
+        SettlementDraft(
+          from: debtor.key,
+          to: creditor.key,
+          amount: Money(amount),
+        ),
+      );
 
       final creditorLeft = creditor.value - amount;
       final debtorLeft = debtor.value - amount;

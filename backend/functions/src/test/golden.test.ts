@@ -10,6 +10,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { computeBalance } from '../domain/balanceEngine.js';
+import { computeEconomicLedger } from '../domain/economicLedger.js';
 import { DomainError } from '../domain/errors.js';
 import {
   splitTicket,
@@ -70,5 +71,17 @@ for (const c of loadCases('balance_engine.json')) {
       assert.deepEqual(result.balances, c.expected.balances);
       assert.deepEqual(result.settlements, c.expected.settlements);
     }
+  });
+}
+
+for (const c of loadCases('economic_ledger.json')) {
+  test(`golden economic: ${c.name}`, () => {
+    assert.deepEqual(
+      computeEconomicLedger({
+        obligations: c.obligations,
+        payments: c.payments,
+      }),
+      c.expected,
+    );
   });
 }

@@ -149,6 +149,57 @@ void main() {
       });
     }
   });
+
+  group('golden: EconomicLedger', () {
+    final cases = _load('test/golden/economic_ledger.json');
+    for (final c in cases) {
+      test(c['name'] as String, () {
+        final result = EconomicLedger.compute(
+          obligations: [
+            for (final o
+                in (c['obligations'] as List).cast<Map<String, dynamic>>())
+              EconomicObligation(
+                id: o['id'] as String,
+                debtorUid: o['debtorUid'] as String,
+                creditorUid: o['creditorUid'] as String,
+                amount: Money(o['amount'] as int),
+                currency: o['currency'] as String,
+              ),
+          ],
+          payments: [
+            for (final p
+                in (c['payments'] as List).cast<Map<String, dynamic>>())
+              EconomicPaymentRecord(
+                id: p['id'] as String,
+                payerUid: p['payerUid'] as String,
+                receiverUid: p['receiverUid'] as String,
+                amount: Money(p['amount'] as int),
+                currency: p['currency'] as String,
+                status: EconomicPaymentStatus.values.byName(
+                  p['status'] as String,
+                ),
+              ),
+          ],
+        );
+
+        expect([
+          for (final balance in result)
+            {
+              'firstUid': balance.firstUid,
+              'secondUid': balance.secondUid,
+              'currency': balance.currency,
+              'originalFirstToSecond': balance.originalFirstToSecond.cents,
+              'originalSecondToFirst': balance.originalSecondToFirst.cents,
+              'confirmedFirstToSecond': balance.confirmedFirstToSecond.cents,
+              'confirmedSecondToFirst': balance.confirmedSecondToFirst.cents,
+              'pendingFirstToSecond': balance.pendingFirstToSecond.cents,
+              'pendingSecondToFirst': balance.pendingSecondToFirst.cents,
+              'signedOutstanding': balance.signedOutstandingCents,
+            },
+        ], c['expected']);
+      });
+    }
+  });
 }
 
 List<Map<String, dynamic>> _load(String path) {

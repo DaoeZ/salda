@@ -5,8 +5,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('SplitEngine', () {
-    test('todos los participantes aparecen en el resultado, aunque con 0',
-        () {
+    test('todos los participantes aparecen en el resultado, aunque con 0', () {
       final result = SplitEngine.splitTicket(
         participantIds: ['a', 'b', 'c'],
         mode: SplitMode.byItem,
@@ -95,10 +94,11 @@ void main() {
           final weights = switch (type) {
             AssignmentType.one => {pids[rng.nextInt(n)]: 1},
             AssignmentType.shared => {
-                for (final p in (pids.toList()..shuffle(rng))
-                    .take(1 + rng.nextInt(n)))
-                  p: 1 + rng.nextInt(5),
-              },
+              for (final p in (pids.toList()..shuffle(rng)).take(
+                1 + rng.nextInt(n),
+              ))
+                p: 1 + rng.nextInt(5),
+            },
             _ => const <String, int>{},
           };
           return SplitLine(
@@ -127,8 +127,7 @@ void main() {
       expect(SplitLine.unitsFromQuantityMilli(2500), 1); // 2,5 no es entero
     });
 
-    test(
-        'propiedad P2.1: con unidades y pagador, Σ consumo == grandTotal '
+    test('propiedad P2.1: con unidades y pagador, Σ consumo == grandTotal '
         '(500 tickets sembrados)', () {
       final rng = Random(11);
       for (var t = 0; t < 500; t++) {
@@ -142,17 +141,13 @@ void main() {
           final claimers = (pids.toList()..shuffle(rng))
               .take(1 + rng.nextInt(n))
               .toList();
-          final weights = {
-            for (final p in claimers) p: 1 + rng.nextInt(units),
-          };
+          final weights = {for (final p in claimers) p: 1 + rng.nextInt(units)};
           return SplitLine(
             id: 'l$i',
             totalPrice: Money(rng.nextInt(5000)),
             units: units,
             assignment: LineAssignment(
-              claimers.length == 1
-                  ? AssignmentType.one
-                  : AssignmentType.shared,
+              claimers.length == 1 ? AssignmentType.one : AssignmentType.shared,
               weights,
             ),
           );

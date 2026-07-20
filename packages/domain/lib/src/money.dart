@@ -54,9 +54,10 @@ List<Money> allocateProportionally(Money total, List<int> weights) {
   // Totales negativos (p. ej. ajustes): se reparte el valor absoluto y se
   // niega, conservando el mismo criterio determinista de desempate.
   if (total.isNegative) {
-    return allocateProportionally(-total, weights)
-        .map((m) => -m)
-        .toList(growable: false);
+    return allocateProportionally(
+      -total,
+      weights,
+    ).map((m) => -m).toList(growable: false);
   }
 
   final base = List<int>.generate(

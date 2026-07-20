@@ -56,10 +56,7 @@ void main() {
 
     test('guiones bajos: ni final ni consecutivos', () {
       expect(validateUsername('edgar_'), UsernameError.endsWithUnderscore);
-      expect(
-        validateUsername('ed__gar'),
-        UsernameError.consecutiveUnderscores,
-      );
+      expect(validateUsername('ed__gar'), UsernameError.consecutiveUnderscores);
     });
 
     test('nombres reservados, también con mayúsculas', () {
@@ -81,20 +78,22 @@ void main() {
   });
 
   group('usernameCandidates', () {
-    test('orden natural: base, base+2 dígitos, base_apellido, base+3 dígitos',
-        () {
-      final random = Random(7);
-      final candidates = usernameCandidates(
-        'Edgar Cantera',
-        nextInt: random.nextInt,
-      );
-      expect(candidates.first, 'edgar');
-      expect(candidates[1], matches(r'^edgar\d{2}$'));
-      expect(candidates[2], 'edgar_cantera');
-      expect(candidates[3], matches(r'^edgar\d{3}$'));
-      expect(candidates, contains('edgarcantera'));
-      expect(candidates, contains('edgarc'));
-    });
+    test(
+      'orden natural: base, base+2 dígitos, base_apellido, base+3 dígitos',
+      () {
+        final random = Random(7);
+        final candidates = usernameCandidates(
+          'Edgar Cantera',
+          nextInt: random.nextInt,
+        );
+        expect(candidates.first, 'edgar');
+        expect(candidates[1], matches(r'^edgar\d{2}$'));
+        expect(candidates[2], 'edgar_cantera');
+        expect(candidates[3], matches(r'^edgar\d{3}$'));
+        expect(candidates, contains('edgarcantera'));
+        expect(candidates, contains('edgarc'));
+      },
+    );
 
     test('todos los candidatos son válidos y sin duplicados', () {
       final random = Random(42);
@@ -138,10 +137,8 @@ void main() {
     });
 
     test('con la misma semilla las propuestas son reproducibles', () {
-      List<String> generate() => usernameCandidates(
-        'Edgar Cantera',
-        nextInt: Random(99).nextInt,
-      );
+      List<String> generate() =>
+          usernameCandidates('Edgar Cantera', nextInt: Random(99).nextInt);
       expect(generate(), generate());
     });
   });

@@ -30,23 +30,23 @@ void main() {
     test('resto mayor: céntimos sobrantes a las mayores fracciones', () {
       // 100 entre pesos [1,1,3]: exacto 20/20/60.
       expect(
-        allocateProportionally(const Money(100), [1, 1, 3])
-            .map((m) => m.cents),
+        allocateProportionally(const Money(100), [1, 1, 3]).map((m) => m.cents),
         [20, 20, 60],
       );
       // 101 entre [1,1,1]: 33.67 cada uno → 34/34/33 (dos restos empatados,
       // ganan los índices menores).
       expect(
-        allocateProportionally(const Money(101), [1, 1, 1])
-            .map((m) => m.cents),
+        allocateProportionally(const Money(101), [1, 1, 1]).map((m) => m.cents),
         [34, 34, 33],
       );
     });
 
     test('empate de fracciones: gana el índice menor', () {
       expect(
-        allocateProportionally(const Money(1001), [250, 250])
-            .map((m) => m.cents),
+        allocateProportionally(const Money(1001), [
+          250,
+          250,
+        ]).map((m) => m.cents),
         [501, 500],
       );
     });
@@ -67,18 +67,33 @@ void main() {
     test('errores: sin partes, pesos negativos, suma de pesos cero', () {
       expect(
         () => allocateProportionally(const Money(100), []),
-        throwsA(isA<DomainException>()
-            .having((e) => e.code, 'code', DomainException.emptyParticipants)),
+        throwsA(
+          isA<DomainException>().having(
+            (e) => e.code,
+            'code',
+            DomainException.emptyParticipants,
+          ),
+        ),
       );
       expect(
         () => allocateProportionally(const Money(100), [1, -1]),
-        throwsA(isA<DomainException>()
-            .having((e) => e.code, 'code', DomainException.invalidWeights)),
+        throwsA(
+          isA<DomainException>().having(
+            (e) => e.code,
+            'code',
+            DomainException.invalidWeights,
+          ),
+        ),
       );
       expect(
         () => allocateProportionally(const Money(100), [0, 0]),
-        throwsA(isA<DomainException>()
-            .having((e) => e.code, 'code', DomainException.invalidWeights)),
+        throwsA(
+          isA<DomainException>().having(
+            (e) => e.code,
+            'code',
+            DomainException.invalidWeights,
+          ),
+        ),
       );
     });
 
@@ -104,10 +119,11 @@ void main() {
     });
 
     test('allocateEvenly equivale a pesos iguales', () {
-      expect(
-        allocateEvenly(const Money(1000), 3).map((m) => m.cents),
-        [334, 333, 333],
-      );
+      expect(allocateEvenly(const Money(1000), 3).map((m) => m.cents), [
+        334,
+        333,
+        333,
+      ]);
     });
   });
 }

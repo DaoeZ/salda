@@ -7,6 +7,7 @@
 library;
 
 export 'src/engines/balance_engine.dart';
+export 'src/engines/economic_ledger.dart';
 export 'src/engines/split_engine.dart';
 export 'src/errors.dart';
 export 'src/identity/avatar_identity.dart';

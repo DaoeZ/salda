@@ -1,0 +1,53 @@
+{
+  "cases": [
+    {
+      "name": "deuda simple de un ticket",
+      "obligations": [
+        {"id":"t1","debtorUid":"alba","creditorUid":"edgar","amount":1000,"currency":"EUR"},
+        {"id":"t1b","debtorUid":"pedro","creditorUid":"edgar","amount":2000,"currency":"EUR"}
+      ],
+      "payments": [],
+      "expected": [
+        {"firstUid":"alba","secondUid":"edgar","currency":"EUR","originalFirstToSecond":1000,"originalSecondToFirst":0,"confirmedFirstToSecond":0,"confirmedSecondToFirst":0,"pendingFirstToSecond":0,"pendingSecondToFirst":0,"signedOutstanding":1000},
+        {"firstUid":"edgar","secondUid":"pedro","currency":"EUR","originalFirstToSecond":0,"originalSecondToFirst":2000,"confirmedFirstToSecond":0,"confirmedSecondToFirst":0,"pendingFirstToSecond":0,"pendingSecondToFirst":0,"signedOutstanding":-2000}
+      ]
+    },
+    {
+      "name": "neteo bilateral conserva ambos movimientos",
+      "obligations": [
+        {"id":"t1","debtorUid":"alba","creditorUid":"edgar","amount":1000,"currency":"EUR"},
+        {"id":"t2","debtorUid":"edgar","creditorUid":"alba","amount":600,"currency":"EUR"}
+      ],
+      "payments": [],
+      "expected": [
+        {"firstUid":"alba","secondUid":"edgar","currency":"EUR","originalFirstToSecond":1000,"originalSecondToFirst":600,"confirmedFirstToSecond":0,"confirmedSecondToFirst":0,"pendingFirstToSecond":0,"pendingSecondToFirst":0,"signedOutstanding":400}
+      ]
+    },
+    {
+      "name": "pago parcial solo descuenta al confirmar",
+      "obligations": [
+        {"id":"t1","debtorUid":"pedro","creditorUid":"alba","amount":2500,"currency":"EUR"}
+      ],
+      "payments": [
+        {"id":"p1","payerUid":"pedro","receiverUid":"alba","amount":1000,"currency":"EUR","status":"confirmed"},
+        {"id":"p2","payerUid":"pedro","receiverUid":"alba","amount":300,"currency":"EUR","status":"pending"},
+        {"id":"p3","payerUid":"pedro","receiverUid":"alba","amount":200,"currency":"EUR","status":"cancelled"}
+      ],
+      "expected": [
+        {"firstUid":"alba","secondUid":"pedro","currency":"EUR","originalFirstToSecond":0,"originalSecondToFirst":2500,"confirmedFirstToSecond":0,"confirmedSecondToFirst":1000,"pendingFirstToSecond":0,"pendingSecondToFirst":300,"signedOutstanding":-1500}
+      ]
+    },
+    {
+      "name": "monedas distintas nunca se suman",
+      "obligations": [
+        {"id":"eur","debtorUid":"a","creditorUid":"b","amount":500,"currency":"EUR"},
+        {"id":"usd","debtorUid":"a","creditorUid":"b","amount":700,"currency":"USD"}
+      ],
+      "payments": [],
+      "expected": [
+        {"firstUid":"a","secondUid":"b","currency":"EUR","originalFirstToSecond":500,"originalSecondToFirst":0,"confirmedFirstToSecond":0,"confirmedSecondToFirst":0,"pendingFirstToSecond":0,"pendingSecondToFirst":0,"signedOutstanding":500},
+        {"firstUid":"a","secondUid":"b","currency":"USD","originalFirstToSecond":700,"originalSecondToFirst":0,"confirmedFirstToSecond":0,"confirmedSecondToFirst":0,"pendingFirstToSecond":0,"pendingSecondToFirst":0,"signedOutstanding":700}
+      ]
+    }
+  ]
+}

@@ -21,6 +21,9 @@ class DomainException implements Exception {
   /// Asignación con pesos inválidos (vacíos, negativos o cero).
   static const invalidWeights = 'invalidWeights';
 
+  /// Obligación o pago con UID, importe o moneda inválidos.
+  static const invalidEconomicRecord = 'invalidEconomicRecord';
+
   final String code;
   final String message;
 

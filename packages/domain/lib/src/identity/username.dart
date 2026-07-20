@@ -80,12 +80,28 @@ UsernameError? validateUsername(String input) {
 }
 
 const Map<String, String> _diacritics = {
-  'á': 'a', 'à': 'a', 'ä': 'a', 'â': 'a',
-  'é': 'e', 'è': 'e', 'ë': 'e', 'ê': 'e',
-  'í': 'i', 'ì': 'i', 'ï': 'i', 'î': 'i',
-  'ó': 'o', 'ò': 'o', 'ö': 'o', 'ô': 'o',
-  'ú': 'u', 'ù': 'u', 'ü': 'u', 'û': 'u',
-  'ñ': 'n', 'ç': 'c',
+  'á': 'a',
+  'à': 'a',
+  'ä': 'a',
+  'â': 'a',
+  'é': 'e',
+  'è': 'e',
+  'ë': 'e',
+  'ê': 'e',
+  'í': 'i',
+  'ì': 'i',
+  'ï': 'i',
+  'î': 'i',
+  'ó': 'o',
+  'ò': 'o',
+  'ö': 'o',
+  'ô': 'o',
+  'ú': 'u',
+  'ù': 'u',
+  'ü': 'u',
+  'û': 'u',
+  'ñ': 'n',
+  'ç': 'c',
 };
 
 /// Reduce un texto libre (nombre visible) a minúsculas ASCII con espacios:
@@ -110,10 +126,9 @@ List<String> usernameCandidates(
   required int Function(int max) nextInt,
   int count = 10,
 }) {
-  final tokens = searchableText(displayName)
-      .split(' ')
-      .where((token) => token.isNotEmpty)
-      .toList();
+  final tokens = searchableText(
+    displayName,
+  ).split(' ').where((token) => token.isNotEmpty).toList();
   var base = tokens.isEmpty ? 'usuario' : tokens.first;
   // Un username debe empezar por letra; un nombre como "3dgar" no.
   if (!_startsWithLetter.hasMatch(base)) base = 'u$base';

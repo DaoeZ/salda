@@ -6,9 +6,9 @@ class Extracted<T> {
   const Extracted(this.value, this.confidence, [this.alternatives = const []]);
 
   const Extracted.missing()
-      : value = null,
-        confidence = 0,
-        alternatives = const [];
+    : value = null,
+      confidence = 0,
+      alternatives = const [];
 
   final T? value;
   final double confidence;
@@ -34,19 +34,20 @@ class LineAlternative {
   final double confidence;
 
   Map<String, Object?> toJson() => {
-        'name': name,
-        'quantityMilli': quantityMilli,
-        'unitPrice': unitPrice?.cents,
-        'totalPrice': totalPrice.cents,
-        'confidence': confidence,
-      };
+    'name': name,
+    'quantityMilli': quantityMilli,
+    'unitPrice': unitPrice?.cents,
+    'totalPrice': totalPrice.cents,
+    'confidence': confidence,
+  };
 
   factory LineAlternative.fromJson(Map<String, dynamic> json) =>
       LineAlternative(
         name: json['name'] as String,
         quantityMilli: json['quantityMilli'] as int,
-        unitPrice:
-            json['unitPrice'] == null ? null : Money(json['unitPrice'] as int),
+        unitPrice: json['unitPrice'] == null
+            ? null
+            : Money(json['unitPrice'] as int),
         totalPrice: Money(json['totalPrice'] as int),
         confidence: (json['confidence'] as num).toDouble(),
       );
@@ -76,28 +77,29 @@ class ExtractedLine {
   final List<LineAlternative> alternatives;
 
   Map<String, Object?> toJson() => {
-        'name': name,
-        'quantityMilli': quantityMilli,
-        'unitPrice': unitPrice?.cents,
-        'totalPrice': totalPrice.cents,
-        'confidence': confidence,
-        'sourceText': sourceText,
-        'alternatives': [for (final a in alternatives) a.toJson()],
-      };
+    'name': name,
+    'quantityMilli': quantityMilli,
+    'unitPrice': unitPrice?.cents,
+    'totalPrice': totalPrice.cents,
+    'confidence': confidence,
+    'sourceText': sourceText,
+    'alternatives': [for (final a in alternatives) a.toJson()],
+  };
 
   factory ExtractedLine.fromJson(Map<String, dynamic> json) => ExtractedLine(
-        name: json['name'] as String,
-        quantityMilli: (json['quantityMilli'] as int?) ?? 1000,
-        unitPrice:
-            json['unitPrice'] == null ? null : Money(json['unitPrice'] as int),
-        totalPrice: Money(json['totalPrice'] as int),
-        confidence: (json['confidence'] as num).toDouble(),
-        sourceText: (json['sourceText'] as String?) ?? '',
-        alternatives: [
-          for (final a in (json['alternatives'] as List?) ?? const [])
-            LineAlternative.fromJson(a as Map<String, dynamic>),
-        ],
-      );
+    name: json['name'] as String,
+    quantityMilli: (json['quantityMilli'] as int?) ?? 1000,
+    unitPrice: json['unitPrice'] == null
+        ? null
+        : Money(json['unitPrice'] as int),
+    totalPrice: Money(json['totalPrice'] as int),
+    confidence: (json['confidence'] as num).toDouble(),
+    sourceText: (json['sourceText'] as String?) ?? '',
+    alternatives: [
+      for (final a in (json['alternatives'] as List?) ?? const [])
+        LineAlternative.fromJson(a as Map<String, dynamic>),
+    ],
+  );
 }
 
 /// Importe etiquetado (impuestos y descuentos). Los descuentos se guardan
@@ -130,16 +132,16 @@ class ReceiptIssue {
   final int? deltaCents;
 
   Map<String, Object?> toJson() => {
-        'code': code,
-        'message': message,
-        if (deltaCents != null) 'deltaCents': deltaCents,
-      };
+    'code': code,
+    'message': message,
+    if (deltaCents != null) 'deltaCents': deltaCents,
+  };
 
   factory ReceiptIssue.fromJson(Map<String, dynamic> json) => ReceiptIssue(
-        json['code'] as String,
-        json['message'] as String,
-        deltaCents: json['deltaCents'] as int?,
-      );
+    json['code'] as String,
+    json['message'] as String,
+    deltaCents: json['deltaCents'] as int?,
+  );
 }
 
 /// Contrato canónico de extracción de un ticket (ESPECIFICACION.md §9.1/§10):
@@ -194,9 +196,9 @@ class ReceiptExtraction {
   double get overallConfidence {
     final linesConfidence = lines.isEmpty
         ? 0.0
-        : lines.map((l) => l.confidence).reduce((a, b) => a + b) /
-            lines.length;
-    final score = 0.40 * linesConfidence +
+        : lines.map((l) => l.confidence).reduce((a, b) => a + b) / lines.length;
+    final score =
+        0.40 * linesConfidence +
         0.30 * grandTotal.confidence +
         0.15 * merchantName.confidence +
         0.15 * date.confidence;
@@ -221,44 +223,44 @@ class ReceiptExtraction {
   }
 
   Map<String, Object?> toJson() => {
-        'engine': engine,
-        'merchantName': merchantName.value,
-        'merchantConfidence': merchantName.confidence,
-        'brandKey': brandKey,
-        'date': date.value,
-        'dateConfidence': date.confidence,
-        'time': time.value,
-        'timeConfidence': time.confidence,
-        'currency': currency,
-        'category': category,
-        'lines': [for (final l in lines) l.toJson()],
-        'taxes': [for (final t in taxes) t.toJson()],
-        'discounts': [for (final d in discounts) d.toJson()],
-        'tip': tip.value?.cents,
-        'subtotal': subtotal.value?.cents,
-        'grandTotal': grandTotal.value?.cents,
-        'grandTotalConfidence': grandTotal.confidence,
-        'issues': [for (final i in issues) i.toJson()],
-      };
+    'engine': engine,
+    'merchantName': merchantName.value,
+    'merchantConfidence': merchantName.confidence,
+    'brandKey': brandKey,
+    'date': date.value,
+    'dateConfidence': date.confidence,
+    'time': time.value,
+    'timeConfidence': time.confidence,
+    'currency': currency,
+    'category': category,
+    'lines': [for (final l in lines) l.toJson()],
+    'taxes': [for (final t in taxes) t.toJson()],
+    'discounts': [for (final d in discounts) d.toJson()],
+    'tip': tip.value?.cents,
+    'subtotal': subtotal.value?.cents,
+    'grandTotal': grandTotal.value?.cents,
+    'grandTotalConfidence': grandTotal.confidence,
+    'issues': [for (final i in issues) i.toJson()],
+  };
 
   factory ReceiptExtraction.fromJson(Map<String, dynamic> json) {
     Extracted<Money> money(String key, [String? confidenceKey]) =>
         json[key] == null
-            ? const Extracted.missing()
-            : Extracted(
-                Money(json[key] as int),
-                confidenceKey == null
-                    ? 1.0
-                    : ((json[confidenceKey] as num?) ?? 1.0).toDouble(),
-              );
+        ? const Extracted.missing()
+        : Extracted(
+            Money(json[key] as int),
+            confidenceKey == null
+                ? 1.0
+                : ((json[confidenceKey] as num?) ?? 1.0).toDouble(),
+          );
 
     Extracted<String> text(String key, String confidenceKey) =>
         json[key] == null
-            ? const Extracted.missing()
-            : Extracted(
-                json[key] as String,
-                ((json[confidenceKey] as num?) ?? 1.0).toDouble(),
-              );
+        ? const Extracted.missing()
+        : Extracted(
+            json[key] as String,
+            ((json[confidenceKey] as num?) ?? 1.0).toDouble(),
+          );
 
     return ReceiptExtraction(
       engine: json['engine'] as String,
