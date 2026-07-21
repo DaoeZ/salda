@@ -229,8 +229,27 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/profiles/$(data.receiverUid));
     }
 
+    // El cliente crea solicitudes dentro de una transacción que primero lee
+    // el documento (para converger solicitudes cruzadas y ser idempotente).
+    // Ese get llega ANTES de que el doc exista: con resource == null solo se
+    // permite si el ID incorpora el token serializado del propio UID, así un
+    // tercero no puede sondear la existencia de relaciones ajenas.
+    function friendshipIdInvolvesSelf(friendshipId) {
+      return friendshipId.matches(
+        '.*'
+        + (string(request.auth.uid.size()) + ':' + request.auth.uid)
+            .toUtf8().toHexString().lower()
+        + '.*'
+      );
+    }
+
     match /friendships/{friendshipId} {
-      allow read: if canUseSocial()
+      allow get: if canUseSocial()
+        && (resource == null
+          ? friendshipIdInvolvesSelf(friendshipId)
+          : request.auth.uid in resource.data.memberUids);
+
+      allow list: if canUseSocial()
         && request.auth.uid in resource.data.memberUids;
 
       allow create: if canUseSocial()

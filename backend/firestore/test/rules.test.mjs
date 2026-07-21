@@ -23,6 +23,7 @@ import {
   getDoc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -372,6 +373,33 @@ describe('friendships', () => {
     const saved = await getDoc(refFor());
     assert.equal(saved.data().status, 'pending');
     assert.deepEqual(saved.data().memberUids, [OWNER, STRANGER].sort());
+  });
+
+  // Regresión: el cliente envía la solicitud dentro de una transacción que
+  // primero LEE el documento (aún inexistente). La regla de get debe admitir
+  // esa lectura o la transacción entera muere con permission-denied.
+  it('el flujo real del cliente: transacción que lee el doc inexistente y lo crea',
+      async () => {
+    const database = db(OWNER);
+    await assertSucceeds(runTransaction(database, async (tx) => {
+      const snapshot = await tx.get(doc(database, `friendships/${id()}`));
+      assert.equal(snapshot.exists(), false);
+      tx.set(
+        doc(database, `friendships/${id()}`),
+        friendshipData(OWNER, STRANGER),
+      );
+    }));
+    const saved = await getDoc(refFor());
+    assert.equal(saved.data().status, 'pending');
+  });
+
+  it('get de una relación inexistente: solo si el ID incluye al lector',
+      async () => {
+    await assertSucceeds(getDoc(refFor(OWNER)));
+    await assertSucceeds(getDoc(refFor(STRANGER)));
+    // Cuenta social válida pero ajena al par: no puede sondear existencia.
+    await assertFails(getDoc(refFor(SOCIAL_OUTSIDER)));
+    await assertFails(getDoc(refFor(GUEST)));
   });
 
   it('solo los participantes completos leen y la query exige arrayContains',

@@ -149,6 +149,49 @@ void main() {
       await subscription.cancel();
     });
   });
+
+  group('AppUser', () {
+    // Regresión del bug de amistades: reloadUser re-emite un AppUser nuevo
+    // en cada escritura social; sin igualdad de valor, authStateProvider
+    // notificaba, el router se recreaba y la pantalla activa se cerraba.
+    test('dos instancias con los mismos datos son iguales', () {
+      const first = AppUser(
+        uid: 'uid-a',
+        email: 'a@salda.test',
+        displayName: 'Alba',
+        providerIds: {'password', 'google.com'},
+      );
+      const second = AppUser(
+        uid: 'uid-a',
+        email: 'a@salda.test',
+        displayName: 'Alba',
+        providerIds: {'google.com', 'password'},
+      );
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+    });
+
+    test('cambiar cualquier campo relevante rompe la igualdad', () {
+      const base = AppUser(uid: 'uid-a', email: 'a@salda.test');
+      expect(base, isNot(const AppUser(uid: 'uid-b', email: 'a@salda.test')));
+      expect(base, isNot(const AppUser(uid: 'uid-a', email: 'b@salda.test')));
+      expect(
+        base,
+        isNot(const AppUser(uid: 'uid-a', email: 'a@salda.test', isAnonymous: true)),
+      );
+      expect(
+        base,
+        isNot(
+          const AppUser(
+            uid: 'uid-a',
+            email: 'a@salda.test',
+            emailVerified: false,
+          ),
+        ),
+      );
+    });
+  });
 }
 
 class _FakeAuthGateway implements AuthGateway {

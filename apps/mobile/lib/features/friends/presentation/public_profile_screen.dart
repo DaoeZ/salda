@@ -24,11 +24,19 @@ class PublicProfileScreen extends ConsumerStatefulWidget {
 class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
   var _busy = false;
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<void> _run(
+    Future<void> Function() action, {
+    String? successMessage,
+  }) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       await action();
+      if (mounted && successMessage != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(successMessage)));
+      }
     } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -139,6 +147,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                         () => ref
                             .read(friendshipRepositoryProvider)
                             .sendRequest(widget.profileUid),
+                        successMessage: l10n.friendRequestSent,
                       ),
                       onAccept: () => _run(
                         () => ref
