@@ -17,13 +17,15 @@ void main() {
     );
   });
 
-  NewSessionInput input() => const NewSessionInput(
+  NewSessionInput input({String? spaceId}) => NewSessionInput(
     name: 'Cena Casa Paco',
     splitModeDefault: SplitMode.byItem,
     paymentMethodsSnapshot: {'bizumPhone': '612345678'},
     participantNames: ['Edgar', 'Alba', 'Lucía'],
     payerIndex: 1,
-    ticket: NewTicketInput(
+    spaceId: spaceId,
+    spaceName: spaceId == null ? null : 'Piso',
+    ticket: const NewTicketInput(
       kind: 'scanned',
       merchantName: 'Casa Paco',
       category: 'restaurante',
@@ -40,6 +42,21 @@ void main() {
         NewLineInput(name: 'Solomillo', totalPrice: Money(4440)),
       ],
     ),
+  );
+
+  test(
+    'el contexto se persiste en sesión y ticket en la misma creación',
+    () async {
+      final created = await repo.createSession(input(spaceId: 'space-1'));
+      final session =
+          (await firestore.doc('sessions/${created.sessionId}').get()).data()!;
+      final ticket = (await firestore.doc(created.ticketPath).get()).data()!;
+
+      expect(session['contextModelVersion'], 1);
+      expect(session['spaceId'], 'space-1');
+      expect(ticket['contextModelVersion'], 1);
+      expect(ticket['spaceId'], 'space-1');
+    },
   );
 
   test(
@@ -186,10 +203,12 @@ void main() {
         grandTotal: Money(4000),
       ),
       payerPid: 'p2',
+      spaceId: 'space-1',
     );
 
     final session = (await firestore.doc('sessions/$sid').get()).data()!;
     expect(session['kind'], 'multi');
+    expect(session['spaceId'], 'space-1');
 
     final accounts = await firestore
         .collection('sessions/$sid/accounts')

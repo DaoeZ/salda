@@ -13,6 +13,13 @@ library;
 
 enum SpaceStatus { active, archived }
 
+/// Tipo funcional del contexto principal de Salda.
+///
+/// Los espacios P4 anteriores a este campo se leen como [group]. Esa
+/// compatibilidad es deliberada: no se puede deducir una relación social a
+/// partir de tickets o de una lista histórica de miembros.
+enum SpaceKind { relationship, group }
+
 enum SpaceInviteStatus { pending, accepted, rejected, cancelled }
 
 class Space {
@@ -21,6 +28,8 @@ class Space {
     required this.name,
     required this.ownerUid,
     required this.status,
+    this.kind = SpaceKind.group,
+    this.relationshipUids = const [],
     this.avatarEmoji,
     this.createdAt,
     this.updatedAt,
@@ -30,6 +39,11 @@ class Space {
   final String name;
   final String ownerUid;
   final SpaceStatus status;
+  final SpaceKind kind;
+
+  /// Pareja canónica reservada por una relación, incluso mientras la segunda
+  /// persona todavía no haya aceptado la invitación.
+  final List<String> relationshipUids;
 
   /// Avatar básico opcional (un emoji). El COLOR se deriva siempre del id
   /// del espacio (avatarColorIndex), igual que los avatares de personas.
@@ -38,6 +52,21 @@ class Space {
   final DateTime? updatedAt;
 
   bool get isActive => status == SpaceStatus.active;
+  bool get isRelationship => kind == SpaceKind.relationship;
+}
+
+/// ID canónico e independiente del orden para una relación entre dos UID.
+/// Firebase Auth genera UID sin `/`; `~` mantiene el ID verificable también
+/// desde Rules, que así puede impedir parejas duplicadas sin una Function.
+String relationshipSpaceId(String leftUid, String rightUid) {
+  if (leftUid == rightUid) {
+    throw ArgumentError.value(rightUid, 'rightUid', 'Debe ser otro usuario');
+  }
+  final pair = [leftUid, rightUid]..sort();
+  if (pair.any((value) => value.contains('/') || value.contains('~'))) {
+    throw ArgumentError('UID incompatible con el identificador de relación');
+  }
+  return 'relationship_${pair.first}~${pair.last}';
 }
 
 /// Membresía = acceso al espacio. El ROL no se persiste: propietario es

@@ -410,5 +410,22 @@
   "economyOpenDetail": "Ver desglose",
   "spaceEconomicTitle": "Tu balance en este espacio",
   "spaceEconomicEmpty": "Todavía no tienes movimientos económicos identificados en este espacio.",
-  "commonRetry": "Reintentar"
+  "commonRetry": "Reintentar",
+  "historyTitle": "Histórico sin organizar",
+  "contextCreate": "Crear",
+  "contextAccountRequired": "Convierte tu cuenta de invitado para crear relaciones y grupos permanentes.",
+  "contextInvitations": "Invitaciones",
+  "contextInvitationPending": "Quiere compartir gastos contigo",
+  "relationshipsTitle": "Relaciones",
+  "relationshipsEmpty": "Crea una relación para compartir gastos con otra persona",
+  "groupsTitle": "Grupos",
+  "groupsEmpty": "Crea un grupo para tres o más personas",
+  "relationshipCreate": "Nueva relación",
+  "relationshipCreateHelp": "Gastos entre dos personas",
+  "relationshipSearchHelp": "Busca a la persona con la que quieres compartir gastos.",
+  "groupCreate": "Nuevo grupo",
+  "groupCreateHelp": "Gastos entre tres o más personas",
+  "ticketContextMissing": "Abre una relación o un grupo antes de crear el ticket.",
+  "relationshipNeedsAcceptance": "La otra persona debe aceptar la invitación antes de crear tickets.",
+  "groupNeedsMembers": "El grupo necesita al menos tres miembros antes de crear tickets."
 }

@@ -54,6 +54,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/sessions/$(sid)).data;
     }
 
+    function futureSessionData(sid) {
+      return getAfter(/databases/$(database)/documents/sessions/$(sid)).data;
+    }
+
     function ownsSession(sid) {
       return signedIn() && sessionData(sid).ownerUid == request.auth.uid;
     }
@@ -284,6 +288,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/spaces/$(spaceId)).data;
     }
 
+    function futureSpaceData(spaceId) {
+      return getAfter(/databases/$(database)/documents/spaces/$(spaceId)).data;
+    }
+
     function isSpaceMember(spaceId) {
       return exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
     }
@@ -295,7 +303,8 @@ service cloud.firestore {
     function validSpaceShape(data) {
       return data.keys().hasOnly([
           'name', 'avatarEmoji', 'ownerUid', 'status',
-          'createdAt', 'updatedAt', 'schemaVersion'
+          'createdAt', 'updatedAt', 'schemaVersion', 'kind',
+          'relationshipUids'
         ])
         && data.name is string
         && data.name.size() >= 2
@@ -303,7 +312,24 @@ service cloud.firestore {
         && (!('avatarEmoji' in data)
           || (data.avatarEmoji is string && data.avatarEmoji.size() <= 8))
         && data.status in ['active', 'archived']
-        && data.schemaVersion == 1
+        && (
+          (data.schemaVersion == 1
+            && !('kind' in data)
+            && !('relationshipUids' in data))
+          || (data.schemaVersion == 2
+            && data.kind in ['relationship', 'group']
+            && (
+              (data.kind == 'group'
+                && data.get('relationshipUids', []).size() == 0)
+              || (data.kind == 'relationship'
+                && data.relationshipUids is list
+                && data.relationshipUids.size() == 2
+                && data.relationshipUids[0] is string
+                && data.relationshipUids[1] is string
+                && data.relationshipUids[0] < data.relationshipUids[1]
+                && data.ownerUid in data.relationshipUids)
+            ))
+        )
         && data.updatedAt is timestamp;
     }
 
@@ -320,6 +346,10 @@ service cloud.firestore {
         && validSpaceShape(request.resource.data)
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.status == 'active'
+        && (request.resource.data.get('kind', 'group') != 'relationship'
+          || spaceId == 'relationship_'
+            + request.resource.data.relationshipUids[0] + '~'
+            + request.resource.data.relationshipUids[1])
         && request.resource.data.createdAt is timestamp
         && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
             .data.uid == request.auth.uid;
@@ -329,6 +359,10 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid
         && validSpaceShape(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.get('kind', 'group')
+          == resource.data.get('kind', 'group')
+        && request.resource.data.get('relationshipUids', [])
+          == resource.data.get('relationshipUids', [])
         && (
           // Editar nombre/avatar o archivar/reactivar: el owner no cambia.
           (request.resource.data.ownerUid == resource.data.ownerUid)
@@ -355,6 +389,8 @@ service cloud.firestore {
           && request.resource.data.uid == memberUid
           && request.resource.data.joinedAt is timestamp
           && memberUid == request.auth.uid
+          && (futureSpaceData(spaceId).get('kind', 'group') != 'relationship'
+            || memberUid in futureSpaceData(spaceId).relationshipUids)
           && (
             // (a) Fundador: su membresía al crear el espacio (mismo batch).
             getAfter(/databases/$(database)/documents/spaces/$(spaceId))
@@ -385,8 +421,9 @@ service cloud.firestore {
 
       // Invita el owner de un espacio ACTIVO a una cuenta con perfil que
       // aún no es miembro. El ID determinista impide duplicados activos.
-      allow create: if isSpaceOwner(request.resource.data.spaceId)
-        && spaceData(request.resource.data.spaceId).status == 'active'
+      allow create: if canUseSocial()
+        && futureSpaceData(request.resource.data.spaceId).ownerUid == request.auth.uid
+        && futureSpaceData(request.resource.data.spaceId).status == 'active'
         && inviteId
           == request.resource.data.spaceId + '_' + request.resource.data.toUid
         && request.resource.data.keys().hasOnly([
@@ -395,6 +432,9 @@ service cloud.firestore {
         ])
         && request.resource.data.fromUid == request.auth.uid
         && request.resource.data.toUid != request.auth.uid
+        && (futureSpaceData(request.resource.data.spaceId).get('kind', 'group') != 'relationship'
+          || request.resource.data.toUid
+            in futureSpaceData(request.resource.data.spaceId).relationshipUids)
         && request.resource.data.spaceName is string
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt is timestamp
@@ -456,6 +496,11 @@ service cloud.firestore {
         && request.resource.data.splitModeDefault in ['equal', 'byItem']
         && request.resource.data.shareCode is string
         && request.resource.data.shareCode.size() >= 16
+        && (request.resource.data.get('contextModelVersion', 0) == 0
+          || (request.resource.data.contextModelVersion == 1
+            && request.resource.data.spaceId is string
+            && request.resource.data.spaceId != ''
+            && isSpaceMember(request.resource.data.spaceId)))
         // Agregados: o ausentes o a cero; a partir de aquí, solo la function.
         && request.resource.data.get('computeVersion', 0) == 0
         && request.resource.data.get('pendingSettlements', 0) == 0
@@ -475,6 +520,15 @@ service cloud.firestore {
       allow update: if isOwner(sid)
         && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['ownerUid', 'totals', 'balances', 'computeVersion'])
+        && (request.resource.data.get('contextModelVersion', 0) == 0
+          || (request.resource.data.contextModelVersion == 1
+            && request.resource.data.spaceId is string
+            && request.resource.data.spaceId != ''
+            && isSpaceMember(request.resource.data.spaceId)))
+        && (resource.data.get('contextModelVersion', 0) == 0
+          || (request.resource.data.contextModelVersion
+                == resource.data.contextModelVersion
+            && request.resource.data.spaceId == resource.data.spaceId))
         && (
           // Abierta: cualquier edición de contenido.
           resource.data.status == 'open'
@@ -537,6 +591,10 @@ service cloud.firestore {
           allow create, update: if isOwner(sid) && isOpen(sid)
             && request.resource.data.grandTotal is int
             && request.resource.data.paidByParticipantId is string
+            && (futureSessionData(sid).get('contextModelVersion', 0) == 0
+              || (request.resource.data.get('contextModelVersion', 0) == 1
+                && request.resource.data.spaceId
+                  == futureSessionData(sid).spaceId))
             && (request.resource.data.get('spaceId', '') == ''
               || (request.resource.data.spaceId is string
                 && isSpaceMember(request.resource.data.spaceId)));

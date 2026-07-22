@@ -5,25 +5,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
+import '../../profile/data/profile_repository.dart';
+import '../../spaces/data/spaces_repository.dart';
+import '../../spaces/domain/space_models.dart';
 import '../application/create_session_controller.dart';
 
-/// Hoja "Gente y reparto" (spec §2.1 paso 4): chips de personas frecuentes,
-/// modo de reparto, pagador y crear+compartir en un toque.
-Future<void> showPeopleSheet(BuildContext context, {String? suggestedName}) {
-  return showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    builder: (context) => Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: _PeopleForm(suggestedName: suggestedName),
-    ),
-  );
-}
+/// Configura el reparto usando los miembros registrados del contexto. La
+/// relación o grupo decide quién participa; el ticket no crea una segunda
+/// lista social independiente.
+Future<void> showPeopleSheet(BuildContext context, {String? suggestedName}) =>
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: _PeopleForm(suggestedName: suggestedName),
+      ),
+    );
 
 class _PeopleForm extends ConsumerStatefulWidget {
   const _PeopleForm({this.suggestedName});
-
   final String? suggestedName;
 
   @override
@@ -31,40 +34,29 @@ class _PeopleForm extends ConsumerStatefulWidget {
 }
 
 class _PeopleFormState extends ConsumerState<_PeopleForm> {
-  final _newPerson = TextEditingController();
-  late final _sessionName =
-      TextEditingController(text: widget.suggestedName ?? '');
-  final List<String> _people = [];
-  var _mode = SplitMode.equal;
-  var _payerIndex = 0;
+  late final sessionName = TextEditingController(
+    text: widget.suggestedName ?? '',
+  );
+  var mode = SplitMode.equal;
+  var payerIndex = 0;
 
   @override
   void dispose() {
-    _newPerson.dispose();
-    _sessionName.dispose();
+    sessionName.dispose();
     super.dispose();
   }
 
-  List<String> get _allNames =>
-      [ref.read(hostDisplayNameProvider), ..._people];
-
-  void _addPerson(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty || _people.contains(trimmed)) return;
-    setState(() {
-      _people.add(trimmed);
-      _newPerson.clear();
-    });
-  }
-
-  Future<void> _create() async {
-    final sid = await ref.read(createSessionControllerProvider.notifier).create(
-          participantNames: _allNames,
-          payerIndex: _payerIndex,
-          splitMode: _mode,
-          sessionName: _sessionName.text.trim().isEmpty
+  Future<void> create(List<({String uid, String name})> people) async {
+    final sid = await ref
+        .read(createSessionControllerProvider.notifier)
+        .create(
+          participantNames: people.map((person) => person.name).toList(),
+          participantUids: people.map((person) => person.uid).toList(),
+          payerIndex: payerIndex,
+          splitMode: mode,
+          sessionName: sessionName.text.trim().isEmpty
               ? (widget.suggestedName ?? 'Cuenta')
-              : _sessionName.text.trim(),
+              : sessionName.text.trim(),
         );
     if (sid != null && mounted) {
       Navigator.pop(context);
@@ -76,113 +68,129 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final frequent = ref.watch(frequentPeopleProvider).value ?? const [];
-    final creating =
-        ref.watch(createSessionControllerProvider) is AsyncLoading;
-    final names = _allNames;
+    final target = ref.watch(pendingSpaceLinkProvider);
+    if (target == null) {
+      return Padding(
+        padding: const EdgeInsets.all(TokenSpacing.xl),
+        child: Text(l10n.ticketContextMissing, textAlign: TextAlign.center),
+      );
+    }
+    final members = ref.watch(spaceMembersProvider(target.id));
+    final creating = ref.watch(createSessionControllerProvider) is AsyncLoading;
 
-    return Padding(
-      padding: const EdgeInsets.all(TokenSpacing.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(l10n.peopleSheetTitle, style: theme.textTheme.titleLarge),
-          const SizedBox(height: TokenSpacing.md),
-          TextField(
-            controller: _sessionName,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(labelText: l10n.sessionNameLabel),
-          ),
-          const SizedBox(height: TokenSpacing.md),
-          Wrap(
-            spacing: TokenSpacing.sm,
-            runSpacing: TokenSpacing.xs,
-            children: [
-              InputChip(
-                avatar: const Icon(Icons.person, size: 18),
-                label: Text(
-                    '${ref.watch(hostDisplayNameProvider)} (${l10n.peopleYou})'),
-                onPressed: null,
-              ),
-              for (final person in _people)
-                InputChip(
-                  label: Text(person),
-                  onDeleted: () => setState(() {
-                    _people.remove(person);
-                    _payerIndex = 0;
-                  }),
-                ),
-              // Frecuentes aún no elegidas: un toque para añadir (RF-40).
-              for (final person in frequent.where(
-                  (f) => !_people.contains(f.name)))
-                ActionChip(
-                  avatar: const Icon(Icons.history, size: 16),
-                  label: Text(person.name),
-                  onPressed: () => _addPerson(person.name),
-                ),
-            ],
-          ),
-          TextField(
-            controller: _newPerson,
-            textCapitalization: TextCapitalization.words,
-            decoration: InputDecoration(
-              hintText: l10n.peopleAddHint,
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: () => _addPerson(_newPerson.text),
-              ),
-            ),
-            onSubmitted: _addPerson,
-          ),
-          const SizedBox(height: TokenSpacing.lg),
-          SegmentedButton<SplitMode>(
-            segments: [
-              ButtonSegment(
-                  value: SplitMode.equal,
-                  icon: const Icon(Icons.balance),
-                  label: Text(l10n.splitEqual)),
-              ButtonSegment(
-                  value: SplitMode.byItem,
-                  icon: const Icon(Icons.checklist),
-                  label: Text(l10n.splitByItem)),
-            ],
-            selected: {_mode},
-            onSelectionChanged: (selection) =>
-                setState(() => _mode = selection.first),
-          ),
-          const SizedBox(height: TokenSpacing.lg),
-          Row(children: [
-            Text(l10n.payerQuestion, style: theme.textTheme.bodyMedium),
-            const SizedBox(width: TokenSpacing.md),
-            Expanded(
-              child: DropdownButton<int>(
-                value: _payerIndex,
-                isExpanded: true,
-                items: [
-                  for (var i = 0; i < names.length; i++)
-                    DropdownMenuItem(value: i, child: Text(names[i])),
-                ],
-                onChanged: (value) =>
-                    setState(() => _payerIndex = value ?? 0),
-              ),
-            ),
-          ]),
-          const SizedBox(height: TokenSpacing.lg),
-          FilledButton.icon(
-            onPressed: _people.isEmpty || creating ? null : _create,
-            icon: creating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.ios_share),
-            label: Text(
-                _people.isEmpty ? l10n.peopleNeedTwo : l10n.createAndShare),
-          ),
-          const SizedBox(height: TokenSpacing.sm),
-        ],
+    return members.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(TokenSpacing.xl),
+        child: Center(child: CircularProgressIndicator()),
       ),
+      error: (_, _) => Padding(
+        padding: const EdgeInsets.all(TokenSpacing.xl),
+        child: Text(l10n.spacesLoadError, textAlign: TextAlign.center),
+      ),
+      data: (spaceMembers) {
+        final myUid = ref.watch(currentUserIdFromSpacesProvider);
+        final ordered = [...spaceMembers]
+          ..sort((a, b) => a.uid == myUid ? -1 : (b.uid == myUid ? 1 : 0));
+        final people = [
+          for (final member in ordered)
+            (
+              uid: member.uid,
+              name: member.uid == myUid
+                  ? ref.watch(hostDisplayNameProvider)
+                  : ref
+                            .watch(publicProfileProvider(member.uid))
+                            .value
+                            ?.displayName ??
+                        '…',
+            ),
+        ];
+        final complete = target.kind == SpaceKind.relationship
+            ? people.length == 2
+            : people.length >= 3;
+        if (payerIndex >= people.length) payerIndex = 0;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(TokenSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(l10n.peopleSheetTitle, style: theme.textTheme.titleLarge),
+              const SizedBox(height: TokenSpacing.xs),
+              Text(target.name, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: TokenSpacing.md),
+              TextField(
+                controller: sessionName,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(labelText: l10n.sessionNameLabel),
+              ),
+              const SizedBox(height: TokenSpacing.md),
+              Wrap(
+                spacing: TokenSpacing.sm,
+                runSpacing: TokenSpacing.xs,
+                children: [
+                  for (final person in people)
+                    Chip(
+                      avatar: const Icon(Icons.person, size: 18),
+                      label: Text(person.name),
+                    ),
+                ],
+              ),
+              if (!complete) ...[
+                const SizedBox(height: TokenSpacing.sm),
+                Text(
+                  target.kind == SpaceKind.relationship
+                      ? l10n.relationshipNeedsAcceptance
+                      : l10n.groupNeedsMembers,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: TokenSpacing.lg),
+              SegmentedButton<SplitMode>(
+                segments: [
+                  ButtonSegment(
+                    value: SplitMode.equal,
+                    icon: const Icon(Icons.balance),
+                    label: Text(l10n.splitEqual),
+                  ),
+                  ButtonSegment(
+                    value: SplitMode.byItem,
+                    icon: const Icon(Icons.checklist),
+                    label: Text(l10n.splitByItem),
+                  ),
+                ],
+                selected: {mode},
+                onSelectionChanged: (selection) =>
+                    setState(() => mode = selection.first),
+              ),
+              const SizedBox(height: TokenSpacing.lg),
+              DropdownButtonFormField<int>(
+                initialValue: people.isEmpty ? null : payerIndex,
+                decoration: InputDecoration(labelText: l10n.payerQuestion),
+                items: [
+                  for (var index = 0; index < people.length; index++)
+                    DropdownMenuItem(
+                      value: index,
+                      child: Text(people[index].name),
+                    ),
+                ],
+                onChanged: (value) => setState(() => payerIndex = value ?? 0),
+              ),
+              const SizedBox(height: TokenSpacing.lg),
+              FilledButton.icon(
+                onPressed: !complete || creating ? null : () => create(people),
+                icon: creating
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.ios_share),
+                label: Text(l10n.createAndShare),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

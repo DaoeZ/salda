@@ -24,11 +24,56 @@ void main() {
       expect(space['name'], 'Viaje a Lisboa');
       expect(space['ownerUid'], 'uid-a');
       expect(space['status'], 'active');
-      expect(space['schemaVersion'], 1);
+      expect(space['schemaVersion'], 2);
+      expect(space['kind'], 'group');
       expect(
         (await firestore.doc('spaces/$id/members/uid-a').get()).exists,
         true,
       );
+    });
+
+    test(
+      'relación usa id canónico y reserva exactamente los dos UID',
+      () async {
+        final id = await repoFor(
+          'uid-b',
+        ).createRelationship(toUid: 'uid-a', name: 'Ana y Bruno');
+
+        expect(id, relationshipSpaceId('uid-a', 'uid-b'));
+        expect(id, relationshipSpaceId('uid-b', 'uid-a'));
+        final space = (await firestore.doc('spaces/$id').get()).data()!;
+        expect(space['kind'], 'relationship');
+        expect(space['relationshipUids'], ['uid-a', 'uid-b']);
+        expect(
+          (await firestore.doc('spaceInvites/${id}_uid-a').get()).data(),
+          containsPair('status', 'pending'),
+        );
+
+        expect(
+          () => repoFor(
+            'uid-a',
+          ).createRelationship(toUid: 'uid-b', name: 'Duplicada'),
+          throwsA(
+            isA<SpaceFailure>().having(
+              (failure) => failure.code,
+              'code',
+              SpaceFailureCode.alreadyMember,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('espacio histórico sin kind se interpreta como grupo', () async {
+      await firestore.doc('spaces/legacy').set({
+        'name': 'Histórico',
+        'ownerUid': 'uid-a',
+        'status': 'active',
+      });
+      await firestore.doc('spaces/legacy/members/uid-a').set({'uid': 'uid-a'});
+
+      final spaces = await repoFor('uid-a').watchMySpaces().first;
+      expect(spaces.single.kind, SpaceKind.group);
     });
 
     test('watchMySpaces lista los espacios de MIS membresías', () async {
@@ -45,40 +90,39 @@ void main() {
       final repo = repoFor('uid-a');
       final id = await repo.createSpace('Peña');
       await repo.setStatus(id, SpaceStatus.archived);
-      expect(
-        (await repo.watchSpace(id).first)!.status,
-        SpaceStatus.archived,
-      );
+      expect((await repo.watchSpace(id).first)!.status, SpaceStatus.archived);
       await repo.setStatus(id, SpaceStatus.active);
       expect((await repo.watchSpace(id).first)!.isActive, true);
     });
 
-    test('transferencia: un solo doc; a no-miembro falla; a mí mismo, no-op',
-        () async {
-      final repoA = repoFor('uid-a');
-      final id = await repoA.createSpace('Familia');
-      await firestore.doc('spaces/$id/members/uid-b').set({
-        'uid': 'uid-b',
-        'joinedAt': DateTime(2026, 7),
-      });
+    test(
+      'transferencia: un solo doc; a no-miembro falla; a mí mismo, no-op',
+      () async {
+        final repoA = repoFor('uid-a');
+        final id = await repoA.createSpace('Familia');
+        await firestore.doc('spaces/$id/members/uid-b').set({
+          'uid': 'uid-b',
+          'joinedAt': DateTime(2026, 7),
+        });
 
-      await repoA.transferOwnership(id, 'uid-b');
-      expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
+        await repoA.transferOwnership(id, 'uid-b');
+        expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
 
-      await expectLater(
-        repoFor('uid-b').transferOwnership(id, 'uid-x'),
-        throwsA(
-          isA<SpaceFailure>().having(
-            (f) => f.code,
-            'code',
-            SpaceFailureCode.targetUnavailable,
+        await expectLater(
+          repoFor('uid-b').transferOwnership(id, 'uid-x'),
+          throwsA(
+            isA<SpaceFailure>().having(
+              (f) => f.code,
+              'code',
+              SpaceFailureCode.targetUnavailable,
+            ),
           ),
-        ),
-      );
-      // Idempotente: transferirse a sí mismo no cambia nada.
-      await repoFor('uid-b').transferOwnership(id, 'uid-b');
-      expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
-    });
+        );
+        // Idempotente: transferirse a sí mismo no cambia nada.
+        await repoFor('uid-b').transferOwnership(id, 'uid-b');
+        expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
+      },
+    );
   });
 
   group('invitaciones', () {
@@ -89,8 +133,7 @@ void main() {
       await repoA.invite(id, 'Viaje', 'uid-b');
       final inviteId = SpaceInvite.idFor(id, 'uid-b');
       expect(
-        (await firestore.doc('spaceInvites/$inviteId').get())
-            .data()!['status'],
+        (await firestore.doc('spaceInvites/$inviteId').get()).data()!['status'],
         'pending',
       );
 
@@ -116,8 +159,7 @@ void main() {
       );
     });
 
-    test('aceptar une al receptor y resuelve la invitación en batch',
-        () async {
+    test('aceptar une al receptor y resuelve la invitación en batch', () async {
       final repoA = repoFor('uid-a');
       final repoB = repoFor('uid-b');
       final id = await repoA.createSpace('Viaje');
@@ -148,8 +190,10 @@ void main() {
       final again = await repoB.watchMyInvites().first;
       expect(again.single.id, invite.id);
       expect(again.single.status, SpaceInviteStatus.pending);
-      expect((await firestore.collection('spaceInvites').get()).docs,
-          hasLength(1));
+      expect(
+        (await firestore.collection('spaceInvites').get()).docs,
+        hasLength(1),
+      );
     });
 
     test('cancelar deja la invitación fuera de las pendientes', () async {
@@ -163,34 +207,36 @@ void main() {
   });
 
   group('membresía', () {
-    test('el owner no puede salir; un miembro sí (solo su doc social)',
-        () async {
-      final repoA = repoFor('uid-a');
-      final id = await repoA.createSpace('Piso');
-      await firestore.doc('spaces/$id/members/uid-b').set({
-        'uid': 'uid-b',
-        'joinedAt': DateTime(2026, 7),
-      });
+    test(
+      'el owner no puede salir; un miembro sí (solo su doc social)',
+      () async {
+        final repoA = repoFor('uid-a');
+        final id = await repoA.createSpace('Piso');
+        await firestore.doc('spaces/$id/members/uid-b').set({
+          'uid': 'uid-b',
+          'joinedAt': DateTime(2026, 7),
+        });
 
-      await expectLater(
-        repoA.leave(id),
-        throwsA(
-          isA<SpaceFailure>().having(
-            (f) => f.code,
-            'code',
-            SpaceFailureCode.ownerCannotLeave,
+        await expectLater(
+          repoA.leave(id),
+          throwsA(
+            isA<SpaceFailure>().having(
+              (f) => f.code,
+              'code',
+              SpaceFailureCode.ownerCannotLeave,
+            ),
           ),
-        ),
-      );
+        );
 
-      await repoFor('uid-b').leave(id);
-      expect(
-        (await firestore.doc('spaces/$id/members/uid-b').get()).exists,
-        false,
-      );
-      // El espacio y su otro miembro siguen intactos.
-      expect((await firestore.doc('spaces/$id').get()).exists, true);
-    });
+        await repoFor('uid-b').leave(id);
+        expect(
+          (await firestore.doc('spaces/$id/members/uid-b').get()).exists,
+          false,
+        );
+        // El espacio y su otro miembro siguen intactos.
+        expect((await firestore.doc('spaces/$id').get()).exists, true);
+      },
+    );
 
     test('expulsar borra SOLO la membresía', () async {
       final repoA = repoFor('uid-a');
@@ -219,27 +265,17 @@ void main() {
       });
     });
 
-    test('vincular, sobrescribir (máximo un espacio) y desvincular',
-        () async {
+    test('vincular, sobrescribir (máximo un espacio) y desvincular', () async {
       final repo = repoFor('uid-a');
       await repo.linkTicket(ticketPath, 'sp1');
-      expect(
-        (await firestore.doc(ticketPath).get()).data()!['spaceId'],
-        'sp1',
-      );
+      expect((await firestore.doc(ticketPath).get()).data()!['spaceId'], 'sp1');
 
       // Máximo un espacio: vincular a otro sobrescribe, nunca duplica.
       await repo.linkTicket(ticketPath, 'sp2');
-      expect(
-        (await firestore.doc(ticketPath).get()).data()!['spaceId'],
-        'sp2',
-      );
+      expect((await firestore.doc(ticketPath).get()).data()!['spaceId'], 'sp2');
 
       await repo.unlinkTicket(ticketPath);
-      expect(
-        (await firestore.doc(ticketPath).get()).data()!['spaceId'],
-        '',
-      );
+      expect((await firestore.doc(ticketPath).get()).data()!['spaceId'], '');
       // Nada más cambió en el ticket (participantes/importes intactos).
       expect(
         (await firestore.doc(ticketPath).get()).data()!['grandTotal'],
@@ -263,11 +299,12 @@ void main() {
       expect(tickets.single.sessionId, 's1');
     });
 
-    test('compatibilidad: un ticket sin spaceId no aparece en ningún espacio',
-        () async {
-      final tickets =
-          await repoFor('uid-a').watchSpaceTickets('sp1').first;
-      expect(tickets, isEmpty);
-    });
+    test(
+      'compatibilidad: un ticket sin spaceId no aparece en ningún espacio',
+      () async {
+        final tickets = await repoFor('uid-a').watchSpaceTickets('sp1').first;
+        expect(tickets, isEmpty);
+      },
+    );
   });
 }

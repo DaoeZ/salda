@@ -121,6 +121,9 @@ class FirestoreSessionRepository implements SessionRepository {
     // Paso 1: el documento de sesión (las reglas de subdocs hacen get()).
     await sessionRef.set({
       'schemaVersion': 1,
+      if (input.spaceId != null) 'contextModelVersion': 1,
+      if (input.spaceId != null) 'spaceId': input.spaceId,
+      if (input.spaceName != null) 'spaceName': input.spaceName,
       'ownerUid': owner,
       'kind': input.kind,
       'name': input.name,
@@ -152,7 +155,9 @@ class FirestoreSessionRepository implements SessionRepository {
         'name': input.participantNames[i],
         'isOwner': i == 0,
         'order': i,
-        'claimedByDevice': '',
+        'claimedByDevice': i < input.participantUids.length
+            ? input.participantUids[i]
+            : '',
         'active': true,
       });
     }
@@ -164,6 +169,7 @@ class FirestoreSessionRepository implements SessionRepository {
       accountName: input.accountName ?? input.ticket.merchantName,
       ticket: input.ticket,
       payerPid: 'p${input.payerIndex}',
+      spaceId: input.spaceId,
     );
 
     batch.set(sessionRef.collection('activity').doc(), {
@@ -181,6 +187,7 @@ class FirestoreSessionRepository implements SessionRepository {
     String sessionId,
     NewTicketInput ticket, {
     required String payerPid,
+    required String spaceId,
   }) async {
     final sessionRef = _sessions.doc(sessionId);
     final accounts = await sessionRef.collection('accounts').get();
@@ -192,10 +199,13 @@ class FirestoreSessionRepository implements SessionRepository {
       accountName: ticket.merchantName,
       ticket: ticket,
       payerPid: payerPid,
+      spaceId: spaceId,
     );
     batch.update(sessionRef, {
       // Con más de una cuenta la sesión es conceptualmente multi (DC-6).
       if (accounts.size >= 1) 'kind': 'multi',
+      'contextModelVersion': 1,
+      'spaceId': spaceId,
       'updatedAt': FieldValue.serverTimestamp(),
     });
     batch.set(sessionRef.collection('activity').doc(), {
@@ -215,6 +225,7 @@ class FirestoreSessionRepository implements SessionRepository {
     required String accountName,
     required NewTicketInput ticket,
     required String payerPid,
+    String? spaceId,
   }) {
     final accountRef = sessionRef.collection('accounts').doc('a$accountIndex');
     batch.set(accountRef, {
@@ -241,6 +252,9 @@ class FirestoreSessionRepository implements SessionRepository {
       ],
       'tip': ticket.tip?.cents,
       'grandTotal': ticket.grandTotal.cents,
+      ...?spaceId == null
+          ? null
+          : <String, Object?>{'spaceId': spaceId, 'contextModelVersion': 1},
       'createdAt': FieldValue.serverTimestamp(),
     });
 

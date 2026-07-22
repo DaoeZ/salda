@@ -62,8 +62,7 @@ class SpacesRepository {
         .snapshots()
         .asyncMap((snapshot) async {
           final refs = [
-            for (final member in snapshot.docs)
-              ?member.reference.parent.parent,
+            for (final member in snapshot.docs) ?member.reference.parent.parent,
           ];
           final docs = await Future.wait(refs.map((ref) => ref.get()));
           final spaces = [for (final doc in docs) ?_spaceFrom(doc)];
@@ -140,16 +139,62 @@ class SpacesRepository {
       if (avatarEmoji != null && avatarEmoji.isNotEmpty)
         'avatarEmoji': avatarEmoji,
       'ownerUid': uid(),
+      'kind': SpaceKind.group.name,
       'status': 'active',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'schemaVersion': 1,
+      'schemaVersion': 2,
     });
     batch.set(space.collection('members').doc(uid()), {
       'uid': uid(),
       'joinedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+    return space.id;
+  }
+
+  /// Crea la relación y su invitación inicial de forma atómica. El ID y los
+  /// UID reservados hacen que A→B y B→A sean el mismo contexto económico.
+  Future<String> createRelationship({
+    required String toUid,
+    required String name,
+  }) async {
+    _requireAccount();
+    final fromUid = uid();
+    if (toUid == fromUid) {
+      throw const SpaceFailure(SpaceFailureCode.notAllowed);
+    }
+    final pair = [fromUid, toUid]..sort();
+    final space = _spaces.doc(relationshipSpaceId(fromUid, toUid));
+    final invite = _invites.doc(SpaceInvite.idFor(space.id, toUid));
+    await firestore.runTransaction((transaction) async {
+      if ((await transaction.get(space)).exists) {
+        throw const SpaceFailure(SpaceFailureCode.alreadyMember);
+      }
+      transaction.set(space, {
+        'name': name.trim(),
+        'ownerUid': fromUid,
+        'kind': SpaceKind.relationship.name,
+        'relationshipUids': pair,
+        'status': 'active',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'schemaVersion': 2,
+      });
+      transaction.set(space.collection('members').doc(fromUid), {
+        'uid': fromUid,
+        'joinedAt': FieldValue.serverTimestamp(),
+      });
+      transaction.set(invite, {
+        'spaceId': space.id,
+        'spaceName': name.trim(),
+        'fromUid': fromUid,
+        'toUid': toUid,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
     return space.id;
   }
 
@@ -230,9 +275,9 @@ class SpacesRepository {
   }
 
   Future<void> cancelInvite(String inviteId) => _invites.doc(inviteId).update({
-        'status': 'cancelled',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    'status': 'cancelled',
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
 
   /// Aceptar crea la membresía y resuelve la invitación EN EL MISMO batch:
   /// una invitación cancelada ya no puede aceptarse (la regla exige
@@ -244,17 +289,17 @@ class SpacesRepository {
       'status': 'accepted',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    batch.set(
-      _spaces.doc(invite.spaceId).collection('members').doc(uid()),
-      {'uid': uid(), 'joinedAt': FieldValue.serverTimestamp()},
-    );
+    batch.set(_spaces.doc(invite.spaceId).collection('members').doc(uid()), {
+      'uid': uid(),
+      'joinedAt': FieldValue.serverTimestamp(),
+    });
     await batch.commit();
   }
 
   Future<void> rejectInvite(String inviteId) => _invites.doc(inviteId).update({
-        'status': 'rejected',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    'status': 'rejected',
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
 
   // ── Membresía ─────────────────────────────────────────────────────────
 
@@ -296,6 +341,13 @@ class SpacesRepository {
       status: data['status'] == 'archived'
           ? SpaceStatus.archived
           : SpaceStatus.active,
+      kind: data['kind'] == SpaceKind.relationship.name
+          ? SpaceKind.relationship
+          : SpaceKind.group,
+      relationshipUids: [
+        for (final value in (data['relationshipUids'] as List?) ?? const [])
+          if (value is String) value,
+      ],
       avatarEmoji: data['avatarEmoji'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
@@ -347,37 +399,43 @@ final spaceProvider = StreamProvider.autoDispose.family<Space?, String>(
   (ref, spaceId) => ref.watch(spacesRepositoryProvider).watchSpace(spaceId),
 );
 
-final spaceMembersProvider =
-    StreamProvider.autoDispose.family<List<SpaceMember>, String>(
-  (ref, spaceId) => ref.watch(spacesRepositoryProvider).watchMembers(spaceId),
-);
+final spaceMembersProvider = StreamProvider.autoDispose
+    .family<List<SpaceMember>, String>(
+      (ref, spaceId) =>
+          ref.watch(spacesRepositoryProvider).watchMembers(spaceId),
+    );
 
-final spaceInvitesProvider =
-    StreamProvider.autoDispose.family<List<SpaceInvite>, String>(
-  (ref, spaceId) =>
-      ref.watch(spacesRepositoryProvider).watchSpaceInvites(spaceId),
-);
+final spaceInvitesProvider = StreamProvider.autoDispose
+    .family<List<SpaceInvite>, String>(
+      (ref, spaceId) =>
+          ref.watch(spacesRepositoryProvider).watchSpaceInvites(spaceId),
+    );
 
-final spaceTicketsProvider =
-    StreamProvider.autoDispose.family<List<SpaceTicket>, String>(
-  (ref, spaceId) =>
-      ref.watch(spacesRepositoryProvider).watchSpaceTickets(spaceId),
-);
+final spaceTicketsProvider = StreamProvider.autoDispose
+    .family<List<SpaceTicket>, String>(
+      (ref, spaceId) =>
+          ref.watch(spacesRepositoryProvider).watchSpaceTickets(spaceId),
+    );
 
 /// Espacio pendiente de vincular al PRÓXIMO ticket creado ("crear ticket
 /// desde el espacio"): lo consume el controlador de creación al guardar.
 final pendingSpaceLinkProvider =
-    NotifierProvider<PendingSpaceLink, ({String id, String name})?>(
-  PendingSpaceLink.new,
-);
+    NotifierProvider<
+      PendingSpaceLink,
+      ({String id, String name, SpaceKind kind})?
+    >(PendingSpaceLink.new);
 
-class PendingSpaceLink extends Notifier<({String id, String name})?> {
+class PendingSpaceLink
+    extends Notifier<({String id, String name, SpaceKind kind})?> {
   @override
-  ({String id, String name})? build() => null;
+  ({String id, String name, SpaceKind kind})? build() => null;
 
-  void set(String id, String name) => state = (id: id, name: name);
+  void set(String id, String name, SpaceKind kind) =>
+      state = (id: id, name: name, kind: kind);
 
-  ({String id, String name})? consume() {
+  void clear() => state = null;
+
+  ({String id, String name, SpaceKind kind})? consume() {
     final value = state;
     state = null;
     return value;

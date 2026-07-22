@@ -333,8 +333,11 @@ class NewSessionInput {
     this.kind = 'single',
     required this.splitModeDefault,
     required this.participantNames,
+    this.participantUids = const [],
     this.payerIndex = 0,
     required this.ticket,
+    this.spaceId,
+    this.spaceName,
     this.accountName,
     this.paymentMethodsSnapshot = const {},
   });
@@ -345,8 +348,11 @@ class NewSessionInput {
 
   /// El índice 0 es SIEMPRE el anfitrión.
   final List<String> participantNames;
+  final List<String> participantUids;
   final int payerIndex;
   final NewTicketInput ticket;
+  final String? spaceId;
+  final String? spaceName;
   final String? accountName;
 
   /// Snapshot de métodos de pago del anfitrión (RF-72): se congela al crear

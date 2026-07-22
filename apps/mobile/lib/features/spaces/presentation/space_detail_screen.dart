@@ -193,7 +193,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
                       // (lo consume el controlador de creación).
                       ref
                           .read(pendingSpaceLinkProvider.notifier)
-                          .set(space.id, space.name);
+                          .set(space.id, space.name, space.kind);
                       showScanEntrySheet(
                         context,
                         ref,

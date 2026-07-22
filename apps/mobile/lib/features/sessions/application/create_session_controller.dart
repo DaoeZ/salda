@@ -12,6 +12,7 @@ import '../../review/application/review_draft.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../settings/data/user_profile_repository.dart';
 import '../../spaces/data/spaces_repository.dart';
+import '../../spaces/domain/space_models.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
 import 'add_ticket_controller.dart';
@@ -24,6 +25,7 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
 
   Future<String?> create({
     required List<String> participantNames,
+    required List<String> participantUids,
     required int payerIndex,
     required SplitMode splitMode,
     required String sessionName,
@@ -32,6 +34,16 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
     if (draft == null || participantNames.length < 2) return null;
     state = const AsyncLoading();
     try {
+      final pendingSpace = ref.read(pendingSpaceLinkProvider);
+      if (pendingSpace == null) {
+        throw const MissingTicketContextException();
+      }
+      final validCount = pendingSpace.kind == SpaceKind.relationship
+          ? participantNames.length == 2
+          : participantNames.length >= 3;
+      if (!validCount || participantUids.length != participantNames.length) {
+        throw const MissingTicketContextException();
+      }
       final user = ref.read(authRepositoryProvider).currentUser;
       // Un invitado no tiene users/{uid}; su snapshot y sus frecuentes son
       // vacíos hasta que proteja la cuenta.
@@ -43,12 +55,16 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
         name: sessionName,
         splitModeDefault: splitMode,
         participantNames: participantNames,
+        participantUids: participantUids,
         payerIndex: payerIndex,
+        spaceId: pendingSpace.id,
+        spaceName: pendingSpace.name,
         ticket: ticketInputFromDraft(draft, fallbackName: sessionName),
       );
       final created = await ref
           .read(sessionRepositoryProvider)
           .createSession(input);
+      ref.read(pendingSpaceLinkProvider.notifier).clear();
       // Foto del ticket: copia local durable ANTES de perder el archivo del
       // picker, y subida con reintento en segundo plano (no bloquea el flujo).
       final imagePath = ref.read(lastScanImageProvider);
@@ -60,17 +76,6 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
       // "Crear ticket desde el espacio" (P4): si el flujo partió de un
       // espacio, el ticket recién creado se vincula a él. Best-effort: un
       // fallo de vínculo no invalida el ticket ya guardado.
-      final pendingSpace =
-          ref.read(pendingSpaceLinkProvider.notifier).consume();
-      if (pendingSpace != null) {
-        try {
-          await ref
-              .read(spacesRepositoryProvider)
-              .linkTicket(created.ticketPath, pendingSpace.id);
-        } on Object {
-          // El usuario puede vincularlo a mano desde el detalle del ticket.
-        }
-      }
       // Personas frecuentes: todas menos el anfitrión (índice 0).
       if (user?.isFullAccount ?? false) {
         await ref

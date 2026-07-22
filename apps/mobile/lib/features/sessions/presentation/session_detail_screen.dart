@@ -8,7 +8,6 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../../scan/presentation/scan_flow.dart';
 import '../application/session_export.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
@@ -165,8 +164,6 @@ class _Menu extends ConsumerWidget {
       enabled: !deleting,
       onSelected: (action) async {
         switch (action) {
-          case 'add_ticket':
-            await showScanEntrySheet(context, ref, targetSessionId: sessionId);
           case 'share':
             context.go('/home/session/$sessionId/share');
           case 'export_pdf':
@@ -221,8 +218,6 @@ class _Menu extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
-        if (open)
-          PopupMenuItem(value: 'add_ticket', child: Text(l10n.menuAddTicket)),
         PopupMenuItem(value: 'share', child: Text(l10n.menuShare)),
         PopupMenuItem(value: 'export_pdf', child: Text(l10n.menuExportPdf)),
         PopupMenuItem(value: 'share_image', child: Text(l10n.menuShareImage)),

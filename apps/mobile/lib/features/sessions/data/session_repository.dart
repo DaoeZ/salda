@@ -28,6 +28,7 @@ abstract interface class SessionRepository {
     String sessionId,
     NewTicketInput ticket, {
     required String payerPid,
+    required String spaceId,
   });
 
   Stream<List<SessionTicket>> watchTickets(String sessionId, String accountId);

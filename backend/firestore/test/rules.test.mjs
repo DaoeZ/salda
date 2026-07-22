@@ -501,6 +501,17 @@ describe('sessions.create', () => {
   it('owner crea una sesión válida', () =>
     assertSucceeds(setDoc(doc(db(OWNER), 'sessions/nueva'), valid)));
 
+  it('sesión contextual exige un espacio del que el owner sea miembro',
+      async () => {
+    await assertSucceeds(setDoc(doc(db(OWNER), 'sessions/contextual'), {
+      ...valid, contextModelVersion: 1, spaceId: 'sp1', spaceName: 'Viaje',
+    }));
+    await assertFails(setDoc(doc(db(FOURTH), 'sessions/contextual-ajena'), {
+      ...valid, ownerUid: FOURTH, contextModelVersion: 1,
+      spaceId: 'sp1', spaceName: 'Viaje',
+    }));
+  });
+
   it('invitado móvil crea una sesión propia', () =>
     assertSucceeds(setDoc(doc(db(GUEST), 'sessions/nueva'),
       { ...valid, ownerUid: GUEST })));
@@ -957,6 +968,55 @@ describe('spaces', () => {
 
   it('cuenta completa crea espacio + membresía owner en batch', () =>
     assertSucceeds(createSpace(db(FOURTH), FOURTH, 'nuevo')));
+
+  it('crea una relación canónica con invitación en el mismo batch', async () => {
+    const relationId = `relationship_${FOURTH}~${THIRD}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${relationId}`), {
+      name: 'Relación', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD], status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${relationId}/members/${FOURTH}`), {
+      uid: FOURTH, joinedAt: serverTimestamp(),
+    });
+    batch.set(doc(f, `spaceInvites/${relationId}_${THIRD}`), {
+      spaceId: relationId, spaceName: 'Relación', fromUid: FOURTH,
+      toUid: THIRD, status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('deniega relación con id no canónico o invitación a un tercer UID',
+      async () => {
+    await assertFails(createSpace(db(FOURTH), FOURTH, 'relacion-falsa', {
+      kind: 'relationship', relationshipUids: [FOURTH, THIRD],
+      schemaVersion: 2,
+    }));
+
+    const relationId = `relationship_${FOURTH}~${THIRD}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${relationId}`), {
+      name: 'Relación', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD], status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${relationId}/members/${FOURTH}`), {
+      uid: FOURTH, joinedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+    await assertFails(setDoc(
+      doc(f, `spaceInvites/${relationId}_${SOCIAL_OUTSIDER}`), {
+        spaceId: relationId, spaceName: 'Relación', fromUid: FOURTH,
+        toUid: SOCIAL_OUTSIDER, status: 'pending',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      }));
+  });
 
   it('espacio sin membresía owner en el batch: denegado', () =>
     assertFails(setDoc(doc(db(FOURTH), 'spaces/suelto'), spaceDoc())));

@@ -2241,6 +2241,108 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Reintentar'**
   String get commonRetry;
+
+  /// No description provided for @historyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Histórico sin organizar'**
+  String get historyTitle;
+
+  /// No description provided for @contextCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear'**
+  String get contextCreate;
+
+  /// No description provided for @contextAccountRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Convierte tu cuenta de invitado para crear relaciones y grupos permanentes.'**
+  String get contextAccountRequired;
+
+  /// No description provided for @contextInvitations.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitaciones'**
+  String get contextInvitations;
+
+  /// No description provided for @contextInvitationPending.
+  ///
+  /// In es, this message translates to:
+  /// **'Quiere compartir gastos contigo'**
+  String get contextInvitationPending;
+
+  /// No description provided for @relationshipsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Relaciones'**
+  String get relationshipsTitle;
+
+  /// No description provided for @relationshipsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea una relación para compartir gastos con otra persona'**
+  String get relationshipsEmpty;
+
+  /// No description provided for @groupsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Grupos'**
+  String get groupsTitle;
+
+  /// No description provided for @groupsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea un grupo para tres o más personas'**
+  String get groupsEmpty;
+
+  /// No description provided for @relationshipCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Nueva relación'**
+  String get relationshipCreate;
+
+  /// No description provided for @relationshipCreateHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Gastos entre dos personas'**
+  String get relationshipCreateHelp;
+
+  /// No description provided for @relationshipSearchHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Busca a la persona con la que quieres compartir gastos.'**
+  String get relationshipSearchHelp;
+
+  /// No description provided for @groupCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Nuevo grupo'**
+  String get groupCreate;
+
+  /// No description provided for @groupCreateHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Gastos entre tres o más personas'**
+  String get groupCreateHelp;
+
+  /// No description provided for @ticketContextMissing.
+  ///
+  /// In es, this message translates to:
+  /// **'Abre una relación o un grupo antes de crear el ticket.'**
+  String get ticketContextMissing;
+
+  /// No description provided for @relationshipNeedsAcceptance.
+  ///
+  /// In es, this message translates to:
+  /// **'La otra persona debe aceptar la invitación antes de crear tickets.'**
+  String get relationshipNeedsAcceptance;
+
+  /// No description provided for @groupNeedsMembers.
+  ///
+  /// In es, this message translates to:
+  /// **'El grupo necesita al menos tres miembros antes de crear tickets.'**
+  String get groupNeedsMembers;
 }
 
 class _AppLocalizationsDelegate

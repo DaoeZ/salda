@@ -1201,4 +1201,61 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get commonRetry => 'Reintentar';
+
+  @override
+  String get historyTitle => 'Histórico sin organizar';
+
+  @override
+  String get contextCreate => 'Crear';
+
+  @override
+  String get contextAccountRequired =>
+      'Convierte tu cuenta de invitado para crear relaciones y grupos permanentes.';
+
+  @override
+  String get contextInvitations => 'Invitaciones';
+
+  @override
+  String get contextInvitationPending => 'Quiere compartir gastos contigo';
+
+  @override
+  String get relationshipsTitle => 'Relaciones';
+
+  @override
+  String get relationshipsEmpty =>
+      'Crea una relación para compartir gastos con otra persona';
+
+  @override
+  String get groupsTitle => 'Grupos';
+
+  @override
+  String get groupsEmpty => 'Crea un grupo para tres o más personas';
+
+  @override
+  String get relationshipCreate => 'Nueva relación';
+
+  @override
+  String get relationshipCreateHelp => 'Gastos entre dos personas';
+
+  @override
+  String get relationshipSearchHelp =>
+      'Busca a la persona con la que quieres compartir gastos.';
+
+  @override
+  String get groupCreate => 'Nuevo grupo';
+
+  @override
+  String get groupCreateHelp => 'Gastos entre tres o más personas';
+
+  @override
+  String get ticketContextMissing =>
+      'Abre una relación o un grupo antes de crear el ticket.';
+
+  @override
+  String get relationshipNeedsAcceptance =>
+      'La otra persona debe aceptar la invitación antes de crear tickets.';
+
+  @override
+  String get groupNeedsMembers =>
+      'El grupo necesita al menos tres miembros antes de crear tickets.';
 }
