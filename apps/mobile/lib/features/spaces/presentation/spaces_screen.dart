@@ -32,8 +32,14 @@ class SpacesScreen extends ConsumerWidget {
           ),
         ),
         data: (list) {
-          final active = [for (final s in list) if (s.isActive) s];
-          final archived = [for (final s in list) if (!s.isActive) s];
+          final active = [
+            for (final s in list)
+              if (s.isActive) s,
+          ];
+          final archived = [
+            for (final s in list)
+              if (!s.isActive) s,
+          ];
           if (active.isEmpty && archived.isEmpty && invites.isEmpty) {
             return Center(
               child: Padding(
@@ -41,11 +47,16 @@ class SpacesScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.group_work_outlined,
-                        size: 64, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.group_work_outlined,
+                      size: 64,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(height: TokenSpacing.lg),
-                    Text(l10n.spacesEmptyTitle,
-                        style: theme.textTheme.titleMedium),
+                    Text(
+                      l10n.spacesEmptyTitle,
+                      style: theme.textTheme.titleMedium,
+                    ),
                     const SizedBox(height: TokenSpacing.xs),
                     Text(
                       l10n.spacesEmptyBody,
@@ -60,10 +71,8 @@ class SpacesScreen extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(TokenSpacing.lg),
             children: [
-              for (final invite in invites)
-                _InviteCard(invite: invite),
-              for (final space in active)
-                _SpaceTile(space: space),
+              for (final invite in invites) _InviteCard(invite: invite),
+              for (final space in active) _SpaceTile(space: space),
               if (archived.isNotEmpty) ...[
                 const SizedBox(height: TokenSpacing.md),
                 ExpansionTile(
@@ -144,8 +153,7 @@ class _InviteCardState extends ConsumerState<_InviteCard> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final from =
-        ref.watch(publicProfileProvider(widget.invite.fromUid)).value;
+    final from = ref.watch(publicProfileProvider(widget.invite.fromUid)).value;
     final repo = ref.read(spacesRepositoryProvider);
     return Card(
       color: theme.colorScheme.secondaryContainer,
@@ -183,15 +191,14 @@ class _InviteCardState extends ConsumerState<_InviteCard> {
                   onPressed: _busy
                       ? null
                       : () =>
-                          _resolve(() => repo.rejectInvite(widget.invite.id)),
+                            _resolve(() => repo.rejectInvite(widget.invite.id)),
                   child: Text(l10n.spaceInviteReject),
                 ),
                 const SizedBox(width: TokenSpacing.sm),
                 FilledButton(
                   onPressed: _busy
                       ? null
-                      : () =>
-                          _resolve(() => repo.acceptInvite(widget.invite)),
+                      : () => _resolve(() => repo.acceptInvite(widget.invite)),
                   child: Text(l10n.spaceInviteAccept),
                 ),
               ],
