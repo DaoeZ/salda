@@ -17,6 +17,7 @@ import '../../features/sessions/presentation/share_screen.dart';
 import '../../features/sessions/presentation/ticket_detail_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/spaces/presentation/space_detail_screen.dart';
+import '../../features/spaces/presentation/create_relationship_screen.dart';
 import '../../features/spaces/presentation/spaces_screen.dart';
 
 /// Rutas ANIDADAS bajo /home: navegar con go() a cualquier destino construye
@@ -85,6 +86,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const HomeScreen(),
         routes: [
           GoRoute(path: 'review', builder: (_, _) => const ReviewScreen()),
+          GoRoute(
+            path: 'history',
+            builder: (_, _) => const LegacySessionsScreen(),
+          ),
+          GoRoute(
+            path: 'relationship/new',
+            builder: (_, _) => const CreateRelationshipScreen(),
+          ),
           GoRoute(path: 'profile', builder: (_, _) => const ProfileScreen()),
           GoRoute(path: 'friends', builder: (_, _) => const FriendsScreen()),
           GoRoute(

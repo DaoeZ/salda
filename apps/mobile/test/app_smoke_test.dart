@@ -16,8 +16,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(Brand.appName), findsOneWidget);
-    expect(find.text('Escanea tu primer ticket'), findsOneWidget);
-    expect(find.text('Escanear'), findsOneWidget);
+    expect(find.text('Relaciones'), findsOneWidget);
+    expect(find.text('Grupos'), findsOneWidget);
+    expect(find.text('Escanear'), findsNothing);
+    expect(find.text('Crear'), findsOneWidget);
   });
 
   testWidgets('sin sesión: se muestra el login', (tester) async {
@@ -77,6 +79,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Escanear'), findsOneWidget);
+    expect(find.textContaining('Convierte tu cuenta'), findsOneWidget);
+    expect(find.text('Escanear'), findsNothing);
   });
 }

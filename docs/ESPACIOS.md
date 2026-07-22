@@ -1,14 +1,15 @@
-# Espacios compartidos (P4)
+# Relaciones y grupos (evolución de P4)
 
-Estado: P4 validado y P5 integrado (2026-07-19). Contrato vigente del
+Estado: eje principal integrado sobre P4 y P5 (2026-07-22). Contrato vigente del
 contenedor social de gastos. Los balances explicables por espacio se describen
 en `docs/RELACIONES_ECONOMICAS.md`; actividad, chat y notificaciones siguen fuera.
 
 ## Concepto
 
-Un espacio agrupa tickets y personas alrededor de un contexto (pareja, piso,
-viaje, peña…). Es UN único modelo para dos personas o para veinte: no existe
-un sistema aparte para relaciones de dos.
+Un espacio agrupa tickets y personas alrededor de un contexto. En producto se
+presenta como **relación** cuando reserva exactamente dos UID, o como **grupo**
+cuando participan tres o más personas. Ambos reutilizan `spaces`; no existe un
+segundo backend social ni económico.
 
 Separación estricta de conceptos:
 
@@ -31,13 +32,25 @@ invitaciones.
 ```text
 spaces/{spaceId}
   name (2..40) · avatarEmoji? (≤8) · ownerUid · status: active|archived
-  createdAt · updatedAt · schemaVersion: 1
+  kind: relationship|group · relationshipUids? · schemaVersion: 2
+  createdAt · updatedAt
   members/{uid}: { uid, joinedAt }
 spaceInvites/{spaceId}_{toUid}
   spaceId · spaceName (denormalizado solo para pintar) · fromUid · toUid
   status: pending|accepted|rejected|cancelled · createdAt · updatedAt
-tickets/*.spaceId ('' o ausente = sin espacio)
+sessions/*.contextModelVersion: 1 · spaceId · spaceName
+tickets/*.contextModelVersion: 1 · spaceId
 ```
+
+Los documentos P4 `schemaVersion: 1` sin `kind` se leen como grupos. No se
+clasifican automáticamente por número de miembros ni por tickets: hacerlo
+inventaría una intención social y podría cambiar la presentación histórica.
+
+Una relación usa el ID canónico `relationship_{uidMenor}~{uidMayor}` y conserva
+los dos UID ordenados e inmutables en `relationshipUids`, incluso mientras la
+segunda persona decide la invitación. Rules impide otro ID, un tercer miembro o
+una invitación fuera de la pareja. Un grupo mantiene membresía flexible, pero la
+app exige al menos tres miembros antes de permitir gastos nuevos.
 
 Decisiones clave:
 
@@ -69,8 +82,14 @@ Decisiones clave:
 
 ## Tickets y política de privacidad
 
-Un ticket pertenece como máximo a UN espacio (`spaceId`, el campo
-sobrescribe). Vincular o desvincular NUNCA cambia participantes,
+Todo ticket nuevo pertenece a UN contexto. La sesión y el ticket llevan
+`contextModelVersion: 1` y el mismo `spaceId`; Rules impide cambiarlo o
+desvincularlo. Sus participantes registrados se crean desde las membresías y
+quedan reclamados por UID, lo que mantiene explicables los balances P5.
+
+Los tickets anteriores sin marcador siguen siendo legibles y no se asocian por
+heurísticas. Aparecen en «Histórico sin organizar» y pueden vincularse solo por
+una acción explícita. Vincular o desvincular un ticket histórico NUNCA cambia participantes,
 asignaciones, balances ni pagos, y solo puede hacerlo el dueño de la sesión
 del ticket, hacia espacios de los que es miembro (Rules lo valida).
 

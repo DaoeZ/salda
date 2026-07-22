@@ -314,6 +314,8 @@ class FirestoreSessionRepository implements SessionRepository {
                 _ => null,
               },
               spaceId: d.data()['spaceId'] as String?,
+              contextModelVersion:
+                  (d.data()['contextModelVersion'] as int?) ?? 0,
             ),
         ],
       );

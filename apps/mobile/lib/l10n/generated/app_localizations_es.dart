@@ -1258,4 +1258,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get groupNeedsMembers =>
       'El grupo necesita al menos tres miembros antes de crear tickets.';
+
+  @override
+  String get contextChoose => 'Elige una relación o grupo';
+
+  @override
+  String get ticketContextLocked =>
+      'Este ticket pertenece a su contexto y no se puede desvincular';
 }

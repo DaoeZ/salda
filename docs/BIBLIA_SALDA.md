@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.8 · **Fecha:** 2026-07-19 · **Changelog:** v1.8 — P5 relaciones
+**Versión:** 1.9 · **Fecha:** 2026-07-22 · **Changelog:** v1.9 — Relaciones y
+grupos pasan a ser la raíz visible; tickets nuevos siempre contextuales y
+compatibilidad histórica no destructiva (ADR-030). v1.8 — P5 relaciones
 económicas explicables, neteo bilateral y pagos confirmados (ADR-029). v1.7 — P4 espacios
 compartidos: contenedor social único con propietario en un solo campo,
 invitaciones deterministas y tickets vinculables (ADR-028). v1.6 — P3 amistades
@@ -1243,6 +1245,27 @@ Contrato detallado en `docs/RELACIONES_ECONOMICAS.md`.
 **Revisión:** medir coste/latencia antes de añadir índices o materializar un
 documento de saldo por usuario; P5 calcula esa vista en el cliente.
 
+### ADR-030: Relaciones y grupos como raíz visible del producto
+**Estado:** Aceptada · **Fecha:** 2026-07-22
+**Contexto:** la navegación centrada en sesiones/tickets obligaba a crear el
+gasto antes de declarar con quién se compartía. P4 ya aporta un contenedor por
+UID y P5 deriva dinero por ticket, por lo que crear otro modelo duplicaría
+estado social y económico.
+**Decisión:** [HECHO] `spaces` se reutiliza como contexto único. `kind` distingue
+`relationship` (pareja canónica e inmutable de UID) de `group`; los P4 sin campo
+se leen como grupo. Inicio muestra ambos e invitaciones, y el escaneo solo nace
+dentro de su detalle. Sesión y ticket nuevos comparten `spaceId` y
+`contextModelVersion: 1`; sus miembros registrados reclaman los participantes
+por UID. Las sesiones anteriores no se clasifican ni migran automáticamente:
+quedan en «Histórico sin organizar» con vinculación manual explícita.
+**Consecuencias:** una relación no admite tercer miembro; un grupo necesita tres
+miembros para crear gastos; un ticket contextual no se desvincula. P5 conserva
+fuente de verdad, neteo, liquidaciones, permisos y trazabilidad sin cambios. La
+amistad continúa siendo independiente. P6/P7 no forman parte de esta decisión.
+Contrato detallado en `docs/ESPACIOS.md`.
+**Revisión:** antes de permitir invitados no registrados dentro de un grupo,
+definir cómo se representa su identidad sin degradar el vínculo por UID.
+
 ---
 
 <a name="parte-x"></a>
@@ -1250,7 +1273,8 @@ documento de saldo por usuario; P5 calcula esa vista en el cliente.
 
 ## §56. Glosario
 
-**Grupo/Sesión** raíz de compartición (código: `Session`) · **Cuenta** agrupador
+**Relación/Grupo** contexto social raíz (código: `Space`) · **Sesión** contenedor
+económico interno de uno o varios tickets · **Cuenta** agrupador
 de tickets dentro del grupo · **Ticket** gasto escaneado o manual con pagador ·
 **Línea** producto con asignación · **Asignación** unassigned|one|shared|all con
 pesos · **quantityMilli** cantidad ×1000 (0,466 kg → 466) · **Balance** neto por
@@ -1279,6 +1303,7 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 | Motor de reparto | spec §8, Biblia §26, `docs/REPARTO_POR_UNIDADES.md` | 006, 007, 025, 026 | `packages/domain/.../split_engine.dart` + espejo `backend/functions/src/domain/splitEngine.ts` | golden `split_engine.json`, propiedades en `split_engine_test.dart`, recompute y Rules |
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
 | Relaciones económicas | `docs/RELACIONES_ECONOMICAS.md` | 029 | `economic_ledger.dart` + `economicLedger.ts`, `economicPayments.ts`, `features/economy/**` | golden `economic_ledger.json`, tests de dominio/Functions/Flutter/Rules |
+| Relaciones y grupos | `docs/ESPACIOS.md` | 028, 030 | `features/spaces/**`, `features/home/**`, contexto en `features/sessions/**` | `spaces_repository_test.dart`, `session_repository_test.dart`, `app_smoke_test.dart`, Rules |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |
 | Contrato IA | spec §9, Biblia §29 | 011 | `packages/ai_providers/**` + `features/ai/**` | `ai_providers_test.dart` (10) + `ai_feature_test.dart` (6) |

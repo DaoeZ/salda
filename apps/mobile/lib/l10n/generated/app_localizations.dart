@@ -2343,6 +2343,18 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'El grupo necesita al menos tres miembros antes de crear tickets.'**
   String get groupNeedsMembers;
+
+  /// No description provided for @contextChoose.
+  ///
+  /// In es, this message translates to:
+  /// **'Elige una relación o grupo'**
+  String get contextChoose;
+
+  /// No description provided for @ticketContextLocked.
+  ///
+  /// In es, this message translates to:
+  /// **'Este ticket pertenece a su contexto y no se puede desvincular'**
+  String get ticketContextLocked;
 }
 
 class _AppLocalizationsDelegate

@@ -170,6 +170,7 @@ class SessionTicket {
     this.imagePath,
     this.splitModeOverride,
     this.spaceId,
+    this.contextModelVersion = 0,
   });
 
   final String id;
@@ -191,8 +192,10 @@ class SessionTicket {
   /// ticket pertenece como máximo a UN espacio y vincularlo no cambia
   /// participantes, asignaciones, balances ni pagos.
   final String? spaceId;
+  final int contextModelVersion;
 
   bool get hasSpace => spaceId != null && spaceId!.isNotEmpty;
+  bool get isContextual => contextModelVersion >= 1;
 }
 
 /// Línea VIVA de un ticket (P2.1): el creador ve y edita las asignaciones

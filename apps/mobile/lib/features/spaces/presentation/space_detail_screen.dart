@@ -69,6 +69,9 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
         body: Center(child: Text(l10n.spaceGone)),
       );
     }
+    final contextReady = space.isRelationship
+        ? members.length == 2
+        : members.length >= 3;
 
     return Scaffold(
       appBar: AppBar(
@@ -175,6 +178,19 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
             ),
           ),
           if (amOwner) _PendingInvites(spaceId: space.id),
+          if (!contextReady) ...[
+            const SizedBox(height: TokenSpacing.md),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(TokenSpacing.lg),
+                child: Text(
+                  space.isRelationship
+                      ? l10n.relationshipNeedsAcceptance
+                      : l10n.groupNeedsMembers,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: TokenSpacing.xl),
           SpaceEconomicSummary(spaceId: space.id),
           const SizedBox(height: TokenSpacing.xl),
@@ -186,7 +202,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
       ),
       floatingActionButton: space.isActive
           ? FloatingActionButton.extended(
-              onPressed: _scanning
+              onPressed: _scanning || !contextReady
                   ? null
                   : () {
                       // El próximo ticket guardado se vincula a ESTE espacio
@@ -473,10 +489,15 @@ class _InviteFriendsSheet extends ConsumerWidget {
     final invites = ref.watch(spaceInvitesProvider(space.id)).value ?? const [];
     final memberUids = {for (final m in members) m.uid};
     final invitedUids = {for (final i in invites) i.toUid};
-    final friends = [
-      for (final f in friendships)
-        if (f.status == FriendshipStatus.friends) f.otherUid(myUid),
-    ];
+    final friends = space.isRelationship
+        ? [
+            for (final uid in space.relationshipUids)
+              if (uid != myUid) uid,
+          ]
+        : [
+            for (final f in friendships)
+              if (f.status == FriendshipStatus.friends) f.otherUid(myUid),
+          ];
 
     return SafeArea(
       child: Padding(

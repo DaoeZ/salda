@@ -106,6 +106,13 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
       return const SizedBox.shrink();
     }
     final linked = _spaceId != null && _spaceId!.isNotEmpty;
+    if (widget.ticket.isContextual) {
+      return IconButton(
+        onPressed: null,
+        tooltip: l10n.ticketContextLocked,
+        icon: const Icon(Icons.group_work),
+      );
+    }
     return PopupMenuButton<String>(
       icon: Icon(
         linked ? Icons.group_work : Icons.group_work_outlined,

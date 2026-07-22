@@ -20,13 +20,6 @@ Future<(FakeFirebaseFirestore, ProviderContainer)> _pump(
   final container = ProviderContainer(
     overrides: [
       ...loggedInOverrides(firestore: fake),
-      spacesRepositoryProvider.overrideWithValue(
-        SpacesRepository(
-          firestore: fake,
-          uid: () => 'owner',
-          isFullAccount: () => true,
-        ),
-      ),
     ],
   );
   addTearDown(container.dispose);

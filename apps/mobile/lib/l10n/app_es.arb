@@ -427,5 +427,7 @@
   "groupCreateHelp": "Gastos entre tres o más personas",
   "ticketContextMissing": "Abre una relación o un grupo antes de crear el ticket.",
   "relationshipNeedsAcceptance": "La otra persona debe aceptar la invitación antes de crear tickets.",
-  "groupNeedsMembers": "El grupo necesita al menos tres miembros antes de crear tickets."
+  "groupNeedsMembers": "El grupo necesita al menos tres miembros antes de crear tickets.",
+  "contextChoose": "Elige una relación o grupo",
+  "ticketContextLocked": "Este ticket pertenece a su contexto y no se puede desvincular"
 }

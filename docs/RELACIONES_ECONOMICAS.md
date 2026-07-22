@@ -1,5 +1,9 @@
 # P5 — Relaciones económicas y balances consolidados
 
+> ADR-030 no cambia este cálculo: los tickets nuevos nacen dentro de una
+> relación o grupo y llevan `spaceId`; las entradas históricas sin contexto
+> siguen participando en el balance y nunca se reasocian automáticamente.
+
 Estado: implementado. Este documento define el contrato económico global de Salda.
 No redefine el reparto de tickets ni introduce una segunda fuente de verdad.
 

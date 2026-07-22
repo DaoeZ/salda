@@ -11,10 +11,13 @@ import '../economy/presentation/economic_overview_screen.dart';
 import '../profile/data/profile_repository.dart';
 import '../review/application/draft_store.dart';
 import '../review/application/review_draft.dart';
-import '../scan/presentation/scan_flow.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session_models.dart';
 import '../sessions/presentation/settlement_progress_bar.dart';
+import '../spaces/data/spaces_repository.dart';
+import '../spaces/domain/space_models.dart';
+import '../spaces/presentation/space_avatar.dart';
+import '../spaces/presentation/spaces_screen.dart';
 
 /// Historial de sesiones (RF-80/82) + FAB de escaneo.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -25,12 +28,11 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  bool _scanning = false;
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final sessions = ref.watch(sessionsProvider);
+    final fullAccount =
+        ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -43,9 +45,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               icon: const Icon(Icons.account_balance_wallet_outlined),
             ),
             IconButton(
-              tooltip: l10n.spacesTitle,
-              onPressed: () => context.push('/home/spaces'),
-              icon: const Icon(Icons.group_work_outlined),
+              tooltip: l10n.historyTitle,
+              onPressed: () => context.push('/home/history'),
+              icon: const Icon(Icons.history_outlined),
             ),
             IconButton(
               tooltip: l10n.friendsTitle,
@@ -59,44 +61,260 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
-        bottom: _scanning
-            ? const PreferredSize(
-                preferredSize: Size.fromHeight(2),
-                child: LinearProgressIndicator(minHeight: 2),
-              )
-            : null,
       ),
       body: Column(
         children: [
           const _ProfileBanner(),
           const _DraftBanner(),
           Expanded(
-            child: sessions.when(
-              loading: () => const _SessionsSkeleton(),
-              error: (error, _) => Center(child: Text('$error')),
-              data: (list) => list.isEmpty
-                  ? _EmptyState(l10n: l10n)
-                  : _SessionsList(sessions: list),
-            ),
+            child: fullAccount
+                ? const _ContextsHome()
+                : const _AccountRequiredHome(),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _scanning
-            ? null
-            : () => showScanEntrySheet(
-                context,
-                ref,
-                onBusy: (busy) {
-                  if (mounted) setState(() => _scanning = busy);
-                },
-              ),
-        icon: const Icon(Icons.document_scanner_outlined),
-        label: Text(l10n.scanFab),
+      floatingActionButton: fullAccount
+          ? FloatingActionButton.extended(
+              onPressed: () => _showCreateContextSheet(context, ref),
+              icon: const Icon(Icons.add),
+              label: Text(l10n.contextCreate),
+            )
+          : null,
+    );
+  }
+}
+
+/// Historial económico anterior al modelo contextual. Es deliberadamente
+/// solo lectura desde esta entrada: nunca inventa una relación o grupo.
+class LegacySessionsScreen extends ConsumerWidget {
+  const LegacySessionsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.historyTitle)),
+      body: ref
+          .watch(sessionsProvider)
+          .when(
+            loading: () => const _SessionsSkeleton(),
+            error: (error, _) => Center(child: Text('$error')),
+            data: (sessions) => sessions.isEmpty
+                ? _EmptyState(l10n: l10n)
+                : _SessionsList(sessions: sessions),
+          ),
+    );
+  }
+}
+
+class _AccountRequiredHome extends StatelessWidget {
+  const _AccountRequiredHome();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(TokenSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.lock_person_outlined, size: 64),
+            const SizedBox(height: TokenSpacing.md),
+            Text(l10n.contextAccountRequired, textAlign: TextAlign.center),
+            const SizedBox(height: TokenSpacing.md),
+            FilledButton(
+              onPressed: () => context.push('/register'),
+              child: Text(l10n.authProtectGuestAction),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+class _ContextsHome extends ConsumerWidget {
+  const _ContextsHome();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final spaces = ref.watch(mySpacesProvider);
+    final invites = ref.watch(mySpaceInvitesProvider).value ?? const [];
+    return spaces.when(
+      loading: () => const _SessionsSkeleton(),
+      error: (_, _) => Center(child: Text(l10n.spacesLoadError)),
+      data: (all) {
+        final active = all.where((space) => space.isActive).toList();
+        final relationships = active
+            .where((space) => space.isRelationship)
+            .toList();
+        final groups = active.where((space) => !space.isRelationship).toList();
+        return ListView(
+          padding: const EdgeInsets.all(TokenSpacing.lg),
+          children: [
+            const EconomicHomeCard(),
+            if (invites.isNotEmpty) ...[
+              const SizedBox(height: TokenSpacing.lg),
+              Text(
+                l10n.contextInvitations,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: TokenSpacing.sm),
+              for (final invite in invites) _HomeInviteCard(invite: invite),
+            ],
+            const SizedBox(height: TokenSpacing.lg),
+            _ContextSection(
+              title: l10n.relationshipsTitle,
+              empty: l10n.relationshipsEmpty,
+              spaces: relationships,
+              icon: Icons.person_outline,
+            ),
+            const SizedBox(height: TokenSpacing.lg),
+            _ContextSection(
+              title: l10n.groupsTitle,
+              empty: l10n.groupsEmpty,
+              spaces: groups,
+              icon: Icons.groups_outlined,
+            ),
+            const SizedBox(height: 88),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ContextSection extends StatelessWidget {
+  const _ContextSection({
+    required this.title,
+    required this.empty,
+    required this.spaces,
+    required this.icon,
+  });
+
+  final String title;
+  final String empty;
+  final List<Space> spaces;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: TokenSpacing.sm),
+      if (spaces.isEmpty)
+        Card(
+          child: ListTile(leading: Icon(icon), title: Text(empty)),
+        )
+      else
+        for (final space in spaces)
+          Card(
+            child: ListTile(
+              leading: SpaceAvatar(space: space),
+              title: Text(
+                space.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/home/spaces/${space.id}'),
+            ),
+          ),
+    ],
+  );
+}
+
+class _HomeInviteCard extends ConsumerStatefulWidget {
+  const _HomeInviteCard({required this.invite});
+  final SpaceInvite invite;
+
+  @override
+  ConsumerState<_HomeInviteCard> createState() => _HomeInviteCardState();
+}
+
+class _HomeInviteCardState extends ConsumerState<_HomeInviteCard> {
+  var busy = false;
+
+  Future<void> resolve(Future<void> Function() action) async {
+    setState(() => busy = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final repo = ref.read(spacesRepositoryProvider);
+    return Card(
+      child: ListTile(
+        title: Text(
+          widget.invite.spaceName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(l10n.contextInvitationPending),
+        trailing: Wrap(
+          children: [
+            IconButton(
+              tooltip: l10n.spaceInviteReject,
+              onPressed: busy
+                  ? null
+                  : () => resolve(() => repo.rejectInvite(widget.invite.id)),
+              icon: const Icon(Icons.close),
+            ),
+            IconButton.filled(
+              tooltip: l10n.spaceInviteAccept,
+              onPressed: busy
+                  ? null
+                  : () => resolve(() => repo.acceptInvite(widget.invite)),
+              icon: const Icon(Icons.check),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showCreateContextSheet(BuildContext context, WidgetRef ref) =>
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final l10n = AppLocalizations.of(sheetContext);
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.person_add_alt_1_outlined),
+                title: Text(l10n.relationshipCreate),
+                subtitle: Text(l10n.relationshipCreateHelp),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  context.push('/home/relationship/new');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.group_add_outlined),
+                title: Text(l10n.groupCreate),
+                subtitle: Text(l10n.groupCreateHelp),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  showCreateSpaceDialog(context, ref);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
 
 /// Aviso de perfil público pendiente (P2): las cuentas completas sin perfil
 /// lo crean desde aquí (cubre registro por email, Google y conversiones de
@@ -136,6 +354,8 @@ class _DraftBanner extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final saved = ref.watch(savedDraftProvider).value;
     final alreadyEditing = ref.watch(reviewDraftProvider) != null;
+    final fullAccount =
+        ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
     if (saved == null || alreadyEditing) return const SizedBox.shrink();
 
     return MaterialBanner(
@@ -149,13 +369,38 @@ class _DraftBanner extends ConsumerWidget {
           },
           child: Text(l10n.draftDiscard),
         ),
-        FilledButton.tonal(
-          onPressed: () {
-            ref.read(reviewDraftProvider.notifier).loadFrom(saved);
-            context.push('/home/review');
-          },
-          child: Text(l10n.draftResume),
-        ),
+        if (fullAccount)
+          FilledButton.tonal(
+            onPressed: () async {
+              if (ref.read(pendingSpaceLinkProvider) == null) {
+                final spaces = ref.read(mySpacesProvider).value
+                        ?.where((space) => space.isActive)
+                        .toList() ??
+                    const <Space>[];
+                final selected = await showDialog<Space>(
+                  context: context,
+                  builder: (dialogContext) => SimpleDialog(
+                    title: Text(l10n.contextChoose),
+                    children: [
+                      for (final space in spaces)
+                        SimpleDialogOption(
+                          onPressed: () =>
+                              Navigator.pop(dialogContext, space),
+                          child: Text(space.name),
+                        ),
+                    ],
+                  ),
+                );
+                if (selected == null || !context.mounted) return;
+                ref
+                    .read(pendingSpaceLinkProvider.notifier)
+                    .set(selected.id, selected.name, selected.kind);
+              }
+              ref.read(reviewDraftProvider.notifier).loadFrom(saved);
+              if (context.mounted) context.push('/home/review');
+            },
+            child: Text(l10n.draftResume),
+          ),
       ],
     );
   }

@@ -9,6 +9,7 @@ import 'package:salda_mobile/features/people/data/frequent_people_repository.dar
 import 'package:salda_mobile/features/profile/data/profile_repository.dart';
 import 'package:salda_mobile/features/sessions/data/firestore_session_repository.dart';
 import 'package:salda_mobile/features/sessions/data/session_repository.dart';
+import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
 
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.user});
@@ -112,6 +113,13 @@ List<Override> loggedInOverrides({
     ),
     friendshipRepositoryProvider.overrideWithValue(
       FriendshipRepository(
+        firestore: fake,
+        uid: () => 'owner',
+        isFullAccount: () => true,
+      ),
+    ),
+    spacesRepositoryProvider.overrideWithValue(
+      SpacesRepository(
         firestore: fake,
         uid: () => 'owner',
         isFullAccount: () => true,

@@ -85,6 +85,13 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)**, **P3
 (amistades)**, **P4 (espacios compartidos)** y **P5 (relaciones económicas)**
 completos a nivel de código.
+**Reestructuración Relaciones/Grupos (ADR-030):** `spaces` es ahora la raíz
+visible del producto: `relationship` reserva una pareja canónica de UID y
+`group` representa contextos de tres o más miembros. Inicio ya no crea ni lista
+tickets sueltos; el escaneo nace dentro del contexto. Sesión y ticket nuevos
+comparten `spaceId` + `contextModelVersion: 1` y sus participantes registrados
+se reclaman por UID. Los datos anteriores no se reinterpretan: permanecen en
+«Histórico sin organizar» y solo se vinculan mediante acción explícita.
 P5 (ADR-029) deriva obligaciones explicables por ticket en `economicEntries`,
 consolida bilateralmente por UID y moneda con `EconomicLedger` Dart/TypeScript,
 y registra pagos parciales idempotentes en `economicPayments`: el deudor marca y
@@ -437,6 +444,7 @@ firebase CLI → keyring del SO del desarrollador.
 | `.github/workflows/ci.yml` | Qué verifica la CI (incluida la frescura de los `.g.`) |
 | `docs/AMISTADES.md` | Contrato P3: identidad canónica, concurrencia, UX y seguridad social |
 | `docs/RELACIONES_ECONOMICAS.md` | Contrato P5: fuente de verdad, neteo bilateral, pagos y privacidad |
+| `docs/ESPACIOS.md` | Contrato ADR-030: relaciones, grupos, contexto obligatorio y compatibilidad histórica |
 
 ## 11. Próximos pasos concretos (en orden)
 
@@ -449,8 +457,8 @@ firebase CLI → keyring del SO del desarrollador.
    verificados en `salda-dev`; registrar también las huellas de firma release/Play.
 3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
    activar enforcement únicamente para un cliente.
-4. Validar P5 manualmente con tres cuentas y revisar/fusionar su PR. No empezar P6,
-   chat ni actividad hasta una decisión expresa del usuario.
+4. Validar Relaciones/Grupos manualmente con tres cuentas y fusionar su PR.
+   No empezar P6, P7, chat ni actividad hasta una decisión expresa del usuario.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 
