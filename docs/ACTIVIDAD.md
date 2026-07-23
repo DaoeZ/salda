@@ -1,6 +1,7 @@
 # Actividad (P6)
 
-Estado: implementado (2026-07-20). Contrato de la cronología de Salda.
+Estado: implementado (2026-07-20). Decisión: ADR-031. Contrato de la
+cronología de Salda.
 Especificación de origen: `docs/P6_ESPECIFICACIONES.md`. No incluye chat,
 mensajes libres, comentarios, reacciones, menciones, adjuntos, notificaciones
 push completas, correo, rankings ni gamificación (P7+).
