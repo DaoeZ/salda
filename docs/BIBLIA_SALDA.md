@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.10 · **Fecha:** 2026-07-23 · **Changelog:** v1.10 — P6 actividad
+**Versión:** 1.11 · **Fecha:** 2026-07-23 · **Changelog:** v1.11 — P7 chat
+contextual privado por membresía y fecha de alta, separado de actividad y
+economía (ADR-032). v1.10 — P6 actividad
 como proyección de auditoría con IDs deterministas y audiencia congelada
 (ADR-031). v1.9 — Relaciones y grupos pasan a ser la raíz visible; tickets
 nuevos siempre contextuales y compatibilidad histórica no destructiva
@@ -1298,6 +1300,27 @@ tocar la verdad; P7 (chat) podrá convivir sin reusar esta colección; si los
 espacios crecieran más allá de ~30 miembros habría que migrar a fan-out.
 **Revisión:** al implementar notificaciones push completas, decidir si se
 alimentan de estos mismos eventos.
+
+### ADR-032: Chat contextual privado por membresía y fecha de alta
+**Estado:** Aceptada · **Fecha:** 2026-07-23 (P7)
+**Contexto:** Relaciones y Grupos necesitan coordinación dentro del contexto,
+pero reutilizar actividad permitiría escrituras de cliente en una proyección
+Admin y mezclaría conversación con auditoría. Congelar la audiencia de cada
+mensaje exigiría una Function o confiar en listas aportadas por el cliente.
+**Decisión:** [EN IMPLEMENTACIÓN] subcolección aditiva
+`spaces/{spaceId}/messages/{messageId}`, texto inmutable y autor por UID. Solo
+cuentas completas que sigan siendo miembros leen, siempre con
+`createdAt >= members/{uid}.joinedAt`: un miembro nuevo no hereda conversación
+anterior y quien sale pierde acceso. Miembros de espacios activos envían y
+borran únicamente mensajes propios; archivados quedan en solo lectura. Rules
+valida forma, autor, longitud, versión y timestamp de servidor. Primera página
+en vivo, historial bajo demanda, sin Function ni índice compuesto nuevo.
+**Consecuencias:** el owner no modera mensajes ajenos; chat no genera
+`activityEvents`, no altera P5 y no entra en `appcuentas-backup@1`. Sin
+adjuntos, edición, reacciones, recibos, no leídos, push ni invitados web.
+Contrato detallado en `docs/CHAT.md`.
+**Revisión:** si se añaden adjuntos o notificaciones, diseñarlos como extensiones
+independientes y revisar coste, retención y moderación antes de implementarlos.
 
 ---
 
