@@ -1027,6 +1027,68 @@ class AppLocalizationsEs extends AppLocalizations {
   String get spaceUnlinked => 'Ticket desvinculado';
 
   @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatDescription =>
+      'Coordina los gastos dentro de esta relación o grupo.';
+
+  @override
+  String get chatReadOnly =>
+      'El contexto está archivado. El chat es de solo lectura.';
+
+  @override
+  String get chatEmptyTitle => 'Todavía no hay mensajes';
+
+  @override
+  String get chatEmptyBody =>
+      'Escribe el primero para coordinaros dentro de este contexto.';
+
+  @override
+  String get chatMessageHint => 'Escribe un mensaje';
+
+  @override
+  String get chatSend => 'Enviar mensaje';
+
+  @override
+  String get chatSending => 'Enviando…';
+
+  @override
+  String get chatSendError =>
+      'No se pudo enviar el mensaje. Revisa la conexión e inténtalo de nuevo.';
+
+  @override
+  String get chatLoadError =>
+      'No se pudo cargar el chat. Revisa la conexión y vuelve a intentarlo.';
+
+  @override
+  String get chatLoadOlder => 'Cargar mensajes anteriores';
+
+  @override
+  String get chatUnavailable => 'Ya no tienes acceso a este chat.';
+
+  @override
+  String get chatYou => 'Tú';
+
+  @override
+  String get chatAuthorFallback => 'Miembro';
+
+  @override
+  String get chatMessageActions => 'Acciones del mensaje';
+
+  @override
+  String get chatDelete => 'Eliminar mensaje';
+
+  @override
+  String get chatDeleteTitle => '¿Eliminar este mensaje?';
+
+  @override
+  String get chatDeleteBody => 'Se eliminará del chat para todos los miembros.';
+
+  @override
+  String get chatDeleteError => 'No se pudo eliminar el mensaje.';
+
+  @override
   String get profileTitle => 'Perfil público';
 
   @override

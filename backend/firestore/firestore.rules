@@ -327,6 +327,23 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
     }
 
+    function spaceMemberJoinedAt(spaceId) {
+      return get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+          .data.joinedAt;
+    }
+
+    function validChatMessage(data) {
+      return data.keys().hasOnly([
+          'authorUid', 'text', 'createdAt', 'schemaVersion'
+        ])
+        && data.authorUid is string
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 2000
+        && data.createdAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
     function isSpaceOwner(spaceId) {
       return canUseSocial() && spaceData(spaceId).ownerUid == request.auth.uid;
     }
@@ -447,6 +464,32 @@ service cloud.firestore {
         allow delete: if canUseSocial()
           && resource.data.uid != spaceData(spaceId).ownerUid
           && (memberUid == request.auth.uid || isSpaceOwner(spaceId));
+      }
+
+      // P7: conversación contextual. La fecha de alta es una frontera de
+      // privacidad demostrable: nuevos miembros no heredan el historial y
+      // quien deja de ser miembro pierde el acceso.
+      match /messages/{messageId} {
+        allow read: if canUseSocial()
+          && isSpaceMember(spaceId)
+          && resource.data.createdAt >= spaceMemberJoinedAt(spaceId);
+
+        allow create: if canUseSocial()
+          && isSpaceMember(spaceId)
+          && spaceData(spaceId).status == 'active'
+          && validChatMessage(request.resource.data)
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.createdAt >= spaceMemberJoinedAt(spaceId);
+
+        // Mensajes inmutables; el autor puede retirar el suyo mientras el
+        // contexto siga activo. El owner no modera contenido ajeno.
+        allow update: if false;
+        allow delete: if canUseSocial()
+          && isSpaceMember(spaceId)
+          && spaceData(spaceId).status == 'active'
+          && resource.data.authorUid == request.auth.uid
+          && resource.data.createdAt >= spaceMemberJoinedAt(spaceId);
       }
     }
 

@@ -1,6 +1,6 @@
 # Chat contextual (P7)
 
-Estado: diseño aceptado (2026-07-23). Decisión: ADR-032.
+Estado: implementado (2026-07-23). Decisión: ADR-032.
 
 ## Objetivo
 
@@ -113,3 +113,6 @@ que exista una revisión versionada del backup.
   suplantación, forma, límite, inmutabilidad, borrado propio/ajeno y archivo.
 - Suite completa, análisis, web, Functions, Rules, CI y APK debug contra
   `salda-dev`.
+
+La implementación añade 10 pruebas Dart/Flutter específicas y 7 escenarios de
+Rules. La matriz completa de seguridad queda en 130/130 casos.

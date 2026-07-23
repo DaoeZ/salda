@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../activity/presentation/space_activity_section.dart';
+import '../../chat/presentation/space_chat_section.dart';
 import '../../friends/data/friendship_repository.dart';
 import '../../friends/domain/friendship.dart';
 import '../../economy/presentation/space_economic_summary.dart';
@@ -198,6 +199,8 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
           Text(l10n.spaceTicketsTitle, style: theme.textTheme.titleMedium),
           const SizedBox(height: TokenSpacing.sm),
           _SpaceTickets(spaceId: space.id),
+          const SizedBox(height: TokenSpacing.xl),
+          SpaceChatSection(spaceId: space.id, isActive: space.isActive),
           const SizedBox(height: TokenSpacing.xl),
           SpaceActivitySection(spaceId: space.id),
           const SizedBox(height: 88),

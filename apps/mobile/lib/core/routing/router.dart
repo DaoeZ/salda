@@ -5,6 +5,7 @@ import '../../features/ai/presentation/ai_providers_screen.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/activity/presentation/activity_screen.dart';
+import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/economy/presentation/economic_overview_screen.dart';
 import '../../features/economy/presentation/economic_relation_screen.dart';
 import '../../features/friends/presentation/friends_screen.dart';
@@ -98,10 +99,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: 'profile', builder: (_, _) => const ProfileScreen()),
           GoRoute(path: 'friends', builder: (_, _) => const FriendsScreen()),
-          GoRoute(
-            path: 'activity',
-            builder: (_, _) => const ActivityScreen(),
-          ),
+          GoRoute(path: 'activity', builder: (_, _) => const ActivityScreen()),
           GoRoute(
             path: 'economy',
             builder: (_, _) => const EconomicOverviewScreen(),
@@ -134,9 +132,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'activity',
-                    builder: (_, state) => ActivityScreen(
-                      spaceId: state.pathParameters['sid']!,
-                    ),
+                    builder: (_, state) =>
+                        ActivityScreen(spaceId: state.pathParameters['sid']!),
+                  ),
+                  GoRoute(
+                    path: 'chat',
+                    builder: (_, state) =>
+                        ChatScreen(spaceId: state.pathParameters['sid']!),
                   ),
                 ],
               ),

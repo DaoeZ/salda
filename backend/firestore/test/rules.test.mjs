@@ -22,6 +22,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -1218,6 +1220,188 @@ describe('spaces', () => {
     await assertSucceeds(createSpace(db(FOURTH), FOURTH, 'ajeno'));
     await assertFails(updateDoc(
       doc(db(OWNER), `${S}/accounts/a1/tickets/t1`), { spaceId: 'ajeno' }));
+  });
+});
+
+// ─── Chat contextual (P7): membresía + frontera temporal ────────────────
+describe('space chat', () => {
+  const joinedAt = new Date('2026-07-01T10:00:00.000Z');
+  const thirdJoinedAt = new Date('2026-07-03T10:00:00.000Z');
+  const visibleAt = new Date('2026-07-02T10:00:00.000Z');
+  const afterThirdAt = new Date('2026-07-04T10:00:00.000Z');
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      for (const uid of [SOCIAL_OUTSIDER, STRANGER, OWNER]) {
+        await setDoc(doc(f, `spaces/sp1/members/${uid}`), {
+          uid,
+          joinedAt,
+        });
+      }
+      await setDoc(doc(f, `spaces/sp1/members/${THIRD}`), {
+        uid: THIRD,
+        joinedAt: thirdJoinedAt,
+      });
+      await setDoc(doc(f, 'spaces/sp1/messages/before'), {
+        authorUid: SOCIAL_OUTSIDER,
+        text: 'Conversación anterior',
+        createdAt: new Date('2026-06-30T10:00:00.000Z'),
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'spaces/sp1/messages/visible'), {
+        authorUid: SOCIAL_OUTSIDER,
+        text: 'Mensaje visible',
+        createdAt: visibleAt,
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'spaces/sp1/messages/after-third'), {
+        authorUid: STRANGER,
+        text: 'Mensaje para todos los miembros actuales',
+        createdAt: afterThirdAt,
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'spaces/sp2/messages/archived'), {
+        authorUid: SOCIAL_OUTSIDER,
+        text: 'Contexto archivado',
+        createdAt: visibleAt,
+        schemaVersion: 1,
+      });
+    });
+  });
+
+  const chatQuery = (f, spaceId, cutoff) => query(
+    collection(f, `spaces/${spaceId}/messages`),
+    where('createdAt', '>=', cutoff),
+    orderBy('createdAt', 'desc'),
+    limit(40),
+  );
+
+  const validMessage = (overrides = {}) => ({
+    authorUid: STRANGER,
+    text: 'Hola, grupo',
+    createdAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  it('miembro actual consulta solo desde su fecha de incorporación', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(chatQuery(db(STRANGER), 'sp1', joinedAt)),
+    );
+    assert.deepEqual(
+      snapshot.docs.map((document) => document.id),
+      ['after-third', 'visible'],
+    );
+    await assertFails(getDoc(doc(db(STRANGER), 'spaces/sp1/messages/before')));
+  });
+
+  it('miembro nuevo no hereda historial y la consulta sin cota se deniega',
+      async () => {
+    await assertFails(
+      getDoc(doc(db(THIRD), 'spaces/sp1/messages/visible')),
+    );
+    const snapshot = await assertSucceeds(
+      getDocs(chatQuery(db(THIRD), 'sp1', thirdJoinedAt)),
+    );
+    assert.deepEqual(
+      snapshot.docs.map((document) => document.id),
+      ['after-third'],
+    );
+    await assertFails(getDocs(query(
+      collection(db(THIRD), 'spaces/sp1/messages'),
+      orderBy('createdAt', 'desc'),
+      limit(40),
+    )));
+  });
+
+  it('no miembros, invitados anónimos y cuentas no verificadas no leen',
+      async () => {
+    await assertFails(
+      getDoc(doc(db(FOURTH), 'spaces/sp1/messages/visible')),
+    );
+    await assertFails(
+      getDoc(doc(db(GUEST), 'spaces/sp1/messages/visible')),
+    );
+    await assertFails(
+      getDoc(doc(db(UNVERIFIED), 'spaces/sp1/messages/visible')),
+    );
+  });
+
+  it('miembro activo envía con identidad propia y server timestamp',
+      async () => {
+    await assertSucceeds(setDoc(
+      doc(db(STRANGER), 'spaces/sp1/messages/new'),
+      validMessage(),
+    ));
+    await assertFails(setDoc(
+      doc(db(STRANGER), 'spaces/sp2/messages/new'),
+      validMessage(),
+    ));
+  });
+
+  it('deniega suplantación, forma inválida y campos adicionales', async () => {
+    const target = (id) => doc(db(STRANGER), `spaces/sp1/messages/${id}`);
+    await assertFails(setDoc(
+      target('spoof'),
+      validMessage({ authorUid: OWNER }),
+    ));
+    await assertFails(setDoc(target('empty'), validMessage({ text: '' })));
+    await assertFails(setDoc(
+      target('long'),
+      validMessage({ text: 'x'.repeat(2001) }),
+    ));
+    await assertFails(setDoc(
+      target('schema'),
+      validMessage({ schemaVersion: 2 }),
+    ));
+    await assertFails(setDoc(
+      target('extra'),
+      validMessage({ moderation: true }),
+    ));
+  });
+
+  it('mensajes inmutables; solo el autor borra en un espacio activo',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spaces/sp1/messages/third-before'), {
+        authorUid: THIRD,
+        text: 'Mensaje propio de una membresía anterior',
+        createdAt: visibleAt,
+        schemaVersion: 1,
+      });
+    });
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/messages/visible'),
+      { text: 'Editado' },
+    ));
+    await assertFails(deleteDoc(
+      doc(db(STRANGER), 'spaces/sp1/messages/visible'),
+    ));
+    await assertFails(deleteDoc(
+      doc(db(THIRD), 'spaces/sp1/messages/third-before'),
+    ));
+    await assertSucceeds(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/messages/visible'),
+    ));
+    await assertFails(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp2/messages/archived'),
+    ));
+  });
+
+  it('al salir se pierde inmediatamente todo acceso al chat', async () => {
+    const memberDb = db(STRANGER);
+    await assertSucceeds(
+      deleteDoc(doc(memberDb, `spaces/sp1/members/${STRANGER}`)),
+    );
+    await assertFails(
+      getDoc(doc(memberDb, 'spaces/sp1/messages/after-third')),
+    );
+    await assertFails(setDoc(
+      doc(memberDb, 'spaces/sp1/messages/after-leave'),
+      validMessage(),
+    ));
   });
 });
 

@@ -84,9 +84,8 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 **Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
 pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)**, **P3
-(amistades)**, **P4 (espacios compartidos)**, **P5 (relaciones económicas)** y
-**P6 (actividad)** completos a nivel de código. No empezar P7 hasta que P6
-quede integrado y validado sobre la reestructuración vigente.
+(amistades)**, **P4 (espacios compartidos)**, **P5 (relaciones económicas)**,
+**P6 (actividad)** y **P7 (chat contextual)** completos a nivel de código.
 **Reestructuración Relaciones/Grupos (ADR-030):** `spaces` es ahora la raíz
 visible del producto: `relationship` reserva una pareja canónica de UID y
 `group` representa contextos de tres o más miembros. Inicio ya no crea ni lista
@@ -105,6 +104,14 @@ duplicar el mismo hecho entre sistemas). Pantalla global /home/activity +
 sección y cronología por espacio, tiempo real + paginación por fecha, dos
 índices compuestos. Sin retro-generación de P1–P5. Contrato:
 `docs/ACTIVIDAD.md`; especificación: `docs/P6_ESPECIFICACIONES.md`.
+P7 (ADR-032) añade chat privado dentro de cada Relación o Grupo mediante
+`spaces/{spaceId}/messages`: texto inmutable, identidad por UID, primera página
+en vivo y paginación histórica. Solo los miembros actuales leen y toda query se
+acota a `createdAt >= members/{uid}.joinedAt`, de modo que una incorporación no
+hereda conversaciones anteriores y salir o ser expulsado revoca el acceso. Los
+espacios archivados quedan en solo lectura; cada autor solo puede borrar sus
+propios mensajes. No genera actividad P6, no toca economía P5, no entra en el
+backup v1 y no añade Functions ni índices compuestos. Contrato: `docs/CHAT.md`.
 P5 (ADR-029) deriva obligaciones explicables por ticket en `economicEntries`,
 consolida bilateralmente por UID y moneda con `EconomicLedger` Dart/TypeScript,
 y registra pagos parciales idempotentes en `economicPayments`: el deudor marca y
@@ -143,10 +150,11 @@ avatar derivado (iniciales + color FNV-1a del uid sobre avatarPalette), búsqued
 prefijo de @username y nombre (queries de campo único, sin composites) y pantallas
 /home/profile y /home/people + banner de Home para completar el perfil. P3 reutiliza
 esa identidad pública para amistades basadas exclusivamente en UID. P4 añade
-espacios y P5 mantiene deuda, amistad y membresía como conceptos independientes;
-actividad y chat quedan fuera. Los contratos vigentes están en
-`docs/AUTENTICACION.md`, `docs/AMISTADES.md`, `docs/ESPACIOS.md` y
-`docs/RELACIONES_ECONOMICAS.md`.
+espacios y P5 mantiene deuda, amistad y membresía como conceptos independientes.
+P6 añade auditoría y P7 conversación sin mezclarlas con la verdad económica. Los
+contratos vigentes están en
+`docs/AUTENTICACION.md`, `docs/AMISTADES.md`, `docs/ESPACIOS.md`,
+`docs/RELACIONES_ECONOMICAS.md`, `docs/ACTIVIDAD.md` y `docs/CHAT.md`.
 
 **Qué se hizo en la última sesión de trabajo, en orden:**
 1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
@@ -458,20 +466,18 @@ firebase CLI → keyring del SO del desarrollador.
 | `docs/AMISTADES.md` | Contrato P3: identidad canónica, concurrencia, UX y seguridad social |
 | `docs/RELACIONES_ECONOMICAS.md` | Contrato P5: fuente de verdad, neteo bilateral, pagos y privacidad |
 | `docs/ESPACIOS.md` | Contrato ADR-030: relaciones, grupos, contexto obligatorio y compatibilidad histórica |
+| `docs/ACTIVIDAD.md` | Contrato P6/ADR-031: cronología autoritativa, audiencia y eventos |
+| `docs/CHAT.md` | Contrato P7/ADR-032: chat contextual, privacidad temporal y alcance |
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. Revisar y fusionar el PR de P4 (rama claude/p4-spaces → main) y validar
-   P1–P4 en un dispositivo Android: email real, verificación, Google, conversión
-   de invitado, perfil con propuesta de username, búsqueda, amistades entre dos
-   cuentas y espacios (crear, invitar, aceptar, tickets vinculados, transferir,
-   archivar).
-2. Replicar en producción los proveedores Email/Password, Anonymous y Google ya
-   verificados en `salda-dev`; registrar también las huellas de firma release/Play.
-3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
+1. Validar P6 y P7 manualmente en `salda-dev` con dos cuentas para una Relación y
+   tres para un Grupo; fusionar el PR solo con CI verde.
+2. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
    activar enforcement únicamente para un cliente.
-4. Validar Relaciones/Grupos manualmente con tres cuentas y fusionar su PR.
-   No empezar P6, P7, chat ni actividad hasta una decisión expresa del usuario.
+3. Mantener producción intacta hasta una ventana explícita de promoción y registrar
+   entonces las huellas de firma release/Play.
+4. No empezar P8 sin una decisión expresa del usuario.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 

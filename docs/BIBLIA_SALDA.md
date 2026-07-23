@@ -1307,7 +1307,7 @@ alimentan de estos mismos eventos.
 pero reutilizar actividad permitiría escrituras de cliente en una proyección
 Admin y mezclaría conversación con auditoría. Congelar la audiencia de cada
 mensaje exigiría una Function o confiar en listas aportadas por el cliente.
-**Decisión:** [EN IMPLEMENTACIÓN] subcolección aditiva
+**Decisión:** [HECHO] subcolección aditiva
 `spaces/{spaceId}/messages/{messageId}`, texto inmutable y autor por UID. Solo
 cuentas completas que sigan siendo miembros leen, siempre con
 `createdAt >= members/{uid}.joinedAt`: un miembro nuevo no hereda conversación

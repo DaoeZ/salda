@@ -1876,6 +1876,120 @@ abstract class AppLocalizations {
   /// **'Ticket desvinculado'**
   String get spaceUnlinked;
 
+  /// No description provided for @chatTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Chat'**
+  String get chatTitle;
+
+  /// No description provided for @chatDescription.
+  ///
+  /// In es, this message translates to:
+  /// **'Coordina los gastos dentro de esta relación o grupo.'**
+  String get chatDescription;
+
+  /// No description provided for @chatReadOnly.
+  ///
+  /// In es, this message translates to:
+  /// **'El contexto está archivado. El chat es de solo lectura.'**
+  String get chatReadOnly;
+
+  /// No description provided for @chatEmptyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no hay mensajes'**
+  String get chatEmptyTitle;
+
+  /// No description provided for @chatEmptyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe el primero para coordinaros dentro de este contexto.'**
+  String get chatEmptyBody;
+
+  /// No description provided for @chatMessageHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe un mensaje'**
+  String get chatMessageHint;
+
+  /// No description provided for @chatSend.
+  ///
+  /// In es, this message translates to:
+  /// **'Enviar mensaje'**
+  String get chatSend;
+
+  /// No description provided for @chatSending.
+  ///
+  /// In es, this message translates to:
+  /// **'Enviando…'**
+  String get chatSending;
+
+  /// No description provided for @chatSendError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo enviar el mensaje. Revisa la conexión e inténtalo de nuevo.'**
+  String get chatSendError;
+
+  /// No description provided for @chatLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo cargar el chat. Revisa la conexión y vuelve a intentarlo.'**
+  String get chatLoadError;
+
+  /// No description provided for @chatLoadOlder.
+  ///
+  /// In es, this message translates to:
+  /// **'Cargar mensajes anteriores'**
+  String get chatLoadOlder;
+
+  /// No description provided for @chatUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya no tienes acceso a este chat.'**
+  String get chatUnavailable;
+
+  /// No description provided for @chatYou.
+  ///
+  /// In es, this message translates to:
+  /// **'Tú'**
+  String get chatYou;
+
+  /// No description provided for @chatAuthorFallback.
+  ///
+  /// In es, this message translates to:
+  /// **'Miembro'**
+  String get chatAuthorFallback;
+
+  /// No description provided for @chatMessageActions.
+  ///
+  /// In es, this message translates to:
+  /// **'Acciones del mensaje'**
+  String get chatMessageActions;
+
+  /// No description provided for @chatDelete.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar mensaje'**
+  String get chatDelete;
+
+  /// No description provided for @chatDeleteTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Eliminar este mensaje?'**
+  String get chatDeleteTitle;
+
+  /// No description provided for @chatDeleteBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Se eliminará del chat para todos los miembros.'**
+  String get chatDeleteBody;
+
+  /// No description provided for @chatDeleteError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo eliminar el mensaje.'**
+  String get chatDeleteError;
+
   /// No description provided for @profileTitle.
   ///
   /// In es, this message translates to:
