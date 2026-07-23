@@ -33,6 +33,34 @@ jobs:
         run: |
           if [ -d test ]; then flutter test; fi
 
+  apk:
+    name: APK debug salda-dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolver workspace
+        run: flutter pub get
+      - name: Compilar APK de desarrollo
+        working-directory: apps/mobile
+        run: flutter build apk --debug --dart-define=SALDA_ENV=development
+      - name: Preparar artefacto verificable
+        run: |
+          cp apps/mobile/build/app/outputs/flutter-apk/app-debug.apk salda-p7-dev-debug.apk
+          sha256sum salda-p7-dev-debug.apk | tee salda-p7-dev-debug.apk.sha256
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: salda-p7-dev-debug
+          path: |
+            salda-p7-dev-debug.apk
+            salda-p7-dev-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+
   guest-web:
     name: Web de invitados
     runs-on: ubuntu-latest
