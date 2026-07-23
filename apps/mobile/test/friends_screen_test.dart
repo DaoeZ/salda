@@ -172,7 +172,15 @@ void main() {
     expect(find.text('Añadir amigo'), findsOneWidget);
     await tester.tap(find.text('Añadir amigo'));
     await tester.pumpAndSettle();
-    expect(find.text('Solicitud enviada'), findsOneWidget);
+    // Confirmación doble: el SnackBar de éxito y el botón de estado.
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text('Solicitud enviada'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Solicitud enviada'), findsNWidgets(2));
     expect(find.text('Cancelar solicitud'), findsOneWidget);
 
     await tester.tap(find.text('Cancelar solicitud'));

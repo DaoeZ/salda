@@ -83,8 +83,20 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 **Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
 pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)**, **P3
-(amistades)**, **P4 (espacios compartidos)** y **P5 (relaciones económicas)**
-completos a nivel de código.
+(amistades)**, **P4 (espacios compartidos)**, **P5 (relaciones económicas)** y
+**P6 (actividad)** completos a nivel de código. NO empezar P7 (chat) sin
+decisión expresa del usuario.
+P6 (ADR-030, rama claude/p6-activity) añade la cronología como proyección de
+auditoría: `activityEvents` escritos SOLO por triggers Admin con IDs
+deterministas (reintentos y recompute convergen en el mismo doc), audiencia
+`memberUids` congelada al momento del hecho (máx. 30; expulsados conservan
+sus hechos, miembros nuevos no heredan), actor derivado de datos
+autoritativos (expulsión vs salida via marcador `removedBy` validado por
+Rules), settlements `pending` y proyecciones legacy JAMÁS emiten (sin
+duplicar el mismo hecho entre sistemas). Pantalla global /home/activity +
+sección y cronología por espacio, tiempo real + paginación por fecha, dos
+índices compuestos. Sin retro-generación de P1–P5. Contrato:
+`docs/ACTIVIDAD.md`; especificación: `docs/P6_ESPECIFICACIONES.md`.
 P5 (ADR-029) deriva obligaciones explicables por ticket en `economicEntries`,
 consolida bilateralmente por UID y moneda con `EconomicLedger` Dart/TypeScript,
 y registra pagos parciales idempotentes en `economicPayments`: el deudor marca y

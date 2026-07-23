@@ -973,7 +973,7 @@ abstract class AppLocalizations {
   /// No description provided for @activityEmpty.
   ///
   /// In es, this message translates to:
-  /// **'Sin actividad todavía'**
+  /// **'Aquí aparecerá lo que vaya pasando: tickets, pagos, espacios y miembros.'**
   String get activityEmpty;
 
   /// No description provided for @accountsEmpty.
@@ -1449,6 +1449,180 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Confirmará {name} al recibir el dinero'**
   String settlementAwaitsReceiver(String name);
+
+  /// No description provided for @activityTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Actividad'**
+  String get activityTitle;
+
+  /// No description provided for @activitySeeAll.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver toda'**
+  String get activitySeeAll;
+
+  /// No description provided for @activityLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo cargar la actividad. Comprueba la conexión.'**
+  String get activityLoadError;
+
+  /// No description provided for @activityRetry.
+  ///
+  /// In es, this message translates to:
+  /// **'Reintentar'**
+  String get activityRetry;
+
+  /// No description provided for @activityLoadMore.
+  ///
+  /// In es, this message translates to:
+  /// **'Cargar más'**
+  String get activityLoadMore;
+
+  /// No description provided for @activityGone.
+  ///
+  /// In es, this message translates to:
+  /// **'Ese elemento ya no está disponible.'**
+  String get activityGone;
+
+  /// No description provided for @activityActorFallback.
+  ///
+  /// In es, this message translates to:
+  /// **'Alguien'**
+  String get activityActorFallback;
+
+  /// No description provided for @activityUnknown.
+  ///
+  /// In es, this message translates to:
+  /// **'Actividad'**
+  String get activityUnknown;
+
+  /// No description provided for @activityNow.
+  ///
+  /// In es, this message translates to:
+  /// **'ahora'**
+  String get activityNow;
+
+  /// No description provided for @activityMinutesAgo.
+  ///
+  /// In es, this message translates to:
+  /// **'hace {n} min'**
+  String activityMinutesAgo(int n);
+
+  /// No description provided for @activityHoursAgo.
+  ///
+  /// In es, this message translates to:
+  /// **'hace {n} h'**
+  String activityHoursAgo(int n);
+
+  /// No description provided for @activityDaysAgo.
+  ///
+  /// In es, this message translates to:
+  /// **'hace {n} d'**
+  String activityDaysAgo(int n);
+
+  /// No description provided for @activitySpaceCreated.
+  ///
+  /// In es, this message translates to:
+  /// **'Creó el espacio \"{space}\"'**
+  String activitySpaceCreated(String space);
+
+  /// No description provided for @activitySpaceRenamed.
+  ///
+  /// In es, this message translates to:
+  /// **'Editó el espacio \"{space}\"'**
+  String activitySpaceRenamed(String space);
+
+  /// No description provided for @activitySpaceArchived.
+  ///
+  /// In es, this message translates to:
+  /// **'Archivó el espacio \"{space}\"'**
+  String activitySpaceArchived(String space);
+
+  /// No description provided for @activitySpaceReactivated.
+  ///
+  /// In es, this message translates to:
+  /// **'Reactivó el espacio \"{space}\"'**
+  String activitySpaceReactivated(String space);
+
+  /// No description provided for @activitySpaceTransferred.
+  ///
+  /// In es, this message translates to:
+  /// **'Transfirió el espacio \"{space}\"'**
+  String activitySpaceTransferred(String space);
+
+  /// No description provided for @activityInviteSent.
+  ///
+  /// In es, this message translates to:
+  /// **'Envió una invitación a \"{space}\"'**
+  String activityInviteSent(String space);
+
+  /// No description provided for @activityMemberJoined.
+  ///
+  /// In es, this message translates to:
+  /// **'Se unió a \"{space}\"'**
+  String activityMemberJoined(String space);
+
+  /// No description provided for @activityMemberLeft.
+  ///
+  /// In es, this message translates to:
+  /// **'Salió de \"{space}\"'**
+  String activityMemberLeft(String space);
+
+  /// No description provided for @activityMemberRemoved.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminó a un miembro de \"{space}\"'**
+  String activityMemberRemoved(String space);
+
+  /// No description provided for @activityTicketCreated.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadió el ticket {ticket}'**
+  String activityTicketCreated(String ticket);
+
+  /// No description provided for @activityTicketUpdated.
+  ///
+  /// In es, this message translates to:
+  /// **'Modificó el ticket {ticket}'**
+  String activityTicketUpdated(String ticket);
+
+  /// No description provided for @activityTicketLinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculó {ticket} al espacio \"{space}\"'**
+  String activityTicketLinked(String ticket, String space);
+
+  /// No description provided for @activityTicketUnlinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Desvinculó el ticket {ticket}'**
+  String activityTicketUnlinked(String ticket);
+
+  /// No description provided for @activityTicketDeleted.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminó el ticket {ticket}'**
+  String activityTicketDeleted(String ticket);
+
+  /// No description provided for @activityPaymentMarked.
+  ///
+  /// In es, this message translates to:
+  /// **'Marcó un pago como enviado'**
+  String get activityPaymentMarked;
+
+  /// No description provided for @activityPaymentConfirmed.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmó que recibió un pago'**
+  String get activityPaymentConfirmed;
+
+  /// No description provided for @activityPaymentCancelled.
+  ///
+  /// In es, this message translates to:
+  /// **'Canceló un pago'**
+  String get activityPaymentCancelled;
 
   /// No description provided for @spacesTitle.
   ///

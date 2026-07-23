@@ -35,3 +35,11 @@ export {
   createEconomicPayment,
   resolveEconomicPayment,
 } from './economicPayments.js';
+export {
+  activityOnSpace,
+  activityOnSpaceMember,
+  activityOnSpaceInvite,
+  activityOnTicketWrite,
+  activityOnSettlementWrite,
+  activityOnEconomicPaymentWrite,
+} from './activity.js';

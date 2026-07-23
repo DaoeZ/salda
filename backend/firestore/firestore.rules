@@ -229,8 +229,27 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/profiles/$(data.receiverUid));
     }
 
+    // El cliente crea solicitudes dentro de una transacción que primero lee
+    // el documento (para converger solicitudes cruzadas y ser idempotente).
+    // Ese get llega ANTES de que el doc exista: con resource == null solo se
+    // permite si el ID incorpora el token serializado del propio UID, así un
+    // tercero no puede sondear la existencia de relaciones ajenas.
+    function friendshipIdInvolvesSelf(friendshipId) {
+      return friendshipId.matches(
+        '.*'
+        + (string(request.auth.uid.size()) + ':' + request.auth.uid)
+            .toUtf8().toHexString().lower()
+        + '.*'
+      );
+    }
+
     match /friendships/{friendshipId} {
-      allow read: if canUseSocial()
+      allow get: if canUseSocial()
+        && (resource == null
+          ? friendshipIdInvolvesSelf(friendshipId)
+          : request.auth.uid in resource.data.memberUids);
+
+      allow list: if canUseSocial()
         && request.auth.uid in resource.data.memberUids;
 
       allow create: if canUseSocial()
@@ -270,6 +289,18 @@ service cloud.firestore {
     }
 
     match /economicPayments/{paymentId} {
+      allow read: if canUseSocial()
+        && request.auth.uid in resource.data.memberUids;
+      allow create, update, delete: if false;
+    }
+
+    // ── Actividad (P6, ADR-030): proyección de auditoría ───────────────
+    // La generan SOLO los triggers Admin; ningún cliente escribe ni puede
+    // fabricar eventos a nombre de otro. La audiencia va congelada en
+    // memberUids: expulsados conservan sus hechos, los miembros nuevos no
+    // heredan actividad anterior. Las queries siempre incluyen
+    // array-contains sobre el propio uid (así la regla es demostrable).
+    match /activityEvents/{eventId} {
       allow read: if canUseSocial()
         && request.auth.uid in resource.data.memberUids;
       allow create, update, delete: if false;
@@ -366,8 +397,14 @@ service cloud.firestore {
                   .data.status == 'accepted')
           );
 
-        // La membresía no tiene campos mutables.
-        allow update: if false;
+        // Única mutación: el owner marca `removedBy` en el MISMO batch del
+        // borrado (P6 distingue así expulsión de salida voluntaria; Rules
+        // garantiza que el marcador es él y nunca el propio expulsado).
+        allow update: if isSpaceOwner(spaceId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['removedBy'])
+          && request.resource.data.removedBy == request.auth.uid
+          && memberUid != request.auth.uid;
 
         // Salir (nunca el owner: antes transfiere o archiva) o expulsión
         // por el owner. Solo borra el acceso social futuro.
