@@ -315,9 +315,16 @@ class SpacesRepository {
     await _spaces.doc(spaceId).collection('members').doc(uid()).delete();
   }
 
-  /// Expulsión por el owner. Mismo contrato: solo la membresía.
-  Future<void> removeMember(String spaceId, String memberUid) =>
-      _spaces.doc(spaceId).collection('members').doc(memberUid).delete();
+  /// Expulsión por el owner. Mismo contrato: solo la membresía. El marcador
+  /// `removedBy` (validado por Rules: solo el owner y nunca sobre sí mismo)
+  /// precede al borrado para que la actividad (P6) distinga expulsión de
+  /// salida voluntaria. Si la app muriera entre ambas escrituras, el
+  /// marcador huérfano es inocuo y el reintento converge.
+  Future<void> removeMember(String spaceId, String memberUid) async {
+    final member = _spaces.doc(spaceId).collection('members').doc(memberUid);
+    await member.update({'removedBy': uid()});
+    await member.delete();
+  }
 
   // ── Tickets ───────────────────────────────────────────────────────────
 

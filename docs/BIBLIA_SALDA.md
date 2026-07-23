@@ -1,8 +1,10 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.9 · **Fecha:** 2026-07-22 · **Changelog:** v1.9 — Relaciones y
-grupos pasan a ser la raíz visible; tickets nuevos siempre contextuales y
-compatibilidad histórica no destructiva (ADR-030). v1.8 — P5 relaciones
+**Versión:** 1.10 · **Fecha:** 2026-07-23 · **Changelog:** v1.10 — P6 actividad
+como proyección de auditoría con IDs deterministas y audiencia congelada
+(ADR-031). v1.9 — Relaciones y grupos pasan a ser la raíz visible; tickets
+nuevos siempre contextuales y compatibilidad histórica no destructiva
+(ADR-030). v1.8 — P5 relaciones
 económicas explicables, neteo bilateral y pagos confirmados (ADR-029). v1.7 — P4 espacios
 compartidos: contenedor social único con propietario en un solo campo,
 invitaciones deterministas y tickets vinculables (ADR-028). v1.6 — P3 amistades
@@ -1265,6 +1267,37 @@ amistad continúa siendo independiente. P6/P7 no forman parte de esta decisión.
 Contrato detallado en `docs/ESPACIOS.md`.
 **Revisión:** antes de permitir invitados no registrados dentro de un grupo,
 definir cómo se representa su identidad sin degradar el vínculo por UID.
+
+### ADR-031: Actividad como proyección de auditoría con IDs deterministas
+**Estado:** Aceptada · **Fecha:** 2026-07-20 (P6)
+**Contexto:** el usuario necesita una cronología (quién hizo qué, cuándo, y
+llegar al objeto) sin convertirla en chat, sin duplicar el modelo económico y
+sin que un cliente pueda fabricar eventos a nombre de otro.
+**Decisión:** [HECHO] colección `activityEvents/{id}` escrita SOLO por
+triggers Admin (`activity.ts`): espacios (crear/editar/archivar/reactivar/
+transferir con actor = owner, transferencia = owner anterior), membresías
+(unirse; salida vs EXPULSIÓN distinguidas por el marcador `removedBy` que el
+owner escribe antes del borrado y Rules valida), invitación enviada, tickets
+(creado/borrado/vinculado/desvinculado y edición RELEVANTE: comercio, total,
+fecha, pagador — una edición atómica = un evento; líneas y asignaciones son
+ruido técnico sin evento), settlements humanos marked/confirmed (pending es
+sugerencia del motor y jamás emite) y pagos P5 `source:user` (actor del
+stateHistory; las proyecciones legacy no emiten: el mismo hecho nunca se
+duplica entre sistemas). IDs deterministas por hecho + escritura
+`create()`-only: reintentos de trigger, offline repetido y recompute
+convergen en el mismo documento conservando su hora. Audiencia `memberUids`
+CONGELADA al momento (máx. 30): un miembro nuevo no hereda actividad, un
+expulsado conserva sus hechos, el owner no gana visibilidad económica.
+Nombres de personas SIEMPRE en vivo por UID (sin snapshots); solo se congela
+el rótulo del objeto. Queries con array-contains del propio uid (regla
+demostrable) + dos índices compuestos; paginación por fecha con primera
+página en stream. Sin retro-generación de P1–P5 (no se fabrican fechas ni
+actores no demostrables). Contrato en `docs/ACTIVIDAD.md`.
+**Consecuencias:** el feed es borrable y reconstruible parcialmente sin
+tocar la verdad; P7 (chat) podrá convivir sin reusar esta colección; si los
+espacios crecieran más allá de ~30 miembros habría que migrar a fan-out.
+**Revisión:** al implementar notificaciones push completas, decidir si se
+alimentan de estos mismos eventos.
 
 ---
 

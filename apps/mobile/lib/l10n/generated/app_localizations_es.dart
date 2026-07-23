@@ -484,7 +484,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get allSettled => 'Todo saldado 🎉';
 
   @override
-  String get activityEmpty => 'Sin actividad todavía';
+  String get activityEmpty =>
+      'Aquí aparecerá lo que vaya pasando: tickets, pagos, espacios y miembros.';
 
   @override
   String get accountsEmpty => 'Sin cuentas todavía';
@@ -752,6 +753,128 @@ class AppLocalizationsEs extends AppLocalizations {
   String settlementAwaitsReceiver(String name) {
     return 'Confirmará $name al recibir el dinero';
   }
+
+  @override
+  String get activityTitle => 'Actividad';
+
+  @override
+  String get activitySeeAll => 'Ver toda';
+
+  @override
+  String get activityLoadError =>
+      'No se pudo cargar la actividad. Comprueba la conexión.';
+
+  @override
+  String get activityRetry => 'Reintentar';
+
+  @override
+  String get activityLoadMore => 'Cargar más';
+
+  @override
+  String get activityGone => 'Ese elemento ya no está disponible.';
+
+  @override
+  String get activityActorFallback => 'Alguien';
+
+  @override
+  String get activityUnknown => 'Actividad';
+
+  @override
+  String get activityNow => 'ahora';
+
+  @override
+  String activityMinutesAgo(int n) {
+    return 'hace $n min';
+  }
+
+  @override
+  String activityHoursAgo(int n) {
+    return 'hace $n h';
+  }
+
+  @override
+  String activityDaysAgo(int n) {
+    return 'hace $n d';
+  }
+
+  @override
+  String activitySpaceCreated(String space) {
+    return 'Creó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceRenamed(String space) {
+    return 'Editó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceArchived(String space) {
+    return 'Archivó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceReactivated(String space) {
+    return 'Reactivó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceTransferred(String space) {
+    return 'Transfirió el espacio \"$space\"';
+  }
+
+  @override
+  String activityInviteSent(String space) {
+    return 'Envió una invitación a \"$space\"';
+  }
+
+  @override
+  String activityMemberJoined(String space) {
+    return 'Se unió a \"$space\"';
+  }
+
+  @override
+  String activityMemberLeft(String space) {
+    return 'Salió de \"$space\"';
+  }
+
+  @override
+  String activityMemberRemoved(String space) {
+    return 'Eliminó a un miembro de \"$space\"';
+  }
+
+  @override
+  String activityTicketCreated(String ticket) {
+    return 'Añadió el ticket $ticket';
+  }
+
+  @override
+  String activityTicketUpdated(String ticket) {
+    return 'Modificó el ticket $ticket';
+  }
+
+  @override
+  String activityTicketLinked(String ticket, String space) {
+    return 'Vinculó $ticket al espacio \"$space\"';
+  }
+
+  @override
+  String activityTicketUnlinked(String ticket) {
+    return 'Desvinculó el ticket $ticket';
+  }
+
+  @override
+  String activityTicketDeleted(String ticket) {
+    return 'Eliminó el ticket $ticket';
+  }
+
+  @override
+  String get activityPaymentMarked => 'Marcó un pago como enviado';
+
+  @override
+  String get activityPaymentConfirmed => 'Confirmó que recibió un pago';
+
+  @override
+  String get activityPaymentCancelled => 'Canceló un pago';
 
   @override
   String get spacesTitle => 'Espacios';

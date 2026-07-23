@@ -40,6 +40,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false) ...[
             IconButton(
+              tooltip: l10n.activityTitle,
+              onPressed: () => context.push('/home/activity'),
+              icon: const Icon(Icons.history),
+            ),
+            IconButton(
               tooltip: l10n.economyTitle,
               onPressed: () => context.push('/home/economy'),
               icon: const Icon(Icons.account_balance_wallet_outlined),

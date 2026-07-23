@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/ai/presentation/ai_providers_screen.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/activity/presentation/activity_screen.dart';
 import '../../features/economy/presentation/economic_overview_screen.dart';
 import '../../features/economy/presentation/economic_relation_screen.dart';
 import '../../features/friends/presentation/friends_screen.dart';
@@ -48,6 +49,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             location == '/home/profile' ||
             location == '/home/friends' ||
             location.startsWith('/home/economy') ||
+            location.startsWith('/home/activity') ||
             location == '/home/people' ||
             location.startsWith('/home/person/') ||
             location.startsWith('/home/spaces');
@@ -97,6 +99,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: 'profile', builder: (_, _) => const ProfileScreen()),
           GoRoute(path: 'friends', builder: (_, _) => const FriendsScreen()),
           GoRoute(
+            path: 'activity',
+            builder: (_, _) => const ActivityScreen(),
+          ),
+          GoRoute(
             path: 'economy',
             builder: (_, _) => const EconomicOverviewScreen(),
             routes: [
@@ -125,6 +131,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: ':sid',
                 builder: (_, state) =>
                     SpaceDetailScreen(spaceId: state.pathParameters['sid']!),
+                routes: [
+                  GoRoute(
+                    path: 'activity',
+                    builder: (_, state) => ActivityScreen(
+                      spaceId: state.pathParameters['sid']!,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

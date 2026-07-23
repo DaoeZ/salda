@@ -29,6 +29,26 @@ class AppUser {
 
   /// Cuenta apta para las futuras funciones de perfil y ámbito social.
   bool get isFullAccount => !isAnonymous && emailVerified;
+
+  /// Igualdad de VALOR: userChanges() re-emite tras cada reload/refresh de
+  /// token aunque nada cambie, y los providers que observan la identidad
+  /// (router incluido) no deben reaccionar a una emisión idéntica: recrear
+  /// el GoRouter reinicia la pila de navegación y cierra pantallas en uso.
+  @override
+  bool operator ==(Object other) =>
+      other is AppUser &&
+      other.uid == uid &&
+      other.email == email &&
+      other.displayName == displayName &&
+      other.photoUrl == photoUrl &&
+      other.isAnonymous == isAnonymous &&
+      other.emailVerified == emailVerified &&
+      other.providerIds.length == providerIds.length &&
+      other.providerIds.containsAll(providerIds);
+
+  @override
+  int get hashCode =>
+      Object.hash(uid, email, displayName, photoUrl, isAnonymous, emailVerified);
 }
 
 enum AuthFailureCode {
