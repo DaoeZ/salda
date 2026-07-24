@@ -44,6 +44,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Prueba sobre Android real (emulador de CI): el bug de Google Sign-In solo
+  # se manifiesta con el plugin y Play Services de verdad.
+  integration_test:
+    sdk: flutter
   flutter_lints: ^6.0.0
   # Solo para el tipo Override en los fakes de test (flutter_riverpod v3
   # no lo re-exporta).

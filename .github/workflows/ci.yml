@@ -108,6 +108,53 @@ jobs:
             --notes "$(printf 'Build de depuracion de %s\n\nSHA-256 del APK:\n```\n%s\n```\n\nHuella de firma:\n```\n%s\n```\n' \
               "$GITHUB_SHA" "$(cat salda-p7-dev-debug.apk.sha256)" "$(cat salda-p7-dev-debug.apk.firma)")"
 
+  emulador:
+    name: Flujo de Google en Android real
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Resolver workspace
+        run: flutter pub get
+      # Los runners de Linux exponen KVM, pero el dispositivo pertenece a root:
+      # sin esta regla el emulador arranca sin aceleración y no termina nunca.
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Prueba de integración en emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb logcat -c
+            adb logcat > logcat.txt &
+            flutter test integration_test/google_sign_in_test.dart \
+              --dart-define=SALDA_ENV=development -d emulator-5554
+          working-directory: apps/mobile
+      - name: Publicar logs de Android
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logcat-google-sign-in
+          path: apps/mobile/logcat.txt
+          if-no-files-found: warn
+          retention-days: 14
+
   guest-web:
     name: Web de invitados
     runs-on: ubuntu-latest
