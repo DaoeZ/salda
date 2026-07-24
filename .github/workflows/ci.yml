@@ -62,8 +62,17 @@ jobs:
       # Publicarla aquí convierte esa comprobación en algo verificable.
       - name: Huella de firma del APK
         run: |
-          keytool -printcert -jarfile salda-p7-dev-debug.apk \
-            | grep -E 'SHA1:|SHA256:' | tee salda-p7-dev-debug.apk.firma
+          # minSdk 24 => el APK va firmado solo con v2/v3, que keytool no sabe
+          # leer; apksigner sí. Se busca la build-tools más reciente instalada.
+          apksigner=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" \
+            -name apksigner -type f 2>/dev/null | sort -V | tail -1)
+          if [ -z "$apksigner" ]; then
+            echo "No se encontró apksigner en el SDK de Android" >&2
+            exit 1
+          fi
+          "$apksigner" verify --print-certs salda-p7-dev-debug.apk \
+            | grep -Ei 'certificate SHA-1|certificate SHA-256' \
+            | tee salda-p7-dev-debug.apk.firma
           {
             echo '### Firma del APK de desarrollo'
             echo '```'
