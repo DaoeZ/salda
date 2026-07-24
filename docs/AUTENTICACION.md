@@ -117,9 +117,17 @@ Comprobaciones, y qué significa cada fallo:
 | 5 | Cerrar el selector sin elegir | Vuelve al login SIN mensaje de error |
 | 6 | Modo avión | "Sin conexión. Inténtalo de nuevo." |
 
-Si aparece el mensaje de huella de firma con el código `clientConfigurationError`,
-el paso 1 no está hecho o se registró otra huella: no es un fallo de la cuenta y
-reintentar no lo arregla.
+Si aparece el mensaje de huella de firma, el paso 1 no está hecho o se registró
+otra huella: no es un fallo de la cuenta y reintentar no lo arregla.
+
+**Cuidado al tocar el mapeo de errores.** En Android real, Credential Manager
+NO usa `clientConfigurationError`: entrega casi todo como `unknownError` y el
+motivo viaja solo en `GoogleSignInException.description` (comprobado en el
+emulador de CI: `GetCredentialResponse error returned from framework`). Por eso
+`mapGoogleSignInCode` mira la descripción además del código; si se simplifica a
+un `switch` sobre el enum, todos los fallos vuelven a colapsar en "Algo ha
+fallado" y el bug reaparece sin que ningún test de widget lo note. El job
+`emulador` de CI existe justo para eso.
 - En `salda-dev` están habilitados y verificados Email/Password, Anonymous y Google.
   Producción deberá repetir esta configuración antes de publicar.
 
