@@ -143,11 +143,9 @@ jobs:
           script: |
             adb logcat -c
             adb logcat > logcat.txt &
-            flutter drive \
-              --driver=test_driver/integration_test.dart \
-              --target=integration_test/google_sign_in_test.dart \
-              --dart-define=SALDA_ENV=development \
-              -d emulator-5554
+            # En una sola línea a propósito: esta acción no respeta las
+            # continuaciones con "\" y los argumentos se pierden por el camino.
+            flutter drive --driver=test_driver/integration_test.dart --target=integration_test/google_sign_in_test.dart --dart-define=SALDA_ENV=development -d emulator-5554
           working-directory: apps/mobile
       - name: Publicar logs de Android
         if: always()
