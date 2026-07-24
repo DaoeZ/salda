@@ -8,20 +8,39 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/auth_repository.dart';
 
-String authErrorText(AppLocalizations l10n, AuthFailureCode code) =>
-    switch (code) {
-      AuthFailureCode.invalidCredential => l10n.authErrorInvalidCredential,
-      AuthFailureCode.emailAlreadyInUse => l10n.authErrorEmailInUse,
-      AuthFailureCode.weakPassword => l10n.authErrorWeakPassword,
-      AuthFailureCode.network => l10n.authErrorNetwork,
-      AuthFailureCode.tooManyRequests => l10n.authErrorTooManyRequests,
-      AuthFailureCode.userDisabled => l10n.authErrorUserDisabled,
-      AuthFailureCode.operationNotAllowed => l10n.authErrorOperationNotAllowed,
-      AuthFailureCode.credentialAlreadyInUse =>
-        l10n.authErrorCredentialAlreadyInUse,
-      AuthFailureCode.cancelled => l10n.authErrorCancelled,
-      AuthFailureCode.unknown => l10n.authErrorUnknown,
-    };
+String authErrorText(AppLocalizations l10n, AuthFailure failure) {
+  final message = switch (failure.code) {
+    AuthFailureCode.invalidCredential => l10n.authErrorInvalidCredential,
+    AuthFailureCode.emailAlreadyInUse => l10n.authErrorEmailInUse,
+    AuthFailureCode.weakPassword => l10n.authErrorWeakPassword,
+    AuthFailureCode.network => l10n.authErrorNetwork,
+    AuthFailureCode.tooManyRequests => l10n.authErrorTooManyRequests,
+    AuthFailureCode.userDisabled => l10n.authErrorUserDisabled,
+    AuthFailureCode.operationNotAllowed => l10n.authErrorOperationNotAllowed,
+    AuthFailureCode.credentialAlreadyInUse =>
+      l10n.authErrorCredentialAlreadyInUse,
+    AuthFailureCode.cancelled => l10n.authErrorCancelled,
+    AuthFailureCode.oauthConfiguration => l10n.authErrorOauthConfiguration,
+    AuthFailureCode.signInInterrupted => l10n.authErrorSignInInterrupted,
+    AuthFailureCode.sessionNotEstablished =>
+      l10n.authErrorSessionNotEstablished,
+    AuthFailureCode.profileUnavailable => l10n.authErrorProfileUnavailable,
+    AuthFailureCode.unknown => l10n.authErrorUnknown,
+  };
+  // El código técnico solo acompaña a los fallos que NO puede resolver el
+  // usuario: en el resto sería ruido delante de una acción clara.
+  final code = failure.technicalCode;
+  if (code == null || !_codeWorthShowing.contains(failure.code)) {
+    return message;
+  }
+  return l10n.authErrorWithCode(message, code);
+}
+
+const _codeWorthShowing = {
+  AuthFailureCode.oauthConfiguration,
+  AuthFailureCode.sessionNotEstablished,
+  AuthFailureCode.unknown,
+};
 
 String? validateEmail(AppLocalizations l10n, String? value) {
   final email = value?.trim() ?? '';
@@ -85,10 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on AuthFailure catch (failure) {
       if (mounted && failure.code != AuthFailureCode.cancelled) {
         setState(
-          () => _error = authErrorText(
-            AppLocalizations.of(context),
-            failure.code,
-          ),
+          () => _error = authErrorText(AppLocalizations.of(context), failure),
         );
       }
     } finally {
@@ -265,10 +281,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     } on AuthFailure catch (failure) {
       if (mounted && failure.code != AuthFailureCode.cancelled) {
         setState(
-          () => _error = authErrorText(
-            AppLocalizations.of(context),
-            failure.code,
-          ),
+          () => _error = authErrorText(AppLocalizations.of(context), failure),
         );
       }
     } finally {
@@ -458,7 +471,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           .sendPasswordReset(_email.text.trim());
       if (mounted) setState(() => _sent = true);
     } on AuthFailure catch (failure) {
-      if (mounted) setState(() => _error = authErrorText(l10n, failure.code));
+      if (mounted) setState(() => _error = authErrorText(l10n, failure));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -562,7 +575,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     } on AuthFailure catch (failure) {
       if (mounted) {
         setState(() {
-          _message = authErrorText(l10n, failure.code);
+          _message = authErrorText(l10n, failure);
           _messageIsError = true;
         });
       }
@@ -597,7 +610,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     } on AuthFailure catch (failure) {
       if (mounted) {
         setState(() {
-          _message = authErrorText(l10n, failure.code);
+          _message = authErrorText(l10n, failure);
           _messageIsError = true;
         });
       }
@@ -617,7 +630,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     } on AuthFailure catch (failure) {
       if (mounted) {
         setState(() {
-          _message = authErrorText(l10n, failure.code);
+          _message = authErrorText(l10n, failure);
           _messageIsError = true;
         });
       }
@@ -772,7 +785,7 @@ class _InlineError extends StatelessWidget {
         children: [
           const Icon(Icons.error_outline),
           const SizedBox(width: TokenSpacing.sm),
-          Expanded(child: Text(message)),
+          Expanded(child: Text(message, key: const Key('auth-error'))),
         ],
       ),
     ),

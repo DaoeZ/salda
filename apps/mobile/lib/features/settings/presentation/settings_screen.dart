@@ -203,7 +203,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
       await ref.read(authRepositoryProvider).signOut();
     } on AuthFailure catch (failure) {
       if (mounted) {
-        setState(() => _error = authErrorText(l10n, failure.code));
+        setState(() => _error = authErrorText(l10n, failure));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

@@ -646,11 +646,41 @@ abstract class AppLocalizations {
   /// **'Has cancelado el acceso.'**
   String get authErrorCancelled;
 
+  /// No description provided for @authErrorOauthConfiguration.
+  ///
+  /// In es, this message translates to:
+  /// **'Google no reconoce esta versión de la app: falta registrar la huella de firma (SHA-1) del APK en el proyecto Firebase. No es un problema de tu cuenta y reintentar no lo arregla.'**
+  String get authErrorOauthConfiguration;
+
+  /// No description provided for @authErrorSignInInterrupted.
+  ///
+  /// In es, this message translates to:
+  /// **'El acceso con Google se interrumpió antes de terminar. Vuelve a intentarlo.'**
+  String get authErrorSignInInterrupted;
+
+  /// No description provided for @authErrorSessionNotEstablished.
+  ///
+  /// In es, this message translates to:
+  /// **'Google te ha identificado, pero no se pudo abrir la sesión. Vuelve a intentarlo.'**
+  String get authErrorSessionNotEstablished;
+
+  /// No description provided for @authErrorProfileUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'Has entrado, pero no hemos podido cargar tu perfil. Comprueba la conexión.'**
+  String get authErrorProfileUnavailable;
+
   /// No description provided for @authErrorUnknown.
   ///
   /// In es, this message translates to:
   /// **'Algo ha fallado. Inténtalo de nuevo.'**
   String get authErrorUnknown;
+
+  /// Añade el código técnico del SDK a un error de acceso para poder diagnosticarlo sin logs.
+  ///
+  /// In es, this message translates to:
+  /// **'{message} (código: {code})'**
+  String authErrorWithCode(String message, String code);
 
   /// No description provided for @signOut.
   ///

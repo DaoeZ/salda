@@ -12,3 +12,8 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Excepción: clave de DEPURACIÓN compartida y versionada a propósito, para
+# que la huella SHA-1 del APK de desarrollo sea estable y registrable en
+# Firebase. Contraseña pública "android"; nunca para firmar una release.
+!app/salda-debug.keystore

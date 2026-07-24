@@ -66,6 +66,30 @@ Forzarlo antes rompería la web de invitados.
   flavors.
 - Las huellas SHA-1 y SHA-256 debug están registradas para el paquete existente. Las
   firmas release/Play se registrarán antes de publicar.
+
+### Clave de depuración compartida (obligatoria para Google Sign-In)
+
+`apps/mobile/android/app/salda-debug.keystore` se versiona a propósito y firma
+**todas** las builds debug (local y CI). Antes, cada máquina y cada runner de CI
+generaban su propio `~/.android/debug.keystore`: el APK publicado por CI iba
+firmado con una huella que no estaba —ni podía estar— registrada en `salda-dev`,
+así que Google abría el selector de cuentas y después se negaba a emitir el
+token. Con una única clave versionada la huella es estable y se registra una vez.
+
+| | |
+|---|---|
+| Paquete | `dev.salda.salda_mobile` |
+| SHA-1 | `4B:E8:FE:7F:FD:76:97:F5:61:CA:68:78:15:76:A0:DC:D9:CE:F3:E8` |
+| SHA-256 | `AC:1A:4A:6A:96:29:CB:EA:9A:4D:8C:D9:E5:45:81:A2:F7:85:B9:12:D3:C8:49:5E:3F:BA:A4:6A:E5:24:22:B5` |
+
+**Ambas huellas deben añadirse a la app Android de `salda-dev`** (Configuración
+del proyecto → Tus apps → Añadir huella digital). Sin ese registro el acceso con
+Google falla con `clientConfigurationError`, que la app ya explica en pantalla.
+No es un secreto (contraseña `android`, la convención de Android) y **nunca** debe
+firmar una release: la release necesitará su propia clave y su propio registro.
+
+El job `apk` de CI imprime la huella del APK que acaba de construir, de modo que
+comprobar si coincide con la registrada no requiere adivinar.
 - En `salda-dev` están habilitados y verificados Email/Password, Anonymous y Google.
   Producción deberá repetir esta configuración antes de publicar.
 

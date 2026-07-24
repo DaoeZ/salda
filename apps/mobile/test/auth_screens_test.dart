@@ -29,6 +29,78 @@ void main() {
     expect(auth.calls, ['google', 'guest']);
   });
 
+  // El bug real: el APK firmado con una clave no registrada fallaba tras
+  // elegir cuenta y solo decía "Algo ha fallado", que no orienta a nadie.
+  testWidgets('un fallo de configuración OAuth explica la causa y su código', (
+    tester,
+  ) async {
+    final auth = _RecordingAuthRepository()
+      ..failure = const AuthFailure(
+        AuthFailureCode.oauthConfiguration,
+        technicalCode: 'clientConfigurationError',
+      );
+    await _pump(tester, const LoginScreen(), auth);
+
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pump();
+
+    expect(find.textContaining('huella de firma'), findsOneWidget);
+    expect(find.textContaining('clientConfigurationError'), findsOneWidget);
+    expect(find.textContaining('Algo ha fallado'), findsNothing);
+  });
+
+  testWidgets('cancelar el selector de cuentas no se presenta como error', (
+    tester,
+  ) async {
+    final auth = _RecordingAuthRepository()
+      ..failure = const AuthFailure(AuthFailureCode.cancelled);
+    await _pump(tester, const LoginScreen(), auth);
+
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pump();
+
+    expect(find.textContaining('Has cancelado'), findsNothing);
+    expect(find.textContaining('Algo ha fallado'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  test('cada causa de fallo produce un mensaje distinto', () async {
+    final l10n = await AppLocalizations.delegate.load(const Locale('es'));
+    // Ninguna de estas causas se arregla igual, así que ninguna puede
+    // compartir texto: es justo lo que hacía indiagnosticable el bug.
+    final textos = {
+      for (final code in AuthFailureCode.values)
+        code: authErrorText(l10n, AuthFailure(code)),
+    };
+
+    expect(textos.values.toSet(), hasLength(AuthFailureCode.values.length));
+  });
+
+  test('el código técnico solo acompaña a lo que el usuario no puede resolver', () async {
+    final l10n = await AppLocalizations.delegate.load(const Locale('es'));
+
+    expect(
+      authErrorText(
+        l10n,
+        const AuthFailure(
+          AuthFailureCode.oauthConfiguration,
+          technicalCode: 'clientConfigurationError',
+        ),
+      ),
+      contains('clientConfigurationError'),
+    );
+    expect(
+      authErrorText(
+        l10n,
+        const AuthFailure(
+          AuthFailureCode.network,
+          technicalCode: 'network-request-failed',
+        ),
+      ),
+      isNot(contains('network-request-failed')),
+    );
+  });
+
   testWidgets('login admite contraseñas históricas de 6 caracteres', (
     tester,
   ) async {

@@ -304,7 +304,28 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authErrorCancelled => 'Has cancelado el acceso.';
 
   @override
+  String get authErrorOauthConfiguration =>
+      'Google no reconoce esta versión de la app: falta registrar la huella de firma (SHA-1) del APK en el proyecto Firebase. No es un problema de tu cuenta y reintentar no lo arregla.';
+
+  @override
+  String get authErrorSignInInterrupted =>
+      'El acceso con Google se interrumpió antes de terminar. Vuelve a intentarlo.';
+
+  @override
+  String get authErrorSessionNotEstablished =>
+      'Google te ha identificado, pero no se pudo abrir la sesión. Vuelve a intentarlo.';
+
+  @override
+  String get authErrorProfileUnavailable =>
+      'Has entrado, pero no hemos podido cargar tu perfil. Comprueba la conexión.';
+
+  @override
   String get authErrorUnknown => 'Algo ha fallado. Inténtalo de nuevo.';
+
+  @override
+  String authErrorWithCode(String message, String code) {
+    return '$message (código: $code)';
+  }
 
   @override
   String get signOut => 'Cerrar sesión';

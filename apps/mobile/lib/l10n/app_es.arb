@@ -105,7 +105,19 @@
   "authErrorOperationNotAllowed": "Este método de acceso aún no está habilitado.",
   "authErrorCredentialAlreadyInUse": "Ese acceso ya pertenece a otra cuenta. Cierra esta sesión y entra con la cuenta existente; no hemos movido tus datos.",
   "authErrorCancelled": "Has cancelado el acceso.",
+  "authErrorOauthConfiguration": "Google no reconoce esta versión de la app: falta registrar la huella de firma (SHA-1) del APK en el proyecto Firebase. No es un problema de tu cuenta y reintentar no lo arregla.",
+  "authErrorSignInInterrupted": "El acceso con Google se interrumpió antes de terminar. Vuelve a intentarlo.",
+  "authErrorSessionNotEstablished": "Google te ha identificado, pero no se pudo abrir la sesión. Vuelve a intentarlo.",
+  "authErrorProfileUnavailable": "Has entrado, pero no hemos podido cargar tu perfil. Comprueba la conexión.",
   "authErrorUnknown": "Algo ha fallado. Inténtalo de nuevo.",
+  "authErrorWithCode": "{message} (código: {code})",
+  "@authErrorWithCode": {
+    "description": "Añade el código técnico del SDK a un error de acceso para poder diagnosticarlo sin logs.",
+    "placeholders": {
+      "message": { "type": "String" },
+      "code": { "type": "String" }
+    }
+  },
   "signOut": "Cerrar sesión",
   "guestAccount": "Cuenta de invitado",
   "guestAccountBody": "Tus sesiones solo están vinculadas a este acceso.",

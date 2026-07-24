@@ -61,14 +61,37 @@ enum AuthFailureCode {
   operationNotAllowed,
   credentialAlreadyInUse,
   cancelled,
+
+  /// El proveedor rechaza la app: paquete o huella de firma no registrados
+  /// como cliente OAuth de Android, o serverClientId de otro proyecto. Es la
+  /// causa típica de "elijo cuenta y no pasa nada" y NO se resuelve
+  /// reintentando: hay que registrar la firma en el proyecto Firebase.
+  oauthConfiguration,
+
+  /// El selector se cerró sin decisión del usuario (sin Activity, Play
+  /// Services caído, sistema mató la UI). Reintentar sí tiene sentido.
+  signInInterrupted,
+
+  /// El proveedor aceptó pero Firebase no dejó sesión activa: sin ella la
+  /// navegación posterior al login nunca ocurriría y la pantalla se quedaría
+  /// quieta sin explicación.
+  sessionNotEstablished,
+
+  /// La sesión existe pero el perfil público no se pudo leer ni crear.
+  profileUnavailable,
   unknown,
 }
 
 /// Error estable y presentable: la UI nunca depende de códigos de Firebase.
 class AuthFailure implements Exception {
-  const AuthFailure(this.code);
+  const AuthFailure(this.code, {this.technicalCode});
 
   final AuthFailureCode code;
+
+  /// Código real del SDK (google_sign_in o firebase_auth). Se muestra junto
+  /// a los fallos de configuración porque sin él son indistinguibles entre
+  /// sí, y no contiene datos personales.
+  final String? technicalCode;
 }
 
 /// Puerto de bajo nivel. Separarlo permite probar todas las transiciones de
@@ -283,15 +306,34 @@ class FirebaseAuthGateway implements AuthGateway {
   });
 
   Future<AuthCredential> _googleCredential() async {
-    _googleInitialization ??= _googleSignIn.initialize(
-      serverClientId: _googleServerClientId.isEmpty
-          ? null
-          : _googleServerClientId,
-    );
-    await _googleInitialization;
+    // Un initialize() fallido NO puede quedar memoizado: si se cachea la
+    // Future rota, todos los intentos siguientes repiten el mismo error y
+    // reintentar deja de servir hasta reiniciar la app.
+    final initialization =
+        _googleInitialization ??= _googleSignIn.initialize(
+          serverClientId: _googleServerClientId.isEmpty
+              ? null
+              : _googleServerClientId,
+        );
+    try {
+      await initialization;
+    } on Object {
+      _googleInitialization = null;
+      rethrow;
+    }
     final account = await _googleSignIn.authenticate();
-    final authentication = account.authentication;
-    return GoogleAuthProvider.credential(idToken: authentication.idToken);
+    final idToken = account.authentication.idToken;
+    // Sin idToken no hay credencial que Firebase pueda verificar. Ocurre
+    // cuando el proveedor no reconoce a la app, así que se reporta como
+    // configuración OAuth y no como "credencial incorrecta": lo segundo
+    // mandaría al usuario a revisar una contraseña que no ha escrito.
+    if (idToken == null || idToken.isEmpty) {
+      throw const AuthFailure(
+        AuthFailureCode.oauthConfiguration,
+        technicalCode: 'missing-id-token',
+      );
+    }
+    return GoogleAuthProvider.credential(idToken: idToken);
   }
 
   User _requiredFirebaseUser() {
@@ -302,7 +344,9 @@ class FirebaseAuthGateway implements AuthGateway {
 
   AppUser _required(User? user) {
     final mapped = _map(user);
-    if (mapped == null) throw const AuthFailure(AuthFailureCode.unknown);
+    if (mapped == null) {
+      throw const AuthFailure(AuthFailureCode.sessionNotEstablished);
+    }
     return mapped;
   }
 
@@ -312,16 +356,22 @@ class FirebaseAuthGateway implements AuthGateway {
     } on AuthFailure {
       rethrow;
     } on FirebaseAuthException catch (error) {
-      throw AuthFailure(_mapFirebaseCode(error.code));
+      throw AuthFailure(
+        _mapFirebaseCode(error.code),
+        technicalCode: error.code,
+      );
     } on GoogleSignInException catch (error) {
-      if (error.code == GoogleSignInExceptionCode.canceled) {
-        throw const AuthFailure(AuthFailureCode.cancelled);
-      }
-      throw const AuthFailure(AuthFailureCode.unknown);
+      throw AuthFailure(
+        mapGoogleSignInCode(error.code),
+        technicalCode: error.code.name,
+      );
     } on TimeoutException {
       throw const AuthFailure(AuthFailureCode.network);
-    } on Object {
-      throw const AuthFailure(AuthFailureCode.unknown);
+    } on Object catch (error) {
+      throw AuthFailure(
+        AuthFailureCode.unknown,
+        technicalCode: error.runtimeType.toString(),
+      );
     }
   }
 
@@ -336,6 +386,22 @@ const _googleServerClientId = String.fromEnvironment(
   defaultValue:
       '923355592259-qo73cse3nbhcmidpmjahinimd88aviji.apps.googleusercontent.com',
 );
+
+/// Traduce los códigos de google_sign_in SIN aplanarlos: distinguir
+/// "configuración" de "interrupción" es lo que separa un fallo que hay que
+/// arreglar en Firebase de uno que se resuelve reintentando.
+AuthFailureCode mapGoogleSignInCode(GoogleSignInExceptionCode code) =>
+    switch (code) {
+      GoogleSignInExceptionCode.canceled => AuthFailureCode.cancelled,
+      GoogleSignInExceptionCode.clientConfigurationError ||
+      GoogleSignInExceptionCode.providerConfigurationError =>
+        AuthFailureCode.oauthConfiguration,
+      GoogleSignInExceptionCode.interrupted ||
+      GoogleSignInExceptionCode.uiUnavailable ||
+      GoogleSignInExceptionCode.userMismatch =>
+        AuthFailureCode.signInInterrupted,
+      GoogleSignInExceptionCode.unknownError => AuthFailureCode.unknown,
+    };
 
 AuthFailureCode _mapFirebaseCode(String code) => switch (code) {
   'invalid-credential' ||

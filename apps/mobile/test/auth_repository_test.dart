@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:salda_mobile/features/auth/data/auth_repository.dart';
 
 void main() {
@@ -147,6 +148,56 @@ void main() {
       expect(repository.currentUser?.uid, 'email-user');
       expect(emitted, [null, 'email-user']);
       await subscription.cancel();
+    });
+  });
+
+  // Regresión del login con Google bloqueado: TODO fallo del selector se
+  // aplanaba a `unknown`, así que un APK con la firma sin registrar y una
+  // interrupción pasajera contaban la misma historia inútil.
+  group('errores de Google Sign-In', () {
+    test('la app no reconocida se identifica como configuración OAuth', () {
+      expect(
+        mapGoogleSignInCode(GoogleSignInExceptionCode.clientConfigurationError),
+        AuthFailureCode.oauthConfiguration,
+      );
+      expect(
+        mapGoogleSignInCode(
+          GoogleSignInExceptionCode.providerConfigurationError,
+        ),
+        AuthFailureCode.oauthConfiguration,
+      );
+    });
+
+    test('cancelar es cancelar y no un error de configuración', () {
+      expect(
+        mapGoogleSignInCode(GoogleSignInExceptionCode.canceled),
+        AuthFailureCode.cancelled,
+      );
+    });
+
+    test('lo interrumpido se separa de lo mal configurado', () {
+      for (final code in [
+        GoogleSignInExceptionCode.interrupted,
+        GoogleSignInExceptionCode.uiUnavailable,
+        GoogleSignInExceptionCode.userMismatch,
+      ]) {
+        expect(mapGoogleSignInCode(code), AuthFailureCode.signInInterrupted);
+      }
+    });
+
+    test('solo lo genuinamente desconocido queda como desconocido', () {
+      expect(
+        mapGoogleSignInCode(GoogleSignInExceptionCode.unknownError),
+        AuthFailureCode.unknown,
+      );
+    });
+
+    test('el fallo conserva el código técnico para diagnosticar', () {
+      const failure = AuthFailure(
+        AuthFailureCode.oauthConfiguration,
+        technicalCode: 'clientConfigurationError',
+      );
+      expect(failure.technicalCode, 'clientConfigurationError');
     });
   });
 

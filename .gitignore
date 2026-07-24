@@ -15,6 +15,11 @@ apps/mobile/android/local.properties
 apps/mobile/android/app/.cxx/
 *.keystore
 *.jks
+# Excepción: clave de DEPURACIÓN compartida (contraseña pública "android").
+# Se versiona a propósito para que la huella SHA-1 del APK de desarrollo sea
+# la misma en toda máquina y en CI, y pueda registrarse una sola vez en el
+# proyecto Firebase. Jamás debe usarse para firmar una release.
+!apps/mobile/android/app/salda-debug.keystore
 key.properties
 
 # --- iOS / macOS ---
