@@ -670,6 +670,18 @@ abstract class AppLocalizations {
   /// **'Has entrado, pero no hemos podido cargar tu perfil. Comprueba la conexión.'**
   String get authErrorProfileUnavailable;
 
+  /// No description provided for @authErrorNoGoogleAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'No hay ninguna cuenta de Google en este dispositivo. Añade una en los ajustes de Android y vuelve a intentarlo.'**
+  String get authErrorNoGoogleAccount;
+
+  /// No description provided for @authErrorGoogleUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'Google no ha podido completar el acceso. Si se repite, comprueba que la huella de firma de la app esté registrada en Firebase.'**
+  String get authErrorGoogleUnavailable;
+
   /// No description provided for @authErrorUnknown.
   ///
   /// In es, this message translates to:

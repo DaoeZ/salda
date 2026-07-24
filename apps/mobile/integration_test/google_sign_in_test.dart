@@ -50,10 +50,12 @@ void main() {
           .widget<Text>(find.byKey(const Key('auth-error')))
           .data!;
       debugPrint('EVIDENCIA: mensaje mostrado -> $mensaje');
-      // 2) El fallo se explica. El bug mostraba, como mucho, el genérico.
+      // 2) El fallo se explica. Comparar por igualdad no basta: el código
+      // técnico se añade al final, así que el mensaje comodín pasaba el
+      // filtro con solo llevarlo pegado. Se exige que ni empiece por él.
       expect(
-        mensaje.trim(),
-        isNot('Algo ha fallado. Inténtalo de nuevo.'),
+        mensaje.startsWith('Algo ha fallado'),
+        isFalse,
         reason: 'un fallo real debe decir su causa, no el mensaje comodín',
       );
     } else {

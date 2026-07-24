@@ -320,6 +320,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Has entrado, pero no hemos podido cargar tu perfil. Comprueba la conexión.';
 
   @override
+  String get authErrorNoGoogleAccount =>
+      'No hay ninguna cuenta de Google en este dispositivo. Añade una en los ajustes de Android y vuelve a intentarlo.';
+
+  @override
+  String get authErrorGoogleUnavailable =>
+      'Google no ha podido completar el acceso. Si se repite, comprueba que la huella de firma de la app esté registrada en Firebase.';
+
+  @override
   String get authErrorUnknown => 'Algo ha fallado. Inténtalo de nuevo.';
 
   @override

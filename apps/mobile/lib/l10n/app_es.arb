@@ -109,6 +109,8 @@
   "authErrorSignInInterrupted": "El acceso con Google se interrumpió antes de terminar. Vuelve a intentarlo.",
   "authErrorSessionNotEstablished": "Google te ha identificado, pero no se pudo abrir la sesión. Vuelve a intentarlo.",
   "authErrorProfileUnavailable": "Has entrado, pero no hemos podido cargar tu perfil. Comprueba la conexión.",
+  "authErrorNoGoogleAccount": "No hay ninguna cuenta de Google en este dispositivo. Añade una en los ajustes de Android y vuelve a intentarlo.",
+  "authErrorGoogleUnavailable": "Google no ha podido completar el acceso. Si se repite, comprueba que la huella de firma de la app esté registrada en Firebase.",
   "authErrorUnknown": "Algo ha fallado. Inténtalo de nuevo.",
   "authErrorWithCode": "{message} (código: {code})",
   "@authErrorWithCode": {

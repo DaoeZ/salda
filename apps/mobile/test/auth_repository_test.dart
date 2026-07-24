@@ -185,10 +185,37 @@ void main() {
       }
     });
 
-    test('solo lo genuinamente desconocido queda como desconocido', () {
+    test('un fallo opaco del proveedor no se confunde con un fallo de la app', () {
       expect(
         mapGoogleSignInCode(GoogleSignInExceptionCode.unknownError),
-        AuthFailureCode.unknown,
+        AuthFailureCode.googleUnavailable,
+      );
+    });
+
+    // Verificado en un emulador Android real: Credential Manager entrega
+    // `unknownError` y el motivo viaja SOLO en la descripción. Sin mirarla,
+    // una firma sin registrar acababa en "Algo ha fallado".
+    test('la descripción de Android desambigua lo que el código aplana', () {
+      expect(
+        mapGoogleSignInCode(
+          GoogleSignInExceptionCode.unknownError,
+          description: 'com.google.android.gms.common.api.ApiException: 10: ',
+        ),
+        AuthFailureCode.oauthConfiguration,
+      );
+      expect(
+        mapGoogleSignInCode(
+          GoogleSignInExceptionCode.unknownError,
+          description: 'androidx.credentials.exceptions.NoCredentialException',
+        ),
+        AuthFailureCode.noGoogleAccount,
+      );
+      expect(
+        mapGoogleSignInCode(
+          GoogleSignInExceptionCode.unknownError,
+          description: 'DEVELOPER_ERROR',
+        ),
+        AuthFailureCode.oauthConfiguration,
       );
     });
 

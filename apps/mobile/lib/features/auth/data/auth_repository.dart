@@ -79,6 +79,14 @@ enum AuthFailureCode {
 
   /// La sesión existe pero el perfil público no se pudo leer ni crear.
   profileUnavailable,
+
+  /// El dispositivo no tiene ninguna cuenta de Google que ofrecer.
+  noGoogleAccount,
+
+  /// Google respondió con un fallo que no sabe explicar. Se separa de
+  /// [unknown] para no confundir "el proveedor falló" con "algo raro pasó
+  /// dentro de la app": la acción del usuario es distinta.
+  googleUnavailable,
   unknown,
 }
 
@@ -362,8 +370,10 @@ class FirebaseAuthGateway implements AuthGateway {
       );
     } on GoogleSignInException catch (error) {
       throw AuthFailure(
-        mapGoogleSignInCode(error.code),
-        technicalCode: error.code.name,
+        mapGoogleSignInCode(error.code, description: error.description),
+        // La descripción es lo único que identifica el fallo real en Android;
+        // se recorta porque algunas traen la traza entera.
+        technicalCode: _googleTechnicalCode(error),
       );
     } on TimeoutException {
       throw const AuthFailure(AuthFailureCode.network);
@@ -390,18 +400,48 @@ const _googleServerClientId = String.fromEnvironment(
 /// Traduce los códigos de google_sign_in SIN aplanarlos: distinguir
 /// "configuración" de "interrupción" es lo que separa un fallo que hay que
 /// arreglar en Firebase de uno que se resuelve reintentando.
-AuthFailureCode mapGoogleSignInCode(GoogleSignInExceptionCode code) =>
-    switch (code) {
-      GoogleSignInExceptionCode.canceled => AuthFailureCode.cancelled,
-      GoogleSignInExceptionCode.clientConfigurationError ||
-      GoogleSignInExceptionCode.providerConfigurationError =>
-        AuthFailureCode.oauthConfiguration,
-      GoogleSignInExceptionCode.interrupted ||
-      GoogleSignInExceptionCode.uiUnavailable ||
-      GoogleSignInExceptionCode.userMismatch =>
-        AuthFailureCode.signInInterrupted,
-      GoogleSignInExceptionCode.unknownError => AuthFailureCode.unknown,
-    };
+///
+/// En Android REAL casi todo fallo de Credential Manager llega como
+/// `unknownError` y el motivo solo aparece en [description] (verificado en
+/// emulador: `GetCredentialResponse error returned from framework`). Por eso
+/// el código del enum no basta y hay que mirar también la descripción; si no,
+/// una firma sin registrar y un móvil sin cuentas cuentan la misma historia.
+String _googleTechnicalCode(GoogleSignInException error) {
+  final descripcion = error.description?.trim() ?? '';
+  if (descripcion.isEmpty) return error.code.name;
+  final recortada = descripcion.length > 120
+      ? '${descripcion.substring(0, 120)}…'
+      : descripcion;
+  return '${error.code.name}: $recortada';
+}
+
+AuthFailureCode mapGoogleSignInCode(
+  GoogleSignInExceptionCode code, {
+  String? description,
+}) {
+  final detalle = (description ?? '').toLowerCase();
+  if (detalle.contains('developer_error') ||
+      detalle.contains('apiexception: 10') ||
+      detalle.contains('signature') ||
+      detalle.contains('not registered')) {
+    return AuthFailureCode.oauthConfiguration;
+  }
+  if (detalle.contains('nocredential') ||
+      detalle.contains('no credential')) {
+    return AuthFailureCode.noGoogleAccount;
+  }
+  return switch (code) {
+    GoogleSignInExceptionCode.canceled => AuthFailureCode.cancelled,
+    GoogleSignInExceptionCode.clientConfigurationError ||
+    GoogleSignInExceptionCode.providerConfigurationError =>
+      AuthFailureCode.oauthConfiguration,
+    GoogleSignInExceptionCode.interrupted ||
+    GoogleSignInExceptionCode.uiUnavailable ||
+    GoogleSignInExceptionCode.userMismatch =>
+      AuthFailureCode.signInInterrupted,
+    GoogleSignInExceptionCode.unknownError => AuthFailureCode.googleUnavailable,
+  };
+}
 
 AuthFailureCode _mapFirebaseCode(String code) => switch (code) {
   'invalid-credential' ||

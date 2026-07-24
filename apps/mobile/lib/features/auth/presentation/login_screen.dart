@@ -25,6 +25,8 @@ String authErrorText(AppLocalizations l10n, AuthFailure failure) {
     AuthFailureCode.sessionNotEstablished =>
       l10n.authErrorSessionNotEstablished,
     AuthFailureCode.profileUnavailable => l10n.authErrorProfileUnavailable,
+    AuthFailureCode.noGoogleAccount => l10n.authErrorNoGoogleAccount,
+    AuthFailureCode.googleUnavailable => l10n.authErrorGoogleUnavailable,
     AuthFailureCode.unknown => l10n.authErrorUnknown,
   };
   // El código técnico solo acompaña a los fallos que NO puede resolver el
@@ -39,6 +41,7 @@ String authErrorText(AppLocalizations l10n, AuthFailure failure) {
 const _codeWorthShowing = {
   AuthFailureCode.oauthConfiguration,
   AuthFailureCode.sessionNotEstablished,
+  AuthFailureCode.googleUnavailable,
   AuthFailureCode.unknown,
 };
 
