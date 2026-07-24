@@ -143,8 +143,11 @@ jobs:
           script: |
             adb logcat -c
             adb logcat > logcat.txt &
-            flutter test integration_test/google_sign_in_test.dart \
-              --dart-define=SALDA_ENV=development -d emulator-5554
+            flutter drive \
+              --driver=test_driver/integration_test.dart \
+              --target=integration_test/google_sign_in_test.dart \
+              --dart-define=SALDA_ENV=development \
+              -d emulator-5554
           working-directory: apps/mobile
       - name: Publicar logs de Android
         if: always()
