@@ -333,9 +333,23 @@ class _ProfileBanner extends ConsumerWidget {
     final isFullAccount =
         ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
     final profile = ref.watch(myProfileProvider);
-    // Solo cuando SABEMOS que no hay perfil (no mientras carga).
     if (!isFullAccount || profile.isLoading || profile.value != null) {
       return const SizedBox.shrink();
+    }
+    // No poder LEER el perfil no es lo mismo que no tenerlo: invitar a
+    // crearlo cuando la lectura ha fallado empuja a duplicar un perfil que
+    // quizá ya existe. Se ofrece reintentar en vez de dar por hecho el alta.
+    if (profile.hasError) {
+      return MaterialBanner(
+        leading: const Icon(Icons.cloud_off_outlined),
+        content: Text(l10n.authErrorProfileUnavailable),
+        actions: [
+          FilledButton.tonal(
+            onPressed: () => ref.invalidate(myProfileProvider),
+            child: Text(l10n.commonRetry),
+          ),
+        ],
+      );
     }
     return MaterialBanner(
       leading: const Icon(Icons.account_circle_outlined),
