@@ -470,13 +470,18 @@ firebase CLI → keyring del SO del desarrollador.
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. Validar P6 y P7 manualmente en `salda-dev` con dos cuentas para una Relación y
+1. **Registrar en `salda-dev` las huellas de la clave debug compartida** (SHA-1
+   `4B:E8:…:F3:E8` y SHA-256, tabla en `docs/AUTENTICACION.md`) para el paquete
+   `dev.salda.salda_mobile`. Sin ese paso el acceso con Google del APK de
+   desarrollo sigue fallando: el selector abre y no se emite el token. La app ya
+   lo dice en pantalla (`clientConfigurationError`) en vez de callarse.
+2. Validar P6 y P7 manualmente en `salda-dev` con dos cuentas para una Relación y
    tres para un Grupo; fusionar el PR solo con CI verde.
-2. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
+3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
    activar enforcement únicamente para un cliente.
-3. Mantener producción intacta hasta una ventana explícita de promoción y registrar
+4. Mantener producción intacta hasta una ventana explícita de promoción y registrar
    entonces las huellas de firma release/Play.
-4. No empezar P8 sin una decisión expresa del usuario.
+5. No empezar P8 sin una decisión expresa del usuario.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 
