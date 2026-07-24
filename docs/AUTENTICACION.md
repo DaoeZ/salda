@@ -90,6 +90,36 @@ firmar una release: la release necesitará su propia clave y su propio registro.
 
 El job `apk` de CI imprime la huella del APK que acaba de construir, de modo que
 comprobar si coincide con la registrada no requiere adivinar.
+
+### Verificación en dispositivo del acceso con Google
+
+Los tests cubren todo lo que no necesita hardware (mensajes diferenciados, salir
+del login, alta de perfil, sesión restaurada). Lo que **solo** puede comprobarse
+en un Android real es que Google emita el idToken, porque depende de Play
+Services y del registro de la huella. Orden:
+
+1. Registrar SHA-1 y SHA-256 de la tabla anterior en la app Android de
+   `salda-dev`. Sin esto el paso 3 falla a propósito.
+2. Instalar el APK de la release `dev-apk` (`adb install -r salda-p7-dev-debug.apk`).
+   Confirmar antes que es el mismo binario:
+   `apksigner verify --print-certs salda-p7-dev-debug.apk`.
+3. Recoger evidencia mientras se prueba:
+   `adb logcat -c && adb logcat | grep -Ei 'GoogleSign|Credential|FirebaseAuth|flutter'`.
+
+Comprobaciones, y qué significa cada fallo:
+
+| # | Qué se prueba | Resultado esperado |
+|---|---|---|
+| 1 | Elegir cuenta en el selector | Entra; no vuelve al login |
+| 2 | Matar y reabrir la app | Sigue dentro, sin volver a pedir acceso |
+| 3 | Cuenta nueva | Inicio con el aviso "Completa tu perfil público" |
+| 4 | Cuenta ya existente | Inicio directo, sin ese aviso |
+| 5 | Cerrar el selector sin elegir | Vuelve al login SIN mensaje de error |
+| 6 | Modo avión | "Sin conexión. Inténtalo de nuevo." |
+
+Si aparece el mensaje de huella de firma con el código `clientConfigurationError`,
+el paso 1 no está hecho o se registró otra huella: no es un fallo de la cuenta y
+reintentar no lo arregla.
 - En `salda-dev` están habilitados y verificados Email/Password, Anonymous y Google.
   Producción deberá repetir esta configuración antes de publicar.
 
