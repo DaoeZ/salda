@@ -1732,6 +1732,7 @@ actualizada si toca un componente trazado.
 | I6 | spec RF-95/96 y aiPolicy descritos como v1; no implementados | Deuda DT-1/DT-10/DT-11 con hueco en roadmap R1/R2 |
 | I9 (RESUELTA) | recompute repartía las líneas huérfanas entre todos EN VIVO; la spec RF-46 solo lo preveía al finalizar y con confirmación | Corregido en ADR-021: huérfanas → pagador en el cálculo continuo. Ya no divergen |
 | I7 | Formato de backup `appcuentas-backup` con marca provisional "Salda" | Valor CONGELADO de la spec §14 (compatibilidad); no renombrar |
+| I10 (RESUELTA) | `brand.json` declaraba `androidApplicationId: dev.salda.app` mientras Gradle compilaba `dev.salda.salda_mobile`; la documentación citaba el primero como oficial. Detectada al publicar `assetlinks.json` en el cierre del Sprint 4 | El campo de `brand.json` era **código muerto** (no lo emitía el codegen ni lo leía nadie: regenerar los tokens tras quitarlo no cambia un byte). Oficial = **`dev.salda.salda_mobile`**, con fuente de verdad ÚNICA en `android/app/build.gradle.kts`; cambiarlo convertiría la app en otra distinta y los invitados perderían su identidad local (ADR-034). Campo eliminado, docs corregidas y `android_identity_test.dart` vigila que Gradle, manifest y `assetlinks.json` no vuelvan a separarse |
 | I8 | CLAUDE.md §12 dice "smoke test usa Brand.tagline"; el test actual valida login/estado vacío | Detalle obsoleto de CLAUDE.md; corregir en su próxima edición |
 
 *Fin de la Biblia. Cualquier modelo o ingeniero que llegue hasta aquí tiene todo

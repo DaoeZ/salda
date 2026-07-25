@@ -100,9 +100,10 @@ elige entre invitado, entrar o registrarse, y `pendingGroupLinkProvider` +
 router garantizan que identificarse no pierda el enlace. El mismo sprint
 corrige el vacío de ADR-034: un invitado ya VE sus contextos e invitaciones
 en Inicio (antes era miembro en datos pero sin pantalla a la que llegar).
-El manifest declara el intent-filter `autoVerify` de `/g/`; pendiente de
-Hosting publicar `assetlinks.json` y la página de aterrizaje. Contrato:
-`docs/ESPACIOS.md`.
+El manifest declara el intent-filter `autoVerify` de `/g/` y `salda-dev` ya
+sirve `/.well-known/assetlinks.json` (paquete `dev.salda.salda_mobile` + el
+SHA-256 del certificado); queda pendiente la página de aterrizaje para quien
+no tenga la app. Contrato: `docs/ESPACIOS.md`.
 **Reestructuración Relaciones/Grupos (ADR-030):** `spaces` es ahora la raíz
 visible del producto: `relationship` reserva una pareja canónica de UID y
 `group` representa contextos de tres o más miembros. Inicio ya no crea ni lista
@@ -350,9 +351,11 @@ on-device) · Functions v2 (SOLO 3: `recompute` autoritativa, `notify` FCM, `cle
 borrado en cascada) · Hosting (web invitados + deep links) · App Check (enforced, M3/M4)
 · FCM · Emulator Suite. Los proyectos reales `salda-dev` y `salda-prod` existen y
 pertenecen al usuario; `default` continúa siendo `demo-salda` para emuladores. Firebase
-registra tanto `dev.salda.app` como el paquete compatible del APK existente
-`dev.salda.salda_mobile`, que se conserva para no perder identidades locales; ver
-`docs/AUTENTICACION.md`. Presupuesto y alertas se gestionan en GCP.
+tiene registradas dos apps Android, pero la que compila y usa la app es
+`dev.salda.salda_mobile` (`1:923355592259:android:024e3c6d1eab95bfbac6f6`); la de
+`dev.salda.app` quedó como resto de un identificador provisional y no la usa nadie.
+No se cambia el paquete: Android trataría la app como otra y los invitados perderían
+su identidad local; ver `docs/AUTENTICACION.md`. Presupuesto y alertas se gestionan en GCP.
 
 **Modelo de datos (implantar en M3 EXACTAMENTE como spec §7):** raíz = **sesión**
 (cuenta suelta = sesión `kind:"single"`, la UI oculta la capa):
@@ -432,7 +435,12 @@ firebase CLI → keyring del SO del desarrollador.
 14. **image_picker (cámara del sistema) por ahora** — flujo completo sin custom UI;
     captura guiada cuando haya dispositivo.
 15. **l10n ARB desde M2** — deuda RNF-05 saldada antes de crecer la UI.
-16. **applicationId provisional `dev.salda.app`** — cambiable gratis hasta publicar.
+16. **applicationId oficial `dev.salda.salda_mobile`** — fuente de verdad ÚNICA en
+    `android/app/build.gradle.kts`. No se cambia: Android trataría la app como otra
+    distinta y los invitados perderían su identidad local (ADR-034). `dev.salda.app`
+    fue un valor provisional que nunca llegó a compilar; ya no se declara en ningún
+    sitio. `android_identity_test.dart` vigila que Gradle, manifest y assetlinks no
+    se separen.
 17. **Repo GitHub privado** (`DaoeZ/salda`) — branding y producto aún provisionales.
 
 ## 9. Enfoques probados y descartados (NO repetir)
@@ -472,7 +480,7 @@ firebase CLI → keyring del SO del desarrollador.
 | `packages/ocr_parser/lib/src/es/es_receipt_parser.dart` | Orquestador del parser: fases, reglas, issues (el archivo más denso del proyecto) |
 | `packages/ocr_parser/lib/src/es/es_profiles.dart` | Perfiles por cadena; aquí se añade una cadena nueva |
 | `packages/ocr_parser/test/corpus/` + su README | Corpus de regresión y protocolo para añadir tickets reales |
-| `packages/design_tokens/assets/brand.json` | ÚNICO lugar del branding (nombre, tagline, applicationId) |
+| `packages/design_tokens/assets/brand.json` | ÚNICO lugar del branding (nombre, tagline, dominios de Hosting). El identificador Android NO vive aquí: manda `android/app/build.gradle.kts` |
 | `packages/design_tokens/bin/generate.dart` | Codegen tokens → Dart + CSS |
 | `apps/mobile/lib/features/review/application/review_draft.dart` | Estado editable de la revisión y su lógica de cuadre |
 | `apps/mobile/lib/features/scan/application/scan_service.dart` | Orquestación cámara/galería → OCR → parser |

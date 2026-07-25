@@ -3,9 +3,9 @@
   "appName": "Salda",
   "tagline": "Escanea el ticket, reparte y salda cuentas.",
   "provisional": true,
+  "_androidApplicationId": "NO vive aquí. La fuente de verdad del identificador Android es apps/mobile/android/app/build.gradle.kts (dev.salda.salda_mobile): es el único valor que compila y el que ven Firebase, los App Links y el dispositivo. Duplicarlo aquí ya provocó una contradicción; android_identity_test.dart vigila que no se repita.",
   "hostingDomains": {
     "development": "salda-dev.web.app",
     "production": "salda-prod.web.app"
-  },
-  "androidApplicationId": "dev.salda.app"
+  }
 }
