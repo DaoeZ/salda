@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
@@ -40,7 +41,8 @@ void main() {
       // 128 bits en base64url sin padding: 22 caracteres URL-safe.
       expect(link.token.length, 22);
       expect(link.token, matches(RegExp(r'^[A-Za-z0-9_-]+$')));
-      expect(link.isActive, isTrue);
+      expect(link.usableAt(DateTime.now().toUtc()), isTrue);
+      expect(link.expiresAt, isNull); // sin caducidad por defecto
 
       final raw = (await firestore.doc('spaceLinks/${link.token}').get())
           .data()!;
@@ -96,6 +98,98 @@ void main() {
 
       final active = await repo.watchActiveJoinLink(spaceId).first;
       expect(active!.token, second.token);
+    });
+  });
+
+  group('caducidad', () {
+    test('sin caducidad es el valor por defecto', () async {
+      final spaceId = await newGroup();
+      final link = await accountRepo(
+        'owner',
+      ).createJoinLink(spaceId, 'Cena viernes');
+
+      final raw = (await firestore.doc('spaceLinks/${link.token}').get())
+          .data()!;
+      expect(raw.containsKey('expiresAt'), isFalse);
+    });
+
+    test('una caducidad elegida se guarda en el futuro', () async {
+      final spaceId = await newGroup();
+      final link = await accountRepo('owner').createJoinLink(
+        spaceId,
+        'Cena viernes',
+        lifetime: JoinLinkLifetime.sevenDays,
+      );
+
+      expect(link.expiresAt, isNotNull);
+      expect(link.expiresAt!.isAfter(DateTime.now().toUtc()), isTrue);
+      final raw = (await firestore.doc('spaceLinks/${link.token}').get())
+          .data()!;
+      expect(raw['expiresAt'], isA<Timestamp>());
+    });
+
+    test('un enlace caducado no admite a nadie ni se previsualiza', () async {
+      final spaceId = await newGroup();
+      final owner = accountRepo('owner');
+      final link = await owner.createJoinLink(spaceId, 'Cena viernes');
+      // Se retrasa la caducidad al pasado sin tocar `status`: caducar y
+      // revocar son cosas distintas y ambas deben cerrar la puerta.
+      await firestore.doc('spaceLinks/${link.token}').update({
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+        ),
+      });
+
+      expect(await owner.previewJoinLink(link.token), isNull);
+      expect(
+        await accountRepo('ana').joinWithLink(link.token),
+        JoinLinkOutcome.invalid,
+      );
+      expect(
+        (await firestore.doc('spaces/$spaceId/members/ana').get()).exists,
+        isFalse,
+      );
+    });
+
+    test('el enlace caducado desaparece de la vista del propietario',
+        () async {
+      final spaceId = await newGroup();
+      final owner = accountRepo('owner');
+      final link = await owner.createJoinLink(spaceId, 'Cena viernes');
+      await firestore.doc('spaceLinks/${link.token}').update({
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+        ),
+      });
+
+      expect(await owner.watchActiveJoinLink(spaceId).first, isNull);
+    });
+
+    test('usableAt distingue caducado de revocado', () {
+      final now = DateTime.utc(2026, 7, 25, 12);
+      final vigente = SpaceJoinLink(
+        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
+        revoked: false, expiresAt: now.add(const Duration(hours: 1)),
+      );
+      final caducado = SpaceJoinLink(
+        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
+        revoked: false, expiresAt: now.subtract(const Duration(hours: 1)),
+      );
+      final revocado = SpaceJoinLink(
+        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
+        revoked: true,
+      );
+      final eterno = SpaceJoinLink(
+        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
+        revoked: false,
+      );
+
+      expect(vigente.usableAt(now), isTrue);
+      expect(caducado.usableAt(now), isFalse);
+      expect(caducado.isExpiredAt(now), isTrue);
+      expect(revocado.usableAt(now), isFalse);
+      expect(revocado.isExpiredAt(now), isFalse); // revocado ≠ caducado
+      expect(eterno.usableAt(now), isTrue);
     });
   });
 

@@ -62,6 +62,7 @@ class _NoLink extends ConsumerStatefulWidget {
 
 class _NoLinkState extends ConsumerState<_NoLink> {
   bool _working = false;
+  var _lifetime = JoinLinkLifetime.never;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +72,11 @@ class _NoLinkState extends ConsumerState<_NoLink> {
         const Icon(Icons.link_outlined, size: 64),
         const SizedBox(height: TokenSpacing.md),
         Text(l10n.spaceLinkEmpty, textAlign: TextAlign.center),
+        const SizedBox(height: TokenSpacing.lg),
+        _LifetimePicker(
+          value: _lifetime,
+          onChanged: (value) => setState(() => _lifetime = value),
+        ),
         const SizedBox(height: TokenSpacing.lg),
         FilledButton.icon(
           onPressed: _working ? null : _create,
@@ -86,10 +92,57 @@ class _NoLinkState extends ConsumerState<_NoLink> {
     try {
       await ref
           .read(spacesRepositoryProvider)
-          .createJoinLink(widget.spaceId, widget.spaceName);
+          .createJoinLink(
+            widget.spaceId,
+            widget.spaceName,
+            lifetime: _lifetime,
+          );
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+}
+
+/// Cuánto vive el enlace. Un enlace es un secreto portador: acotarle la vida
+/// limita el daño si acaba donde no debe. Sin caducidad sigue siendo el
+/// valor por defecto — el propietario siempre puede revocar.
+class _LifetimePicker extends StatelessWidget {
+  const _LifetimePicker({required this.value, required this.onChanged});
+
+  final JoinLinkLifetime value;
+  final ValueChanged<JoinLinkLifetime> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    String label(JoinLinkLifetime lifetime) => switch (lifetime) {
+      JoinLinkLifetime.never => l10n.spaceLinkExpiryNever,
+      JoinLinkLifetime.oneDay => l10n.spaceLinkExpiry1d,
+      JoinLinkLifetime.sevenDays => l10n.spaceLinkExpiry7d,
+      JoinLinkLifetime.thirtyDays => l10n.spaceLinkExpiry30d,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l10n.spaceLinkExpiryLabel,
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: TokenSpacing.sm),
+        Wrap(
+          spacing: TokenSpacing.sm,
+          children: [
+            for (final lifetime in JoinLinkLifetime.values)
+              ChoiceChip(
+                label: Text(label(lifetime)),
+                selected: lifetime == value,
+                onSelected: (_) => onChanged(lifetime),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
@@ -129,6 +182,14 @@ class _ActiveLink extends ConsumerWidget {
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall,
         ),
+        if (link.expiresAt case final expiry?) ...[
+          const SizedBox(height: TokenSpacing.sm),
+          Text(
+            l10n.spaceLinkExpiresOn(expiry.toLocal()),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
         const SizedBox(height: TokenSpacing.xl),
         LayoutBuilder(
           builder: (_, constraints) {

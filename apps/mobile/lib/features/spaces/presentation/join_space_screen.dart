@@ -11,19 +11,22 @@ import '../domain/space_models.dart';
 
 /// Incorporación a un grupo por enlace (Sprint 4, ADR-035).
 ///
-/// Una sola pantalla cubre las tres identidades del producto:
-/// - **Cuenta**: entra directamente.
-/// - **Invitado** con nombre: entra igual, sin registrarse.
-/// - **Sin sesión**: elige aquí mismo entre cuenta o invitado, sin perder el
-///   enlace por el camino (el bloqueo clásico de "inicia sesión y vuelve a
-///   pulsar el enlace").
+/// **Regla de producto: a quien ya tiene identidad no se le pregunta quién
+/// es.** Si hay cuenta —o identidad de invitado, que persiste en el
+/// dispositivo— el enlace entra SOLO y aterriza en el grupo. No hay pantalla
+/// intermedia ni botón de confirmar: la identidad ya se conoce, así que
+/// preguntar sería fricción pura.
 ///
-/// Los participantes **manuales** no entran por aquí por definición: no
-/// tienen dispositivo. Siguen siendo cosa del propietario dentro del grupo.
+/// El selector de identidad se reserva para los participantes MANUAL de los
+/// enlaces de TICKET (Sprint 5), donde sí hace falta: allí la persona elige
+/// a qué participante sin cuenta corresponde.
 ///
-/// Con [token] nulo la pantalla pide pegar el enlace. Es la vía que funciona
-/// HOY, sin depender de que Hosting sirva la página de aterrizaje ni de que
-/// Android tenga verificados los App Links.
+/// Solo se pide algo a quien NO tiene identidad todavía, y entonces se le
+/// ofrecen las tres salidas: entrar con su cuenta, crear una, o continuar
+/// como invitado (que solo necesita un nombre visible).
+///
+/// Con [token] nulo la pantalla pide pegar el enlace: es la vía manual
+/// mientras Hosting no sirva la página de aterrizaje.
 class JoinSpaceScreen extends ConsumerStatefulWidget {
   const JoinSpaceScreen({super.key, this.token});
 
@@ -38,15 +41,25 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
   final _guestName = TextEditingController();
 
   SpaceJoinLink? _link;
-  var _loading = false;
-  var _working = false;
-  var _looked = false;
+  var _busy = false;
+  var _resolved = false;
+  /// Evita que el auto-canje se dispare dos veces si el árbol se reconstruye
+  /// mientras la escritura está en vuelo.
+  var _joining = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    if (widget.token != null) _lookup(widget.token!);
+    final token = widget.token;
+    if (token != null) {
+      // Se recuerda ANTES de resolver nada: si la persona se va a
+      // identificarse, el router la devolverá aquí con el mismo enlace.
+      Future.microtask(() {
+        if (mounted) ref.read(pendingGroupLinkProvider.notifier).set(token);
+      });
+      _resolve(token);
+    }
   }
 
   @override
@@ -56,10 +69,10 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
     super.dispose();
   }
 
-  Future<void> _lookup(String raw) async {
+  Future<void> _resolve(String raw) async {
     if (raw.trim().isEmpty) return;
     setState(() {
-      _loading = true;
+      _busy = true;
       _error = null;
     });
     try {
@@ -69,47 +82,46 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
       if (!mounted) return;
       setState(() {
         _link = link;
-        _looked = true;
-        // Revocado y inexistente se presentan igual a propósito: distinguirlos
-        // convertiría la pantalla en un oráculo de qué grupos existen.
+        _resolved = true;
+        // Revocado, caducado e inexistente se presentan igual a propósito:
+        // distinguirlos convertiría la pantalla en un oráculo de qué grupos
+        // existen.
         if (link == null) _error = AppLocalizations.of(context).joinLinkInvalid;
       });
     } on Object {
       if (mounted) {
-        setState(() => _error = AppLocalizations.of(context).joinLinkInvalid);
+        setState(() {
+          _resolved = true;
+          _error = AppLocalizations.of(context).joinLinkInvalid;
+        });
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _join() async {
+  /// ¿Sabemos ya quién es? Cuenta completa, o invitado con nombre elegido.
+  bool _hasIdentity() {
+    final user = ref.read(currentAppUserProvider);
+    if (user == null) return false;
+    if (user.isFullAccount) return true;
+    return user.isAnonymous &&
+        ref.read(myGuestIdentityProvider).value != null;
+  }
+
+  Future<void> _join({String? guestName}) async {
     final l10n = AppLocalizations.of(context);
     final link = _link;
-    if (link == null) return;
+    if (link == null || _joining) return;
+    _joining = true;
     setState(() {
-      _working = true;
+      _busy = true;
       _error = null;
     });
     try {
-      // Un invitado necesita nombre visible ANTES de la membresía: es el
-      // snapshot con el que se le pinta (no tiene perfil público).
-      final user = ref.read(currentAppUserProvider);
-      final needsName =
-          (user?.isAnonymous ?? false) &&
-          ref.read(myGuestIdentityProvider).value == null;
-      if (needsName) {
-        final name = _guestName.text.trim();
-        if (name.isEmpty) {
-          setState(() {
-            _error = l10n.guestNameRequired;
-            _working = false;
-          });
-          return;
-        }
-        await ref.read(guestIdentityRepositoryProvider).setDisplayName(name);
+      if (guestName != null) {
+        await ref.read(guestIdentityRepositoryProvider).setDisplayName(guestName);
       }
-
       final outcome = await ref
           .read(spacesRepositoryProvider)
           .joinWithLink(link.token);
@@ -117,6 +129,9 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
       switch (outcome) {
         case JoinLinkOutcome.joined:
         case JoinLinkOutcome.alreadyMember:
+          // Entrar y ya estar dentro llevan al mismo sitio: el grupo. Volver
+          // a pulsar el enlace nunca debe dar un error.
+          ref.read(pendingGroupLinkProvider.notifier).clear();
           context.go('/home/spaces/${link.spaceId}');
         case JoinLinkOutcome.needsGuestName:
           setState(() => _error = l10n.guestNameRequired);
@@ -126,7 +141,8 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
     } on Object {
       if (mounted) setState(() => _error = l10n.joinLinkError);
     } finally {
-      if (mounted) setState(() => _working = false);
+      _joining = false;
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -137,7 +153,18 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
     final user = ref.watch(currentAppUserProvider);
     final guestIdentity = ref.watch(myGuestIdentityProvider).value;
     final signedIn = user != null;
-    final needsGuestName = (user?.isAnonymous ?? false) && guestIdentity == null;
+    final needsGuestName =
+        (user?.isAnonymous ?? false) && guestIdentity == null;
+    final link = _link;
+
+    // ENTRADA AUTOMÁTICA: en cuanto hay enlace válido e identidad conocida,
+    // se entra sin preguntar. Cubre también el regreso desde el login: el
+    // router devuelve aquí y esto se dispara solo.
+    if (link != null && !_busy && !_joining && _hasIdentity()) {
+      Future.microtask(() {
+        if (mounted) _join();
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.joinTitle)),
@@ -152,7 +179,8 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
                 const Icon(Icons.groups_outlined, size: 64),
                 const SizedBox(height: TokenSpacing.lg),
 
-                if (widget.token == null && _link == null) ...[
+                // Vía manual: pegar el enlace recibido.
+                if (widget.token == null && link == null) ...[
                   Text(l10n.joinPasteHint, textAlign: TextAlign.center),
                   const SizedBox(height: TokenSpacing.md),
                   TextField(
@@ -161,21 +189,16 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
                       labelText: l10n.joinPasteLabel,
                       border: const OutlineInputBorder(),
                     ),
-                    onSubmitted: _lookup,
+                    onSubmitted: _resolve,
                   ),
                   const SizedBox(height: TokenSpacing.md),
                   FilledButton(
-                    onPressed: _loading ? null : () => _lookup(_pasted.text),
+                    onPressed: _busy ? null : () => _resolve(_pasted.text),
                     child: Text(l10n.joinLookup),
                   ),
                 ],
 
-                if (_loading) ...[
-                  const SizedBox(height: TokenSpacing.lg),
-                  const Center(child: CircularProgressIndicator()),
-                ],
-
-                if (_link case final link?) ...[
+                if (link != null) ...[
                   Text(
                     l10n.joinInvitedTo,
                     textAlign: TextAlign.center,
@@ -189,38 +212,49 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
                   ),
                   const SizedBox(height: TokenSpacing.lg),
 
-                  if (!signedIn) ...[
-                    // El enlace NO se pierde al identificarse: se resuelve
-                    // aquí mismo y la pantalla sigue en pie.
-                    Text(l10n.joinIdentifyHint, textAlign: TextAlign.center),
+                  if (!signedIn)
+                    _IdentityChoices(
+                      busy: _busy,
+                      onGuest: _continueAsGuest,
+                      onLogin: () => context.push('/login'),
+                      onRegister: () => context.push('/register'),
+                    )
+                  else if (user.needsEmailVerification) ...[
+                    // Cuenta recién creada: el enlace queda recordado, así
+                    // que verificar y volver aterriza en el grupo.
+                    Text(l10n.joinVerifyEmail, textAlign: TextAlign.center),
                     const SizedBox(height: TokenSpacing.md),
-                    FilledButton.tonal(
-                      onPressed: _working ? null : _continueAsGuest,
-                      child: Text(l10n.authContinueGuest),
+                    FilledButton(
+                      onPressed: () => context.push('/verify-email'),
+                      child: Text(l10n.joinVerifyEmailAction),
                     ),
-                    const SizedBox(height: TokenSpacing.sm),
-                    TextButton(
-                      onPressed: () => context.push('/login'),
-                      child: Text(l10n.joinWithAccount),
-                    ),
-                  ] else ...[
-                    if (needsGuestName) ...[
-                      TextField(
-                        controller: _guestName,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: InputDecoration(
-                          labelText: l10n.guestNameLabel,
-                          border: const OutlineInputBorder(),
-                        ),
+                  ] else if (needsGuestName) ...[
+                    // Un invitado nuevo solo necesita su nombre visible: es
+                    // lo único que la app no puede saber por él.
+                    Text(l10n.joinGuestNameHint, textAlign: TextAlign.center),
+                    const SizedBox(height: TokenSpacing.md),
+                    TextField(
+                      controller: _guestName,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: l10n.guestNameLabel,
+                        border: const OutlineInputBorder(),
                       ),
-                      const SizedBox(height: TokenSpacing.md),
-                    ],
-                    FilledButton.icon(
-                      onPressed: _working ? null : _join,
-                      icon: const Icon(Icons.login),
-                      label: Text(l10n.joinAction),
+                      onSubmitted: (_) => _submitGuestName(),
+                    ),
+                    const SizedBox(height: TokenSpacing.md),
+                    FilledButton(
+                      onPressed: _busy ? null : _submitGuestName,
+                      child: Text(l10n.joinAction),
                     ),
                   ],
+                ],
+
+                // Identidad conocida: solo progreso. No hay nada que decidir.
+                if (_busy) ...[
+                  const SizedBox(height: TokenSpacing.lg),
+                  const Center(child: CircularProgressIndicator()),
                 ],
 
                 if (_error case final message?) ...[
@@ -234,10 +268,13 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
                   ),
                 ],
 
-                if (_looked && _link == null && widget.token != null) ...[
+                if (_resolved && link == null && widget.token != null) ...[
                   const SizedBox(height: TokenSpacing.md),
                   TextButton(
-                    onPressed: () => context.go('/home'),
+                    onPressed: () {
+                      ref.read(pendingGroupLinkProvider.notifier).clear();
+                      context.go('/home');
+                    },
                     child: Text(l10n.commonDone),
                   ),
                 ],
@@ -249,16 +286,68 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
     );
   }
 
+  void _submitGuestName() {
+    final name = _guestName.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = AppLocalizations.of(context).guestNameRequired);
+      return;
+    }
+    _join(guestName: name);
+  }
+
   Future<void> _continueAsGuest() async {
-    setState(() => _working = true);
+    setState(() => _busy = true);
     try {
+      // Al volver, `needsGuestName` pedirá su nombre y de ahí entra solo.
       await ref.read(authRepositoryProvider).signInAsGuest();
     } on Object {
       if (mounted) {
         setState(() => _error = AppLocalizations.of(context).joinLinkError);
       }
     } finally {
-      if (mounted) setState(() => _working = false);
+      if (mounted) setState(() => _busy = false);
     }
+  }
+}
+
+/// Las tres salidas de quien todavía no tiene identidad. El enlace queda
+/// recordado, así que identificarse no lo pierde.
+class _IdentityChoices extends StatelessWidget {
+  const _IdentityChoices({
+    required this.busy,
+    required this.onGuest,
+    required this.onLogin,
+    required this.onRegister,
+  });
+
+  final bool busy;
+  final VoidCallback onGuest;
+  final VoidCallback onLogin;
+  final VoidCallback onRegister;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.joinIdentifyHint, textAlign: TextAlign.center),
+        const SizedBox(height: TokenSpacing.md),
+        FilledButton(
+          onPressed: busy ? null : onGuest,
+          child: Text(l10n.authContinueGuest),
+        ),
+        const SizedBox(height: TokenSpacing.sm),
+        FilledButton.tonal(
+          onPressed: busy ? null : onLogin,
+          child: Text(l10n.joinWithAccount),
+        ),
+        const SizedBox(height: TokenSpacing.sm),
+        TextButton(
+          onPressed: busy ? null : onRegister,
+          child: Text(l10n.joinCreateAccount),
+        ),
+      ],
+    );
   }
 }

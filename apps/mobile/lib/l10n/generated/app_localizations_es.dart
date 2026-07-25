@@ -1590,4 +1590,40 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get joinLinkError =>
       'No hemos podido unirte al grupo. Inténtalo otra vez.';
+
+  @override
+  String get joinCreateAccount => 'Crear una cuenta';
+
+  @override
+  String get joinVerifyEmail =>
+      'Verifica tu correo para entrar en el grupo. Guardamos el enlace: al volver entrarás directamente.';
+
+  @override
+  String get joinVerifyEmailAction => 'Verificar mi correo';
+
+  @override
+  String get joinGuestNameHint => '¿Cómo quieres que te vean en el grupo?';
+
+  @override
+  String get spaceLinkExpiryLabel => 'Caducidad';
+
+  @override
+  String get spaceLinkExpiryNever => 'Sin caducidad';
+
+  @override
+  String get spaceLinkExpiry1d => '1 día';
+
+  @override
+  String get spaceLinkExpiry7d => '7 días';
+
+  @override
+  String get spaceLinkExpiry30d => '30 días';
+
+  @override
+  String spaceLinkExpiresOn(DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return 'Caduca el $dateString';
+  }
 }

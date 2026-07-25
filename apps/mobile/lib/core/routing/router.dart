@@ -19,6 +19,7 @@ import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
 import '../../features/sessions/presentation/ticket_detail_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/spaces/data/spaces_repository.dart';
 import '../../features/spaces/presentation/space_detail_screen.dart';
 import '../../features/spaces/presentation/create_relationship_screen.dart';
 import '../../features/spaces/presentation/join_space_screen.dart';
@@ -30,6 +31,10 @@ import '../../features/spaces/presentation/spaces_screen.dart';
 /// el flujo atrapado (bug 4 del MVP: go() a rutas planas vaciaba la pila).
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authStateProvider);
+  // Enlace de grupo a medio canjear (ADR-035): quien toca "iniciar sesión" o
+  // "crear cuenta" desde el enlace vuelve a él en cuanto se identifica, en
+  // vez de aterrizar en /home habiendo perdido el enlace del chat.
+  final pendingGroupLink = ref.watch(pendingGroupLinkProvider);
   return GoRouter(
     initialLocation: '/auth-loading',
     redirect: (context, state) {
@@ -51,6 +56,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (user == null) {
         return isPublic ? null : '/login';
       }
+      // La pantalla del enlace se queda en pie para CUALQUIER sesión, aunque
+      // esté a medio verificar: es ella la que recuerda el token. Si aquí se
+      // desviara a /verify-email, quien acaba de crear la cuenta perdería el
+      // enlace justo en el paso donde más fácil es perderlo.
+      if (isJoinLink) return null;
       if (user.needsEmailVerification) {
         return location == '/verify-email' ? null : '/verify-email';
       }
@@ -69,13 +79,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             location.startsWith('/home')) {
           return null;
         }
-        return '/home';
+        return pendingGroupLink == null ? '/home' : '/g/$pendingGroupLink';
       }
       if (isJoinLink) return null;
       if (isPublic ||
           location == '/verify-email' ||
           location == '/auth-loading') {
-        return '/home';
+        // Ya identificado y con un enlace a medias: de vuelta al enlace.
+        return pendingGroupLink == null ? '/home' : '/g/$pendingGroupLink';
       }
       return null;
     },

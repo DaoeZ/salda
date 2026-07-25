@@ -541,5 +541,20 @@
   "joinWithAccount": "Entrar con mi cuenta",
   "joinAction": "Unirme al grupo",
   "joinLinkInvalid": "Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.",
-  "joinLinkError": "No hemos podido unirte al grupo. Inténtalo otra vez."
+  "joinLinkError": "No hemos podido unirte al grupo. Inténtalo otra vez.",
+  "joinCreateAccount": "Crear una cuenta",
+  "joinVerifyEmail": "Verifica tu correo para entrar en el grupo. Guardamos el enlace: al volver entrarás directamente.",
+  "joinVerifyEmailAction": "Verificar mi correo",
+  "joinGuestNameHint": "¿Cómo quieres que te vean en el grupo?",
+  "spaceLinkExpiryLabel": "Caducidad",
+  "spaceLinkExpiryNever": "Sin caducidad",
+  "spaceLinkExpiry1d": "1 día",
+  "spaceLinkExpiry7d": "7 días",
+  "spaceLinkExpiry30d": "30 días",
+  "spaceLinkExpiresOn": "Caduca el {date}",
+  "@spaceLinkExpiresOn": {
+    "placeholders": {
+      "date": { "type": "DateTime", "format": "yMMMd" }
+    }
+  }
 }

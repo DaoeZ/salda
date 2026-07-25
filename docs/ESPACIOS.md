@@ -251,7 +251,8 @@ que permite alcanzar a un invitado, que por diseño no es buscable.
 ```text
 spaceLinks/{token}
   spaceId · spaceName (denormalizado solo para pintar) · createdByUid
-  status: active|revoked · createdAt · updatedAt · schemaVersion: 1
+  status: active|revoked · expiresAt? · createdAt · updatedAt
+  schemaVersion: 1
 spaces/{spaceId}/joinGrants/{uid}
   uid · token · createdAt          // prueba de conocimiento, SOLO ESCRITURA
 ```
@@ -304,19 +305,58 @@ Límites deliberados:
 - **Enlaces de TICKET y vinculación de identidad siguen fuera** (Sprint 5 y
   Sprint 6).
 
-**Entrada en la app**: `/g/{token}` —la ruta CANÓNICA, idéntica al camino de
-la URL compartida, para que el deep link resuelva sin traducciones— o `/join`
-para pegar el
-enlace a mano. Una sola pantalla resuelve las tres situaciones —cuenta,
-invitado con nombre y sin sesión— sin perder el enlace por el camino: quien
-llega sin sesión elige ahí mismo entre cuenta o invitado. Aceptar la URL
-completa pegada desde WhatsApp es el caso normal, así que el token se
-normaliza a partir de ella.
+### Caducidad (opcional)
 
-**Pendiente de Hosting** (no es código de app): servir `/g/{token}` como
-página de aterrizaje y publicar `assetlinks.json` para verificar los App
-Links de Android. Hasta entonces la vía operativa es pegar el enlace en
-`/join`; la ruta canónica ya está registrada y cubierta por test.
+Un enlace es un secreto portador, así que puede acotársele la vida:
+`expiresAt` limita el daño si acaba donde no debe. **Ausente = sin
+caducidad**, el valor por defecto y el comportamiento original (el
+propietario siempre puede revocar). La app ofrece sin caducidad, 1, 7 o 30
+días al crearlo.
+
+- **No puede nacer caducado**: enmascararía un reloj mal puesto en cliente.
+- **Es inmutable**: alargarla resucitaría un enlace que ya circula. Para
+  cambiarla se rota, que emite un token nuevo y mata el anterior.
+- **Caducado ≠ revocado**, pero cierran igual: `spaceLinkOpensGroup` mira
+  ambas cosas en CADA canje, no solo al crear la prueba.
+
+### Flujo de entrada
+
+**A quien ya tiene identidad no se le pregunta quién es.** El enlace entra
+solo y aterriza en el grupo: sin pantalla intermedia ni botón de confirmar.
+El selector de identidad se reserva a los participantes MANUAL de los enlaces
+de TICKET (Sprint 5), donde sí hace falta elegir a qué participante sin
+cuenta corresponde uno.
+
+| Quién abre el enlace | Qué pasa |
+|---|---|
+| **Cuenta** verificada | Entra automáticamente y aterriza en el grupo |
+| **Invitado** con nombre elegido | Igual: su identidad persiste en el dispositivo (sesión anónima), no se le pregunta nada |
+| **Invitado sin nombre** | Solo se le pide el nombre visible —lo único que la app no puede saber por él— y de ahí entra |
+| **Sin sesión** | Tres salidas: continuar como invitado, entrar con su cuenta, o crear una |
+| **Cuenta sin verificar** | Se le pide verificar; el enlace queda recordado y al volver entra |
+
+El enlace pendiente vive en `pendingGroupLinkProvider` y lo consume el
+router: identificarse **nunca pierde el enlace**, que era justo donde el flujo
+se rompía (al autenticarse, el router mandaba a `/home`). Por lo mismo, la
+pantalla del enlace se queda en pie para cualquier sesión, incluida una
+pendiente de verificar el correo.
+
+Volver a pulsar un enlace del que ya se es miembro **no da error**: lleva al
+grupo, igual que la primera vez.
+
+**Rutas**: `/g/{token}` es la CANÓNICA —idéntica al camino de la URL
+compartida, para que el deep link resuelva sin traducciones— y `/join`
+permite pegar el enlace a mano. Aceptar la URL completa pegada desde WhatsApp
+es el caso normal, así que el token se normaliza a partir de ella.
+
+**Android**: `AndroidManifest.xml` declara un intent-filter con `autoVerify`
+para `https://{salda-dev|salda-prod}.web.app/g/`, así que el enlace abre la
+app.
+
+**Pendiente de Hosting** (no es código de app): publicar
+`/.well-known/assetlinks.json` para que Android VERIFIQUE ese intent-filter
+—sin él ofrece elegir app en vez de abrirla sola— y servir `/g/{token}` como
+página de aterrizaje para quien no tenga la app instalada.
 
 ## Tickets y política de privacidad
 
@@ -366,13 +406,20 @@ composites).
 
 - `backend/firestore/test/rules.test.mjs` (bloque spaces): 19 casos
   positivos/negativos contra el emulador.
-- `rules.test.mjs` (bloque «enlaces de grupo»): 17 casos — gobierno del
+- `rules.test.mjs` (bloque «enlaces de grupo»): 20 casos — gobierno del
   enlace, no enumerabilidad, canje por cuenta e invitado, token inventado /
-  revocado / de otro grupo, alta de terceros, prueba de solo escritura,
-  revocación con prueba antigua, y regresión de las otras dos vías de alta.
-- `space_links_test.dart`: 13 casos del contrato del repositorio (ciclo de
-  vida, rotación, idempotencia del doble toque, URL pegada, invitado que
-  llega a sus grupos).
+  revocado / caducado / de otro grupo, alta de terceros, prueba de solo
+  escritura, revocación con prueba antigua, caducidad inmutable, y regresión
+  de las otras dos vías de alta.
+- `space_links_test.dart`: 18 casos del contrato del repositorio (ciclo de
+  vida, caducidad, rotación, idempotencia del doble toque, URL pegada,
+  invitado que llega a sus grupos).
+- `join_space_screen_test.dart`: 5 casos del flujo de entrada — cuenta e
+  invitado entran SIN que se les pregunte quién son, las tres salidas de
+  quien no tiene identidad, el enlace recordado, y el enlace caducado que no
+  filtra el nombre del grupo.
+- `join_route_test.dart`: la URL compartida y la ruta canónica no pueden
+  divergir.
 - `spaces_repository_test.dart`: ciclo de vida, idempotencia de
   invitaciones, transferencia, salida/expulsión, vínculo de tickets y
   compatibilidad con tickets sin espacio.

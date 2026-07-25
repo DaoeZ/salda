@@ -91,12 +91,18 @@ inexistente), participantes MANUAL (ADR-033), modo GUEST (ADR-034) y
 ID de documento ES el secreto (`spaceLinks/{token}`, `list` solo para el
 propietario), se canjea escribiendo prueba de conocimiento + membresía en UN
 batch (`joinGrants/{uid}`, solo escritura) y se revalida en cada canje, así
-que revocarlo cierra la puerta al instante. Solo grupos activos; cuenta e
-invitado entran igual; MANUAL no aplica. El mismo sprint corrige el vacío de
-ADR-034: un invitado ya VE sus contextos e invitaciones en Inicio (antes era
-miembro en datos pero sin pantalla a la que llegar). Pendiente de Hosting:
-`/g/{token}` y `assetlinks.json` para los App Links; mientras tanto se pega
-el enlace en `/join`. Contrato: `docs/ESPACIOS.md`.
+que revocarlo —o dejarlo caducar, `expiresAt` opcional e inmutable— cierra la
+puerta al instante. Solo grupos activos; cuenta e invitado entran igual;
+MANUAL no aplica. **A quien ya tiene identidad no se le pregunta quién es**:
+el enlace entra solo, sin pantalla intermedia (el selector de identidad se
+reserva a los MANUAL de los enlaces de TICKET, Sprint 5); quien no la tiene
+elige entre invitado, entrar o registrarse, y `pendingGroupLinkProvider` +
+router garantizan que identificarse no pierda el enlace. El mismo sprint
+corrige el vacío de ADR-034: un invitado ya VE sus contextos e invitaciones
+en Inicio (antes era miembro en datos pero sin pantalla a la que llegar).
+El manifest declara el intent-filter `autoVerify` de `/g/`; pendiente de
+Hosting publicar `assetlinks.json` y la página de aterrizaje. Contrato:
+`docs/ESPACIOS.md`.
 **Reestructuración Relaciones/Grupos (ADR-030):** `spaces` es ahora la raíz
 visible del producto: `relationship` reserva una pareja canónica de UID y
 `group` representa contextos de tres o más miembros. Inicio ya no crea ni lista

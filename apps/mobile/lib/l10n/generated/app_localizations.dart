@@ -2895,6 +2895,66 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'No hemos podido unirte al grupo. Inténtalo otra vez.'**
   String get joinLinkError;
+
+  /// No description provided for @joinCreateAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear una cuenta'**
+  String get joinCreateAccount;
+
+  /// No description provided for @joinVerifyEmail.
+  ///
+  /// In es, this message translates to:
+  /// **'Verifica tu correo para entrar en el grupo. Guardamos el enlace: al volver entrarás directamente.'**
+  String get joinVerifyEmail;
+
+  /// No description provided for @joinVerifyEmailAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Verificar mi correo'**
+  String get joinVerifyEmailAction;
+
+  /// No description provided for @joinGuestNameHint.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Cómo quieres que te vean en el grupo?'**
+  String get joinGuestNameHint;
+
+  /// No description provided for @spaceLinkExpiryLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Caducidad'**
+  String get spaceLinkExpiryLabel;
+
+  /// No description provided for @spaceLinkExpiryNever.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin caducidad'**
+  String get spaceLinkExpiryNever;
+
+  /// No description provided for @spaceLinkExpiry1d.
+  ///
+  /// In es, this message translates to:
+  /// **'1 día'**
+  String get spaceLinkExpiry1d;
+
+  /// No description provided for @spaceLinkExpiry7d.
+  ///
+  /// In es, this message translates to:
+  /// **'7 días'**
+  String get spaceLinkExpiry7d;
+
+  /// No description provided for @spaceLinkExpiry30d.
+  ///
+  /// In es, this message translates to:
+  /// **'30 días'**
+  String get spaceLinkExpiry30d;
+
+  /// No description provided for @spaceLinkExpiresOn.
+  ///
+  /// In es, this message translates to:
+  /// **'Caduca el {date}'**
+  String spaceLinkExpiresOn(DateTime date);
 }
 
 class _AppLocalizationsDelegate

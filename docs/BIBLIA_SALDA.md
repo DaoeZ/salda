@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.14 · **Fecha:** 2026-07-25 · **Changelog:** v1.14 — enlaces de
+**Versión:** 1.15 · **Fecha:** 2026-07-25 · **Changelog:** v1.15 — el enlace
+de grupo entra SOLO a quien ya tiene identidad, conserva el enlace mientras
+uno se identifica y admite caducidad opcional (ADR-035). v1.14 — enlaces de
 grupo: token opaco no enumerable con prueba de conocimiento en batch, y el
 invitado por fin llega a sus contextos (ADR-035). v1.13 — modo
 invitado: participante sin cuenta con identidad persistente de dispositivo y
@@ -1458,6 +1460,25 @@ Solo GRUPOS activos (una relación reserva una pareja inmutable de UID y no
 admite un tercero) y solo el propietario crea, rota o revoca; rotar emite un
 token nuevo y deja el viejo demostrablemente muerto. Cuenta e invitado entran
 por el mismo camino; MANUAL no aplica (no tiene dispositivo).
+**Caducidad OPCIONAL** (`expiresAt`): un enlace es un secreto portador, así
+que poder acotarle la vida limita el daño de una filtración. Ausente = sin
+caducidad, que es el valor por defecto. No puede nacer caducado (enmascararía
+un reloj mal puesto en cliente) y es INMUTABLE: alargarla resucitaría un
+enlace que ya circula, así que para cambiarla se rota. Caducado ≠ revocado,
+pero cierran igual porque ambas se comprueban en cada canje.
+**A quien ya tiene identidad NO se le pregunta quién es.** Con cuenta —o con
+identidad de invitado, que persiste en el dispositivo— el enlace entra solo y
+aterriza en el grupo: sin pantalla intermedia ni botón de confirmar, porque
+la identidad ya se conoce y preguntar sería fricción pura. El selector de
+identidad queda reservado a los participantes MANUAL de los enlaces de TICKET
+(Sprint 5), donde sí hay algo que elegir. Solo se pide algo a quien no tiene
+identidad: continuar como invitado (que únicamente necesita un nombre
+visible), entrar con su cuenta o crear una. El token pendiente vive en
+`pendingGroupLinkProvider` y lo consume el router, de modo que identificarse
+—incluido verificar el correo tras registrarse— **nunca pierde el enlace**;
+por eso la pantalla del enlace se mantiene en pie para cualquier sesión, aun
+sin verificar. Volver a pulsar un enlace del que ya se es miembro lleva al
+grupo en vez de dar error.
 **Consecuencias:** entrar por enlace es la vía natural del invitado, y por
 eso este ADR **corrige un vacío de ADR-034**: la app pintaba
 `_AccountRequiredHome` a todo el que no tuviera cuenta y la query de "mis
@@ -1468,10 +1489,12 @@ MANUAL con los que reparte. Crear contextos sigue siendo exclusivo de una
 cuenta. Quien conserve un enlace vivo puede volver a entrar tras ser
 expulsado —igual que en cualquier grupo de mensajería—: para cerrar de verdad
 hay que rotar o revocar, y así está documentado en la UI.
-**Pendiente (no es código de app):** servir `/g/{token}` en Hosting y
-publicar `assetlinks.json` para verificar los App Links de Android. Mientras
-tanto la vía operativa es pegar el enlace en `/join`, y la ruta con token ya
-está preparada. Contrato en `docs/ESPACIOS.md`.
+`AndroidManifest.xml` declara el intent-filter `autoVerify` de
+`https://{salda-dev|salda-prod}.web.app/g/`, así que el enlace abre la app.
+**Pendiente (no es código de app):** publicar
+`/.well-known/assetlinks.json` para que Android VERIFIQUE ese filtro —sin él
+ofrece elegir app en vez de abrirla sola— y servir `/g/{token}` como página
+de aterrizaje para quien no tenga la app. Contrato en `docs/ESPACIOS.md`.
 **Revisión:** al implementar los enlaces de TICKET (Sprint 5), reutilizar
 este mecanismo en vez de inventar otro; y en el Sprint 6 tener presente que
 un MANUAL y un INVITADO que sean la misma persona siguen siendo dos actores
@@ -1515,7 +1538,7 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
 | Relaciones económicas | `docs/RELACIONES_ECONOMICAS.md` | 029 | `economic_ledger.dart` + `economicLedger.ts`, `economicPayments.ts`, `features/economy/**` | golden `economic_ledger.json`, tests de dominio/Functions/Flutter/Rules |
 | Relaciones y grupos | `docs/ESPACIOS.md` | 028, 030 | `features/spaces/**`, `features/home/**`, contexto en `features/sessions/**` | `spaces_repository_test.dart`, `session_repository_test.dart`, `app_smoke_test.dart`, Rules |
-| Enlaces de grupo | `docs/ESPACIOS.md` | 035 (sobre 012, 033, 034) | `spaces_repository.dart`, `space_link_screen.dart`, `join_space_screen.dart`, `firestore.rules` (spaceLinks + joinGrants) | `space_links_test.dart` (13), Rules «enlaces de grupo» (17) |
+| Enlaces de grupo | `docs/ESPACIOS.md` | 035 (sobre 012, 033, 034) | `spaces_repository.dart`, `space_link_screen.dart`, `join_space_screen.dart`, `router.dart`, `AndroidManifest.xml`, `firestore.rules` (spaceLinks + joinGrants) | `space_links_test.dart` (18), `join_space_screen_test.dart` (5), `join_route_test.dart` (2), Rules «enlaces de grupo» (20) |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |
 | Contrato IA | spec §9, Biblia §29 | 011 | `packages/ai_providers/**` + `features/ai/**` | `ai_providers_test.dart` (10) + `ai_feature_test.dart` (6) |

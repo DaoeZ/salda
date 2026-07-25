@@ -1999,6 +1999,50 @@ describe('enlaces de grupo', () => {
       { spaceName: 'Antiguo renombrado', updatedAt: serverTimestamp() }));
   });
 
+  // ── Caducidad ───────────────────────────────────────────────────────
+  it('la caducidad es opcional pero nunca puede nacer en el pasado',
+      async () => {
+    const future = new Date(Date.now() + 86400000);
+    const past = new Date(Date.now() - 60000);
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/CONCADUCIDADAAAAAAAAA'),
+      linkDoc({ expiresAt: future })));
+    // Nacer caducado enmascararía un reloj mal puesto en el cliente.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/YACADUCADOAAAAAAAAAAA'),
+      linkDoc({ expiresAt: past })));
+    // Y tiene que ser una fecha, no cualquier cosa.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/BASURAAAAAAAAAAAAAAAA'),
+      linkDoc({ expiresAt: 'mañana' })));
+  });
+
+  it('un enlace caducado no admite a nadie, aunque siga active', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // Caducado pero SIN revocar: son dos cosas distintas y ambas cierran.
+      await setDoc(doc(ctx.firestore(), 'spaceLinks/CADUCADOAAAAAAAAAAAAA'),
+        { ...linkDoc(), expiresAt: new Date(Date.now() - 60000) });
+    });
+    await assertFails(redeem(db(FOURTH), FOURTH, 'CADUCADOAAAAAAAAAAAAA'));
+  });
+
+  it('la caducidad es INMUTABLE: no se alarga un enlace ya repartido',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+        { ...linkDoc(), expiresAt: new Date(Date.now() + 3600000) });
+    });
+    const f = db(SOCIAL_OUTSIDER);
+    // Alargarla resucitaría un enlace que ya circula: para cambiarla se rota.
+    await assertFails(updateDoc(doc(f, 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+      { expiresAt: new Date(Date.now() + 999999999), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(f, 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+      { expiresAt: null, updatedAt: serverTimestamp() }));
+    // Revocarlo sí, siempre.
+    await assertSucceeds(updateDoc(doc(f, 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+  });
+
   // ── Canje ───────────────────────────────────────────────────────────
   it('una CUENTA entra presentando el token en el mismo batch', async () => {
     await assertSucceeds(redeem(db(FOURTH), FOURTH, TOKEN));

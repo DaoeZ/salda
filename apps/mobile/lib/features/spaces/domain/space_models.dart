@@ -180,6 +180,7 @@ class SpaceJoinLink {
     required this.createdByUid,
     required this.revoked,
     this.createdAt,
+    this.expiresAt,
   });
 
   final String token;
@@ -193,13 +194,36 @@ class SpaceJoinLink {
   final bool revoked;
   final DateTime? createdAt;
 
-  bool get isActive => !revoked;
+  /// Caducidad OPCIONAL. Un enlace es un secreto portador: poder acotarle la
+  /// vida limita el daño de una filtración. Null = sin caducidad (el
+  /// propietario siempre puede revocar), que es el valor por defecto.
+  final DateTime? expiresAt;
+
+  bool isExpiredAt(DateTime now) =>
+      expiresAt != null && !expiresAt!.isAfter(now);
+
+  /// Un enlace sirve si no está revocado y no ha caducado. Rules aplica
+  /// exactamente la misma regla; esto solo evita el viaje de ida y vuelta.
+  bool usableAt(DateTime now) => !revoked && !isExpiredAt(now);
 }
 
-/// Resultado de mirar un enlace ANTES de entrar. Se distingue "no sirve" de
-/// "ya estás dentro" porque la salida de la app es distinta: error amable
-/// frente a navegar directamente al grupo.
+/// Resultado de canjear un enlace. Se distingue "no sirve" de "ya estás
+/// dentro" porque la salida de la app es distinta: error amable frente a
+/// entrar directamente al grupo.
 enum JoinLinkOutcome { joined, alreadyMember, invalid, needsGuestName }
+
+/// Caducidades ofrecidas al crear un enlace. Sin caducidad es el valor por
+/// defecto: es lo que había y el propietario siempre puede revocar.
+enum JoinLinkLifetime {
+  never(null),
+  oneDay(Duration(days: 1)),
+  sevenDays(Duration(days: 7)),
+  thirtyDays(Duration(days: 30));
+
+  const JoinLinkLifetime(this.duration);
+
+  final Duration? duration;
+}
 
 /// Resumen de un ticket vinculado, leído EN VIVO del propio documento del
 /// ticket (collection group por spaceId): nunca hay copia que desincronizar.

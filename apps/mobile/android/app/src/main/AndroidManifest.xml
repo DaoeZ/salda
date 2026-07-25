@@ -24,6 +24,26 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Enlaces de grupo (ADR-035): https://<host>/g/{token} abre la
+                 app directamente. La ruta es la MISMA que registra el router
+                 (/g/:token), así que Flutter la entrega sin traducciones.
+
+                 autoVerify exige servir /.well-known/assetlinks.json en cada
+                 host; mientras no esté publicado, Android no verifica y
+                 ofrece elegir app en vez de abrirla sola. Ambos entornos
+                 declarados porque el dominio depende del tipo de build
+                 (AppEnvironment / brand.json). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="salda-dev.web.app"
+                      android:pathPrefix="/g/"/>
+                <data android:scheme="https"
+                      android:host="salda-prod.web.app"
+                      android:pathPrefix="/g/"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -393,7 +393,13 @@ class SpacesRepository {
       .where('status', isEqualTo: 'active')
       .snapshots()
       .map((snap) {
-        final links = [for (final d in snap.docs) _linkFrom(d)];
+        final now = DateTime.now().toUtc();
+        // La query filtra por `status`; la caducidad se descarta aquí para
+        // no necesitar un índice compuesto por una comprobación trivial.
+        final links = [
+          for (final d in snap.docs)
+            if (_linkFrom(d).usableAt(now)) _linkFrom(d),
+        ];
         // Rotar deja el anterior revocado, así que en la práctica hay 0 o 1;
         // ante un empate por carrera gana el más reciente, nunca dos vivos
         // compitiendo en la UI.
@@ -409,10 +415,20 @@ class SpacesRepository {
   /// (`ShareCode`, la misma primitiva del enlace de invitados) y ES el id
   /// del documento: así Rules puede validar el conocimiento sin que el
   /// secreto tenga que copiarse a ningún documento legible.
-  Future<SpaceJoinLink> createJoinLink(String spaceId, String spaceName) async {
+  Future<SpaceJoinLink> createJoinLink(
+    String spaceId,
+    String spaceName, {
+    JoinLinkLifetime lifetime = JoinLinkLifetime.never,
+  }) async {
     _requireAccount();
     final token = ShareCode.generate().value;
     final name = spaceName.trim();
+    // La caducidad se calcula en cliente porque Firestore no sabe sumar a
+    // serverTimestamp; Rules solo comprueba que no nazca ya caducada, así
+    // que un reloj adelantado no puede alargar la vida de nadie más.
+    final expiresAt = lifetime.duration == null
+        ? null
+        : DateTime.now().toUtc().add(lifetime.duration!);
     await _links.doc(token).set({
       'spaceId': spaceId,
       'spaceName': name,
@@ -420,6 +436,7 @@ class SpacesRepository {
       'status': 'active',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+      if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt),
       'schemaVersion': 1,
     });
     return SpaceJoinLink(
@@ -428,6 +445,7 @@ class SpacesRepository {
       spaceName: name,
       createdByUid: uid(),
       revoked: false,
+      expiresAt: expiresAt,
     );
   }
 
@@ -446,10 +464,11 @@ class SpacesRepository {
     String spaceId,
     String spaceName, {
     String? previousToken,
+    JoinLinkLifetime lifetime = JoinLinkLifetime.never,
   }) async {
     _requireAccount();
     if (previousToken != null) await revokeJoinLink(previousToken);
-    return createJoinLink(spaceId, spaceName);
+    return createJoinLink(spaceId, spaceName, lifetime: lifetime);
   }
 
   /// Mantiene el rótulo del enlace al día tras renombrar el grupo (solo es
@@ -467,7 +486,9 @@ class SpacesRepository {
     final doc = await _links.doc(_normalizeToken(token)).get();
     if (!doc.exists) return null;
     final link = _linkFrom(doc);
-    return link.isActive ? link : null;
+    // Revocado, caducado e inexistente se tratan igual: la app no distingue
+    // los casos para no convertirse en un oráculo de qué grupos existen.
+    return link.usableAt(DateTime.now().toUtc()) ? link : null;
   }
 
   /// Canjea el enlace: escribe la prueba de conocimiento y la membresía en
@@ -535,6 +556,7 @@ class SpacesRepository {
       createdByUid: (data['createdByUid'] as String?) ?? '',
       revoked: data['status'] != 'active',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      expiresAt: (data['expiresAt'] as Timestamp?)?.toDate().toUtc(),
     );
   }
 
@@ -713,6 +735,25 @@ final spaceInvitesProvider = StreamProvider.autoDispose
       (ref, spaceId) =>
           ref.watch(spacesRepositoryProvider).watchSpaceInvites(spaceId),
     );
+
+/// Enlace de grupo pendiente de canjear mientras el usuario se identifica.
+///
+/// Sin esto, tocar "iniciar sesión" o "crear cuenta" perdía el enlace: al
+/// autenticarse, el router manda a `/home` y el token se quedaba por el
+/// camino, obligando a volver a pulsar el enlace del chat. El router lo
+/// consume para devolver a la persona exactamente donde estaba.
+final pendingGroupLinkProvider = NotifierProvider<PendingGroupLink, String?>(
+  PendingGroupLink.new,
+);
+
+class PendingGroupLink extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String token) => state = token;
+
+  void clear() => state = null;
+}
 
 /// Enlace vivo del grupo. Solo devuelve algo al propietario: Rules restringe
 /// el `list` de `spaceLinks` al dueño del grupo.

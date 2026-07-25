@@ -461,18 +461,29 @@ service cloud.firestore {
     }
 
     // Un enlace vivo de ESTE grupo. Se comprueba en cada uso (no solo al
-    // canjearlo), así que revocarlo cierra la puerta de inmediato.
+    // canjearlo), así que revocar o dejar caducar cierra la puerta de
+    // inmediato, aunque alguien hubiera guardado el token.
     function spaceLinkOpensGroup(token, spaceId) {
       return token is string
         && exists(/databases/$(database)/documents/spaceLinks/$(token))
         && spaceLinkData(token).spaceId == spaceId
-        && spaceLinkData(token).status == 'active';
+        && spaceLinkData(token).status == 'active'
+        && spaceLinkNotExpired(spaceLinkData(token));
+    }
+
+    // Caducidad OPCIONAL: un enlace es un secreto portador, así que poder
+    // acotarle la vida limita el daño de una filtración. Ausente = sin
+    // caducidad (el propietario siempre puede revocar), que es el
+    // comportamiento con el que nacieron los enlaces.
+    function spaceLinkNotExpired(data) {
+      return data.get('expiresAt', null) == null
+        || data.expiresAt > request.time;
     }
 
     function validSpaceLink(data) {
       return data.keys().hasOnly([
           'spaceId', 'spaceName', 'createdByUid', 'status',
-          'createdAt', 'updatedAt', 'schemaVersion'
+          'createdAt', 'updatedAt', 'expiresAt', 'schemaVersion'
         ])
         && data.keys().hasAll([
           'spaceId', 'spaceName', 'createdByUid', 'status',
@@ -483,6 +494,8 @@ service cloud.firestore {
         && data.spaceName.size() >= 2
         && data.spaceName.size() <= 40
         && data.status in ['active', 'revoked']
+        && (data.get('expiresAt', null) == null
+          || data.expiresAt is timestamp)
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
     }
@@ -747,6 +760,9 @@ service cloud.firestore {
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.status == 'active'
         && request.resource.data.createdAt is timestamp
+        // Nacer caducado no tendría sentido y enmascararía un reloj mal
+        // puesto en el cliente.
+        && spaceLinkNotExpired(request.resource.data)
         && isSpaceOwner(request.resource.data.spaceId)
         && spaceData(request.resource.data.spaceId).status == 'active'
         // Solo GRUPOS: una relación reserva una pareja canónica de UID y no
@@ -761,7 +777,11 @@ service cloud.firestore {
         && validSpaceLink(request.resource.data)
         && request.resource.data.spaceId == resource.data.spaceId
         && request.resource.data.createdByUid == resource.data.createdByUid
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        // La caducidad es inmutable: alargarla a posteriori resucitaría un
+        // enlace ya repartido. Para cambiarla se rota.
+        && request.resource.data.get('expiresAt', null)
+          == resource.data.get('expiresAt', null);
 
       // Nada destructivo mientras el enlace siga vivo: primero se revoca.
       allow delete: if isSpaceOwner(resource.data.spaceId)
