@@ -1,17 +1,22 @@
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_tokens/design_tokens.dart';
 import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../../core/config/app_environment.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../spaces/data/spaces_repository.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
+import '../data/ticket_links_repository.dart';
 import '../domain/session_models.dart';
+import '../domain/ticket_link_models.dart';
 
 /// Datos de navegación al detalle de un ticket (van como `extra` de la ruta).
 class TicketRef {
@@ -42,7 +47,10 @@ class TicketDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(t.merchantName),
-        actions: [_SpaceLinkAction(ticket: t)],
+        actions: [
+          _TicketLinkAction(ticketRef: ticket),
+          _SpaceLinkAction(ticket: t),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(TokenSpacing.lg),
@@ -536,5 +544,94 @@ class _FullscreenPhoto extends StatelessWidget {
         child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
       ),
     );
+  }
+}
+
+/// Compartir ESTE ticket por enlace (Sprint 5, ADR-036).
+///
+/// Los participantes MANUAL del ticket se calculan aquí, al crear el enlace,
+/// y viajan denormalizados dentro de él: quien lo recibe todavía no puede
+/// leer nada de la sesión, así que es la única forma de pintarle «¿Quién
+/// eres?» — y a la vez la más estrecha, porque la lista contiene exactamente
+/// esos manuales y nunca cuentas, invitados ni miembros del grupo.
+class _TicketLinkAction extends ConsumerWidget {
+  const _TicketLinkAction({required this.ticketRef});
+
+  final TicketRef ticketRef;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return IconButton(
+      tooltip: l10n.ticketLinkAction,
+      icon: const Icon(Icons.link),
+      onPressed: () => _share(context, ref),
+    );
+  }
+
+  Future<void> _share(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final repo = ref.read(ticketLinksRepositoryProvider);
+    final t = ticketRef.ticket;
+    // sessions/{sid}/accounts/{aid}/tickets/{tid}
+    final segments = t.path.split('/');
+    final accountId = segments.length > 3 ? segments[3] : '';
+
+    // Estado breve de preparación: crear el enlace espera a la señal
+    // autoritativa, así que puede tardar un instante tras editar el ticket.
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final existing = await repo
+          .watchActiveLink(ticketRef.sessionId, t.id)
+          .first;
+      if (existing == null &&
+          !await repo.isProjectionReady(ticketRef.sessionId, t.id)) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.ticketLinkPreparing)),
+        );
+      }
+      final link = existing ??
+          await repo.createLink(
+            sessionId: ticketRef.sessionId,
+            accountId: accountId,
+            ticketId: t.id,
+            merchantName: t.merchantName,
+            spaceId: t.spaceId ?? '',
+            manuals: await _manualsOf(ref),
+          );
+      if (!context.mounted) return;
+      final url = TicketLinksRepository.linkUrlFor(
+        AppEnvironment.hostingDomain,
+        link.token,
+      );
+      await SharePlus.instance.share(
+        ShareParams(text: '${t.merchantName} · ${Brand.appName}\n$url'),
+      );
+    } on TicketLinkNotReady {
+      // Recuperable: recompute no ha terminado. Se reintenta a mano.
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.ticketLinkNotReady)),
+      );
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketLinkError)));
+    }
+  }
+
+  /// Participantes MANUAL activos de la sesión del ticket. La identidad se
+  /// toma de `manualId`, nunca del nombre: renombrar no rompe el enlace.
+  Future<List<EligibleManual>> _manualsOf(WidgetRef ref) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('sessions/${ticketRef.sessionId}/participants')
+        .get();
+    return [
+      for (final doc in snap.docs)
+        if (((doc.data()['manualId'] as String?) ?? '').isNotEmpty &&
+            (doc.data()['active'] as bool? ?? true))
+          EligibleManual(
+            pid: doc.id,
+            manualId: doc.data()['manualId'] as String,
+            displayName: (doc.data()['name'] as String?) ?? '',
+          ),
+    ];
   }
 }

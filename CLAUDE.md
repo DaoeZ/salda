@@ -104,6 +104,16 @@ El manifest declara el intent-filter `autoVerify` de `/g/` y `salda-dev` ya
 sirve `/.well-known/assetlinks.json` (paquete `dev.salda.salda_mobile` + el
 SHA-256 del certificado); queda pendiente la página de aterrizaje para quien
 no tenga la app. Contrato: `docs/ESPACIOS.md`.
+**Sprint 5 — enlaces de TICKET (ADR-036):** colección propia
+`ticketLinks/{token}` (no `spaceLinks`: alcance y amenazas distintos). Publica
+solo el comercio y los MANUAL de ESE ticket. Acceso en dos grados: lectura
+(`sessions/{sid}/ticketAccess/{uid}`) e identificación como un MANUAL, con
+cerrojo determinista `ticketClaims/{ticketId}_{manualId}` que resuelve la
+colisión entre dispositivos (el primero gana). La identificación es TEMPORAL:
+no escribe `linkedUid`, no cambia el actor `manual:{id}` y recompute no la lee
+— usar `claimedByDevice` habría migrado el actor por la puerta de atrás,
+porque tiene precedencia sobre `manualId`. P5 no cambia. Rutas `/t/{token}` y
+`/ticket/{token}`. Contrato: `docs/ENLACES_TICKET.md`.
 **Reestructuración Relaciones/Grupos (ADR-030):** `spaces` es ahora la raíz
 visible del producto: `relationship` reserva una pareja canónica de UID y
 `group` representa contextos de tres o más miembros. Inicio ya no crea ni lista

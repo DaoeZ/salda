@@ -885,3 +885,118 @@ test('MANUAL: sin identidad (solo nombre) sigue sin publicarse en P5', () => {
   assert.ok(!r.economicEntries.some((entry) =>
     entry.debtorUid.startsWith('manual:')));
 });
+
+// ── Proyección de participación por ticket (ADR-036) ──────────────────────
+// La proyección es lo ÚNICO con lo que las Rules pueden demostrar que
+// alguien participa en un ticket. Si dejara documentos obsoletos, seguirían
+// concediendo acceso a quien ya no pinta nada: por eso se comprueba que la
+// lista DECRECE, no solo que crece.
+
+const pidsOf = (snapshot: SessionSnapshot, ticketId: string): string[] =>
+  computeAggregates(snapshot)
+    .ticketParticipants.filter((entry) => entry.ticketId === ticketId)
+    .map((entry) => entry.pid)
+    .sort();
+
+/** Ticket de 3 líneas, una por participante, en modo "cada uno lo suyo". */
+const perItem = (): SessionSnapshot => ({
+  splitModeDefault: 'byItem',
+  ownerUid: 'uid-1',
+  participants: [
+    { id: 'p1', isOwner: true, order: 0 },
+    { id: 'p2', order: 1, manualId: 'm2' },
+    { id: 'p3', order: 2, manualId: 'm3' },
+  ],
+  accounts: [
+    {
+      id: 'a1',
+      tickets: [
+        {
+          id: 't1',
+          grandTotal: 3000,
+          paidByParticipantId: 'p1',
+          lines: [
+            { id: 'l1', totalPrice: 1000,
+              assignment: { type: 'one', participants: { p1: 1 } } },
+            { id: 'l2', totalPrice: 1000,
+              assignment: { type: 'one', participants: { p2: 1 } } },
+            { id: 'l3', totalPrice: 1000,
+              assignment: { type: 'one', participants: { p3: 1 } } },
+          ],
+        },
+      ],
+    },
+  ],
+  settlements: [],
+});
+
+test('proyección: participa quien consume y quien paga', () => {
+  assert.deepEqual(pidsOf(perItem(), 't1'), ['p1', 'p2', 'p3']);
+  const projection = computeAggregates(perItem()).ticketParticipants;
+  // Se proyecta la identidad ESTABLE, nunca el nombre.
+  assert.equal(projection.find((e) => e.pid === 'p2')?.manualId, 'm2');
+});
+
+test('proyección: quien DEJA de consumir desaparece', () => {
+  const snapshot = perItem();
+  // p3 ya no coge nada: su línea pasa a p2.
+  snapshot.accounts[0].tickets[0].lines[2].assignment = {
+    type: 'one', participants: { p2: 1 },
+  };
+  assert.deepEqual(pidsOf(snapshot, 't1'), ['p1', 'p2']);
+});
+
+test('proyección: quien DEJA de pagar desaparece si tampoco consume', () => {
+  const snapshot = perItem();
+  // p1 deja de pagar (paga p2) y su línea se la queda p2.
+  snapshot.accounts[0].tickets[0].paidByParticipantId = 'p2';
+  snapshot.accounts[0].tickets[0].lines[0].assignment = {
+    type: 'one', participants: { p2: 1 },
+  };
+  assert.deepEqual(pidsOf(snapshot, 't1'), ['p2', 'p3']);
+  // Y el pagador SIGUE participando aunque no consuma nada.
+  const solo = perItem();
+  solo.accounts[0].tickets[0].lines = [
+    { id: 'l2', totalPrice: 3000,
+      assignment: { type: 'one', participants: { p2: 1 } } },
+  ];
+  assert.deepEqual(pidsOf(solo, 't1'), ['p1', 'p2']);
+});
+
+test('proyección: borrar una línea retira a quien solo estaba en ella', () => {
+  const snapshot = perItem();
+  snapshot.accounts[0].tickets[0].lines.splice(2, 1);
+  snapshot.accounts[0].tickets[0].grandTotal = 2000;
+  assert.deepEqual(pidsOf(snapshot, 't1'), ['p1', 'p2']);
+});
+
+test('proyección: cambiar el reparto a "todos" mete a todos', () => {
+  const snapshot = perItem();
+  snapshot.accounts[0].tickets[0].lines = [
+    { id: 'l1', totalPrice: 3000,
+      assignment: { type: 'all', participants: {} } },
+  ];
+  assert.deepEqual(pidsOf(snapshot, 't1'), ['p1', 'p2', 'p3']);
+});
+
+test('proyección: retirar al participante lo saca del ticket', () => {
+  const snapshot = perItem();
+  // p3 se desactiva: sus líneas quedan sin dueño y recaen en el pagador.
+  snapshot.participants[2].active = false;
+  const pids = pidsOf(snapshot, 't1');
+  assert.ok(!pids.includes('p3'), `p3 no debería seguir: ${pids.join(',')}`);
+});
+
+test('proyección: un ticket eliminado no deja participación alguna', () => {
+  const snapshot = perItem();
+  snapshot.accounts[0].tickets = [];
+  assert.deepEqual(pidsOf(snapshot, 't1'), []);
+  // Sin participación no hay señal de preparado que sostenga un enlace.
+  assert.deepEqual(computeAggregates(snapshot).ticketParticipants, []);
+});
+
+test('proyección: recomputes repetidos son idénticos (idempotencia)', () => {
+  const a = computeAggregates(perItem()).ticketParticipants;
+  const b = computeAggregates(perItem()).ticketParticipants;
+  assert.deepEqual(a, b);
+});

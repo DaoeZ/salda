@@ -2191,5 +2191,373 @@ describe('enlaces de grupo', () => {
   });
 });
 
+// ─── Enlaces de TICKET (Sprint 5, ADR-036) ─────────────────────────────
+describe('enlaces de ticket', () => {
+  // La sesión s1 la posee OWNER. p1=Edgar (owner), p2/p3 reclamados por
+  // GUEST/OTHER (cuenta e invitado), p4 sin reclamar. Añadimos manuales.
+  const T = 'AAAAAAAAAAAAAAAAAAAAAA'; // token del ticket t1
+  const T_OTRO = 'BBBBBBBBBBBBBBBBBBBBBB'; // token de OTRO ticket (t2)
+  const T_MUERTO = 'CCCCCCCCCCCCCCCCCCCCCC'; // revocado
+  const T_CADUCADO = 'DDDDDDDDDDDDDDDDDDDDDD';
+
+  const linkDoc = (overrides = {}) => ({
+    sessionId: 's1', accountId: 'a1', ticketId: 't1',
+    merchantName: 'Mercadona',
+    manuals: [{ pid: 'p5', manualId: 'm1', displayName: 'Marta' }],
+    createdByUid: OWNER, status: 'active',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  /** Acceso como participante YA reclamado por ese UID (cuenta/invitado). */
+  const openAsKnown = (f, uid, token, { pid = 'p2', ticketId = 't1' } = {}) =>
+    setDoc(doc(f, `${S}/ticketAccess/${ticketId}_${uid}`), {
+      uid, token, ticketId, pid,
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    });
+
+  /** Paso 2: identificarse como un MANUAL (prueba + cerrojo en un batch). */
+  const identify = (f, uid, token, { pid = 'p5', manualId = 'm1',
+      ticketId = 't1', claimUid = uid } = {}) => {
+    const batch = writeBatch(f);
+    batch.set(doc(f, `${S}/ticketClaims/${ticketId}_${manualId}`), {
+      uid: claimUid, ticketId, manualId,
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    });
+    batch.set(doc(f, `${S}/ticketAccess/${ticketId}_${uid}`), {
+      uid, token, ticketId, pid, manualId,
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    });
+    return batch.commit();
+  };
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `${S}/participants/p5`), {
+        name: 'Marta', isOwner: false, order: 4, active: true,
+        claimedByDevice: '', manualId: 'm1',
+      });
+      await setDoc(doc(f, `${S}/participants/p6`), {
+        name: 'Tío Luis', isOwner: false, order: 5, active: true,
+        claimedByDevice: '', manualId: 'm2',
+      });
+      // Segundo ticket de la MISMA sesión, para probar el aislamiento.
+      await setDoc(doc(f, `${S}/accounts/a1/tickets/t2`), {
+        kind: 'manual', grandTotal: 500, paidByParticipantId: 'p1',
+        merchant: { name: 'Otro' },
+      });
+      // Proyeccion AUTORITATIVA que escribe recompute: quien participa en
+      // cada ticket. Las Rules la consultan en vez de fiarse del enlace.
+      for (const [tid, pid] of [
+        ['t1', 'p1'], ['t1', 'p2'], ['t1', 'p5'], ['t1', 'p6'],
+        ['t2', 'p1'], ['t2', 'p5'],
+      ]) {
+        await setDoc(doc(f, `${S}/ticketParticipants/${tid}_${pid}`),
+          { ticketId: tid, pid, schemaVersion: 1 });
+      }
+      // Señal de proyección PREPARADA, que recompute escribe en el mismo
+      // batch que las entradas. Sin ella no se puede crear un enlace.
+      for (const tid of ['t1', 't2']) {
+        await setDoc(doc(f, `${S}/ticketParticipantProjections/${tid}`), {
+          ticketId: tid, ready: true, fingerprint: 'x',
+          updatedAt: serverTimestamp(), schemaVersion: 1,
+        });
+      }
+      await setDoc(doc(f, `ticketLinks/${T}`), linkDoc());
+      await setDoc(doc(f, `ticketLinks/${T_OTRO}`),
+        linkDoc({ ticketId: 't2', merchantName: 'Otro' }));
+      await setDoc(doc(f, `ticketLinks/${T_MUERTO}`),
+        linkDoc({ status: 'revoked' }));
+      await setDoc(doc(f, `ticketLinks/${T_CADUCADO}`),
+        linkDoc({ expiresAt: new Date(Date.now() - 60000) }));
+      await setDoc(doc(f, `guestIdentities/${GUEST}`), {
+        uid: GUEST, displayName: 'Alba invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+    });
+  });
+
+  // ── Gobierno del enlace ─────────────────────────────────────────────
+  it('solo el dueño de la sesión crea el enlace, y hacia SU ticket', async () => {
+    await assertSucceeds(setDoc(doc(db(OWNER), 'ticketLinks/NUEVOAAAAAAAAAAAAAAAA'),
+      linkDoc({ createdByUid: OWNER })));
+    // Un participante cualquiera, no.
+    await assertFails(setDoc(doc(db(STRANGER), 'ticketLinks/DEOTROAAAAAAAAAAAAAAA'),
+      linkDoc({ createdByUid: STRANGER })));
+    // Apuntar a un ticket que no existe donde dice: denegado.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/FANTASMAAAAAAAAAAAAAA'),
+      linkDoc({ ticketId: 'no-existe' })));
+  });
+
+  it('el enlace NO es enumerable', async () => {
+    await assertFails(getDocs(collection(db(STRANGER), 'ticketLinks')));
+    await assertFails(getDocs(query(collection(db(FOURTH), 'ticketLinks'),
+      where('sessionId', '==', 's1'))));
+    await assertSucceeds(getDocs(query(collection(db(OWNER), 'ticketLinks'),
+      where('sessionId', '==', 's1'), where('status', '==', 'active'))));
+  });
+
+  it('quien recibe el enlace ve el comercio, nada más', async () => {
+    await assertSucceeds(getDoc(doc(db(FOURTH), `ticketLinks/${T}`)));
+    // Pero sin identificarse no lee ni el ticket ni la sesión.
+    await assertFails(getDoc(doc(db(FOURTH), `${S}/accounts/a1/tickets/t1`)));
+    await assertFails(getDoc(doc(db(FOURTH), S)));
+  });
+
+  it('reapuntar el enlace a otro ticket es un secuestro: denegado', async () => {
+    await assertFails(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { ticketId: 't2', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+  });
+
+  // ── Acceso de lectura ───────────────────────────────────────────────
+  it('poseer el enlace NO basta: hay que representar a alguien del ticket',
+      async () => {
+    const f = db(FOURTH);
+    // Sin identificarse, el enlace no abre nada.
+    await assertFails(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    // Ni se puede fabricar un acceso "en blanco".
+    await assertFails(setDoc(doc(f, `${S}/ticketAccess/t1_${FOURTH}`), {
+      uid: FOURTH, token: T, ticketId: 't1', pid: '',
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    }));
+    // Tras elegir un MANUAL valido, si.
+    await assertSucceeds(identify(f, FOURTH, T));
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    await assertSucceeds(getDocs(collection(f, `${S}/accounts/a1/tickets/t1/lines`)));
+    // Pero los participantes de la sesion siguen sin abrirse.
+    await assertFails(getDocs(collection(f, `${S}/participants`)));
+  });
+
+  it('una cuenta/invitado ya participante entra sin elegir MANUAL', async () => {
+    await assertSucceeds(openAsKnown(db(GUEST), GUEST, T));
+    await assertSucceeds(
+      getDoc(doc(db(GUEST), `${S}/accounts/a1/tickets/t1`)));
+    // Un desconocido no puede colgarse de un participante ajeno.
+    await assertFails(openAsKnown(db(FOURTH), FOURTH, T, { pid: 'p2' }));
+  });
+
+  it('un pid que NO participa en el ticket es rechazado', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${S}/participants/p7`), {
+        name: 'Ajeno', isOwner: false, order: 6, active: true,
+        claimedByDevice: '', manualId: 'm9',
+      });
+    });
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p7', manualId: 'm9' }));
+  });
+
+  it('el enlace NO da acceso al resto: ni otro ticket, ni la sesión, ni el grupo',
+      async () => {
+    const f = db(FOURTH);
+    await identify(f, FOURTH, T);
+    // Otro ticket de la MISMA sesión: fuera.
+    await assertFails(getDoc(doc(f, `${S}/accounts/a1/tickets/t2`)));
+    // La sesión (con sus balances) y las liquidaciones: fuera.
+    await assertFails(getDoc(doc(f, S)));
+    await assertFails(getDocs(collection(f, `${S}/settlements`)));
+    // Y nada del espacio: ni miembros ni membresía.
+    await assertFails(getDocs(collection(f, 'spaces/sp1/members')));
+    await assertFails(setDoc(doc(f, `spaces/sp1/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() }));
+  });
+
+  it('abrir un 2o ticket NO invalida el acceso al 1o', async () => {
+    const f = db(FOURTH);
+    await assertSucceeds(identify(f, FOURTH, T));
+    await assertSucceeds(identify(f, FOURTH, T_OTRO, { ticketId: 't2' }));
+    // La clave incluye ticketId, asi que el primero SIGUE vivo.
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t2`)));
+  });
+
+  it('enlace revocado o caducado: ni acceso ni identificación', async () => {
+    await assertFails(identify(db(FOURTH), FOURTH, T_MUERTO));
+    await assertFails(identify(db(FOURTH), FOURTH, T_CADUCADO));
+    await assertFails(openAsKnown(db(GUEST), GUEST, T_MUERTO));
+  });
+
+  it('revocar el enlace corta la lectura ya concedida', async () => {
+    const f = db(FOURTH);
+    await identify(f, FOURTH, T);
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), `ticketLinks/${T}`),
+        { status: 'revoked', updatedAt: serverTimestamp() });
+    });
+    // La prueba sigue escrita, pero se revalida el enlace en CADA lectura.
+    await assertFails(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+  });
+
+  // ── Identificación temporal como MANUAL ─────────────────────────────
+  it('identificarse como un MANUAL del ticket funciona', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('NO se puede suplantar a una cuenta ni a un invitado', async () => {
+    // p2 lo reclamó GUEST (cuenta/invitado): no tiene manualId.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p2', manualId: 'm1' }));
+    // p1 es el anfitrión.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p1', manualId: 'm1' }));
+  });
+
+  it('el pid y el manualId tienen que corresponderse de verdad', async () => {
+    // p5 es m1, no m2: declarar otro manualId no cuela.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p5', manualId: 'm2' }));
+  });
+
+  it('no se puede crear la identificación para OTRO uid', async () => {
+    const f = db(FOURTH);
+    await assertFails(setDoc(doc(f, `${S}/ticketAccess/t1_${THIRD}`), {
+      uid: THIRD, token: T, ticketId: 't1', pid: 'p5', manualId: 'm1',
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    }));
+    // Ni con el cerrojo a nombre de otro.
+    await assertFails(identify(f, FOURTH, T, { claimUid: THIRD }));
+  });
+
+  it('la identificación es PRIVADA: solo la lee su dueño', async () => {
+    await identify(db(FOURTH), FOURTH, T);
+    await assertFails(getDoc(doc(db(THIRD), `${S}/ticketAccess/t1_${FOURTH}`)));
+    // Ni el dueño de la sesión audita quién dice ser quién.
+    await assertFails(getDoc(doc(db(OWNER), `${S}/ticketAccess/t1_${FOURTH}`)));
+    await assertFails(getDocs(collection(db(OWNER), `${S}/ticketAccess`)));
+  });
+
+  it('dos dispositivos no pueden quedarse con el MISMO manual', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    // El segundo choca con el cerrojo determinista: primero en llegar gana.
+    await assertFails(identify(db(THIRD), THIRD, T));
+    // Y sigue pudiendo coger OTRO manual libre.
+    await assertSucceeds(identify(db(THIRD), THIRD, T,
+      { pid: 'p6', manualId: 'm2' }));
+  });
+
+  it('reabrir el mismo enlace en el mismo dispositivo es idempotente', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('un MANUAL ya VINCULADO deja de ser elegible', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      // El enlace apunta a un espacio y m1 aparece ya vinculado (Sprint 6).
+      await setDoc(doc(f, `ticketLinks/${T}`), linkDoc({ spaceId: 'sp1' }));
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/m1'), {
+        manualId: 'm1', displayName: 'Marta', linkedUid: FOURTH,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+    });
+    await assertFails(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('el flujo de acceso NO puede tocar balances ni participantes', async () => {
+    const f = db(FOURTH);
+    await identify(f, FOURTH, T);
+    // Agregados: solo-lectura para todo cliente, tambien por enlace.
+    await assertFails(updateDoc(doc(f, S), { balances: {} }));
+    // Los participantes originales del ticket no se tocan.
+    await assertFails(updateDoc(doc(f, `${S}/participants/p5`),
+      { name: 'Otro' }));
+    await assertFails(updateDoc(doc(f, `${S}/participants/p5`),
+      { claimedByDevice: FOURTH }));
+    // Ni las lineas del ticket.
+    await assertFails(setDoc(doc(f, `${S}/accounts/a1/tickets/t1/lines/nueva`),
+      { name: 'Colada', totalPrice: 100, order: 99 }));
+  });
+
+  it('un anónimo SIN identidad de invitado no abre enlaces de ticket', async () => {
+    await assertFails(identify(db(OTHER), OTHER, T));
+  });
+
+  it('RECUPERACION: el dueño libera una reclamación errónea o maliciosa',
+      async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    await assertFails(identify(db(THIRD), THIRD, T));
+    // El dueño de la sesión retira cerrojo y prueba...
+    await assertSucceeds(deleteDoc(doc(db(OWNER), `${S}/ticketClaims/t1_m1`)));
+    await assertSucceeds(
+      deleteDoc(doc(db(OWNER), `${S}/ticketAccess/t1_${FOURTH}`)));
+    // ...y el sitio queda libre otra vez.
+    await assertSucceeds(identify(db(THIRD), THIRD, T));
+    // El usurpador pierde el acceso.
+    await assertFails(getDoc(doc(db(FOURTH), `${S}/accounts/a1/tickets/t1`)));
+  });
+
+  it('un enlace NO puede nacer si la proyección aún no está preparada',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // Ticket recién creado: recompute todavía no ha proyectado nada.
+      const f = ctx.firestore();
+      await setDoc(doc(f, `${S}/accounts/a1/tickets/t9`), {
+        kind: 'manual', grandTotal: 100, paidByParticipantId: 'p1',
+        merchant: { name: 'Recien' },
+      });
+    });
+    // Así se resuelve la carrera: NO se crea un enlace que después fallaría.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/SINPROYECCIONAAAAAAAA'),
+      linkDoc({ ticketId: 't9', merchantName: 'Recien' })));
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), `${S}/ticketParticipantProjections/t9`),
+        { ticketId: 't9', ready: true, fingerprint: 'y',
+          updatedAt: serverTimestamp(), schemaVersion: 1 });
+    });
+    // Ya preparada: ahora sí.
+    await assertSucceeds(setDoc(doc(db(OWNER), 'ticketLinks/CONPROYECCIONAAAAAAAA'),
+      linkDoc({ ticketId: 't9', merchantName: 'Recien' })));
+  });
+
+  it('una entrada OBSOLETA de la proyección deja de conceder acceso',
+      async () => {
+    const f = db(FOURTH);
+    await assertSucceeds(identify(f, FOURTH, T));
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    // recompute rehace el reparto y p5 deja de participar: borra su entrada.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), `${S}/ticketParticipants/t1_p5`));
+    });
+    // La identificación antigua ya no autoriza: se revalida en cada uso.
+    await assertFails(identify(f, FOURTH, T));
+  });
+
+  it('sin proyección NO hay fallback al array `manuals` del enlace',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // El enlace SIGUE anunciando a Marta, pero la proyección ya no la tiene.
+      await deleteDoc(doc(ctx.firestore(), `${S}/ticketParticipants/t1_p5`));
+    });
+    // Si existiera fallback, esto pasaría. No existe.
+    await assertFails(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('la señal de preparación NO la escribe ningún cliente', async () => {
+    await assertFails(setDoc(
+      doc(db(OWNER), `${S}/ticketParticipantProjections/t1`),
+      { ticketId: 't1', ready: true, schemaVersion: 1 }));
+    await assertFails(setDoc(
+      doc(db(FOURTH), `${S}/ticketParticipantProjections/t9`),
+      { ticketId: 't9', ready: true, schemaVersion: 1 }));
+  });
+
+  it('la proyección de participación NO la escribe ningún cliente', async () => {
+    await assertFails(setDoc(doc(db(OWNER), `${S}/ticketParticipants/t1_p9`),
+      { ticketId: 't1', pid: 'p9', schemaVersion: 1 }));
+    await assertFails(setDoc(doc(db(FOURTH), `${S}/ticketParticipants/t1_p9`),
+      { ticketId: 't1', pid: 'p9', schemaVersion: 1 }));
+  });
+});
+
 // Nota: assert está importado para fallos explícitos en helpers futuros.
 void assert;

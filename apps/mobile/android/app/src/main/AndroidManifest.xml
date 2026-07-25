@@ -43,6 +43,15 @@
                 <data android:scheme="https"
                       android:host="salda-prod.web.app"
                       android:pathPrefix="/g/"/>
+                <!-- Enlaces de TICKET (ADR-036). Mismo host, así que el
+                     assetlinks.json ya publicado los cubre sin cambios:
+                     Digital Asset Links verifica el DOMINIO, no la ruta. -->
+                <data android:scheme="https"
+                      android:host="salda-dev.web.app"
+                      android:pathPrefix="/t/"/>
+                <data android:scheme="https"
+                      android:host="salda-prod.web.app"
+                      android:pathPrefix="/t/"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -15,6 +15,9 @@ import '../../features/home/home_screen.dart';
 import '../../features/profile/presentation/people_search_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/review/presentation/review_screen.dart';
+import '../../features/sessions/data/ticket_links_repository.dart';
+import '../../features/sessions/presentation/join_ticket_screen.dart';
+import '../../features/sessions/presentation/linked_ticket_screen.dart';
 import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
 import '../../features/sessions/presentation/ticket_detail_screen.dart';
@@ -35,6 +38,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   // "crear cuenta" desde el enlace vuelve a él en cuanto se identifica, en
   // vez de aterrizar en /home habiendo perdido el enlace del chat.
   final pendingGroupLink = ref.watch(pendingGroupLinkProvider);
+  final pendingTicketLink = ref.watch(pendingTicketLinkProvider);
   return GoRouter(
     initialLocation: '/auth-loading',
     redirect: (context, state) {
@@ -48,11 +52,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // invitado. Mandarlo al login perdería el enlace por el camino.
       final isJoinLink =
           location.startsWith('/join') || location.startsWith('/g/');
+      // Enlace de TICKET (ADR-036): mismo trato que el de grupo.
+      final isTicketLink =
+          location.startsWith('/t/') || location.startsWith('/ticket/');
       final isPublic =
           location == '/login' ||
           location == '/register' ||
           location == '/forgot-password' ||
-          isJoinLink;
+          isJoinLink ||
+          isTicketLink;
       if (user == null) {
         return isPublic ? null : '/login';
       }
@@ -60,7 +68,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // esté a medio verificar: es ella la que recuerda el token. Si aquí se
       // desviara a /verify-email, quien acaba de crear la cuenta perdería el
       // enlace justo en el paso donde más fácil es perderlo.
-      if (isJoinLink) return null;
+      if (isJoinLink || isTicketLink) return null;
       if (user.needsEmailVerification) {
         return location == '/verify-email' ? null : '/verify-email';
       }
@@ -76,17 +84,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (isAccountOnlyRoute) return '/home';
         if (location == '/register' ||
             isJoinLink ||
+            isTicketLink ||
             location.startsWith('/home')) {
           return null;
         }
-        return pendingGroupLink == null ? '/home' : '/g/$pendingGroupLink';
+        return _afterAuth(pendingGroupLink, pendingTicketLink);
       }
       if (isJoinLink) return null;
       if (isPublic ||
           location == '/verify-email' ||
           location == '/auth-loading') {
         // Ya identificado y con un enlace a medias: de vuelta al enlace.
-        return pendingGroupLink == null ? '/home' : '/g/$pendingGroupLink';
+        return _afterAuth(pendingGroupLink, pendingTicketLink);
       }
       return null;
     },
@@ -104,6 +113,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/g/:token',
         builder: (_, state) =>
             JoinSpaceScreen(token: state.pathParameters['token']),
+      ),
+      // Enlace de TICKET (ADR-036). Ruta propia y pública por el mismo
+      // motivo que /g/: quien lo abre sin sesión decide ahí mismo.
+      GoRoute(
+        path: '/t/:token',
+        builder: (_, state) =>
+            JoinTicketScreen(token: state.pathParameters['token']!),
+      ),
+      GoRoute(
+        path: '/ticket/:token',
+        builder: (_, state) =>
+            LinkedTicketScreen(token: state.pathParameters['token']!),
       ),
       GoRoute(
         path: '/join',
@@ -226,3 +247,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// A dónde va alguien que acaba de identificarse. Un enlace a medias —de
+/// grupo o de ticket— manda sobre el inicio: perderlo obligaría a volver a
+/// buscarlo en el chat, que es justo el punto donde el flujo se rompía.
+String _afterAuth(String? groupToken, String? ticketToken) {
+  if (ticketToken != null) return '/t/$ticketToken';
+  if (groupToken != null) return '/g/$groupToken';
+  return '/home';
+}

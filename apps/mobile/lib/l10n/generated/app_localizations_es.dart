@@ -1605,6 +1605,80 @@ class AppLocalizationsEs extends AppLocalizations {
   String get joinGuestNameHint => '¿Cómo quieres que te vean en el grupo?';
 
   @override
+  String get ticketLinkTitle => 'Ticket compartido';
+
+  @override
+  String get ticketLinkAction => 'Compartir este ticket';
+
+  @override
+  String get ticketLinkSharedWithYou => 'Te han compartido el ticket de';
+
+  @override
+  String get ticketLinkWhoAreYou => '¿Quién eres?';
+
+  @override
+  String get ticketLinkWhoAreYouHelp =>
+      'Elige tu nombre para ver lo que te toca en este ticket.';
+
+  @override
+  String get ticketLinkNoManuals =>
+      'Ya no queda ningún nombre libre en este ticket.';
+
+  @override
+  String get ticketLinkManualTaken =>
+      'Ese nombre lo acaba de coger otro dispositivo. Elige otro.';
+
+  @override
+  String get ticketLinkInvalid =>
+      'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.';
+
+  @override
+  String get ticketLinkError =>
+      'No hemos podido abrir el ticket. Inténtalo otra vez.';
+
+  @override
+  String get ticketLinkGone => 'Este ticket ya no está disponible.';
+
+  @override
+  String get ticketLinkLines => 'Productos';
+
+  @override
+  String get ticketLinkTotal => 'Total';
+
+  @override
+  String get ticketLinkRelease => 'No soy yo';
+
+  @override
+  String get ticketLinkTemporary =>
+      'Identificación temporal, solo en este dispositivo';
+
+  @override
+  String ticketLinkViewingAs(String name) {
+    return 'Estás viendo el ticket como $name';
+  }
+
+  @override
+  String get ticketLinkEmpty =>
+      'Crea un enlace para que quien no tenga cuenta pueda ver este ticket.';
+
+  @override
+  String get ticketLinkCreate => 'Crear enlace del ticket';
+
+  @override
+  String get ticketLinkHint =>
+      'Quien reciba este enlace verá solo este ticket, nunca el resto del grupo.';
+
+  @override
+  String get ticketLinkRevoke => 'Revocar el enlace';
+
+  @override
+  String get ticketLinkPreparing => 'Preparando el enlace…';
+
+  @override
+  String get ticketLinkNotReady =>
+      'El ticket todavía se está procesando. Inténtalo de nuevo en unos segundos.';
+
+  @override
   String get spaceLinkExpiryLabel => 'Caducidad';
 
   @override

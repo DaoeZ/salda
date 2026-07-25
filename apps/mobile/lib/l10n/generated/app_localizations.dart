@@ -2920,6 +2920,132 @@ abstract class AppLocalizations {
   /// **'¿Cómo quieres que te vean en el grupo?'**
   String get joinGuestNameHint;
 
+  /// No description provided for @ticketLinkTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Ticket compartido'**
+  String get ticketLinkTitle;
+
+  /// No description provided for @ticketLinkAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartir este ticket'**
+  String get ticketLinkAction;
+
+  /// No description provided for @ticketLinkSharedWithYou.
+  ///
+  /// In es, this message translates to:
+  /// **'Te han compartido el ticket de'**
+  String get ticketLinkSharedWithYou;
+
+  /// No description provided for @ticketLinkWhoAreYou.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Quién eres?'**
+  String get ticketLinkWhoAreYou;
+
+  /// No description provided for @ticketLinkWhoAreYouHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Elige tu nombre para ver lo que te toca en este ticket.'**
+  String get ticketLinkWhoAreYouHelp;
+
+  /// No description provided for @ticketLinkNoManuals.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya no queda ningún nombre libre en este ticket.'**
+  String get ticketLinkNoManuals;
+
+  /// No description provided for @ticketLinkManualTaken.
+  ///
+  /// In es, this message translates to:
+  /// **'Ese nombre lo acaba de coger otro dispositivo. Elige otro.'**
+  String get ticketLinkManualTaken;
+
+  /// No description provided for @ticketLinkInvalid.
+  ///
+  /// In es, this message translates to:
+  /// **'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.'**
+  String get ticketLinkInvalid;
+
+  /// No description provided for @ticketLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido abrir el ticket. Inténtalo otra vez.'**
+  String get ticketLinkError;
+
+  /// No description provided for @ticketLinkGone.
+  ///
+  /// In es, this message translates to:
+  /// **'Este ticket ya no está disponible.'**
+  String get ticketLinkGone;
+
+  /// No description provided for @ticketLinkLines.
+  ///
+  /// In es, this message translates to:
+  /// **'Productos'**
+  String get ticketLinkLines;
+
+  /// No description provided for @ticketLinkTotal.
+  ///
+  /// In es, this message translates to:
+  /// **'Total'**
+  String get ticketLinkTotal;
+
+  /// No description provided for @ticketLinkRelease.
+  ///
+  /// In es, this message translates to:
+  /// **'No soy yo'**
+  String get ticketLinkRelease;
+
+  /// No description provided for @ticketLinkTemporary.
+  ///
+  /// In es, this message translates to:
+  /// **'Identificación temporal, solo en este dispositivo'**
+  String get ticketLinkTemporary;
+
+  /// No description provided for @ticketLinkViewingAs.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás viendo el ticket como {name}'**
+  String ticketLinkViewingAs(String name);
+
+  /// No description provided for @ticketLinkEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea un enlace para que quien no tenga cuenta pueda ver este ticket.'**
+  String get ticketLinkEmpty;
+
+  /// No description provided for @ticketLinkCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear enlace del ticket'**
+  String get ticketLinkCreate;
+
+  /// No description provided for @ticketLinkHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Quien reciba este enlace verá solo este ticket, nunca el resto del grupo.'**
+  String get ticketLinkHint;
+
+  /// No description provided for @ticketLinkRevoke.
+  ///
+  /// In es, this message translates to:
+  /// **'Revocar el enlace'**
+  String get ticketLinkRevoke;
+
+  /// No description provided for @ticketLinkPreparing.
+  ///
+  /// In es, this message translates to:
+  /// **'Preparando el enlace…'**
+  String get ticketLinkPreparing;
+
+  /// No description provided for @ticketLinkNotReady.
+  ///
+  /// In es, this message translates to:
+  /// **'El ticket todavía se está procesando. Inténtalo de nuevo en unos segundos.'**
+  String get ticketLinkNotReady;
+
   /// No description provided for @spaceLinkExpiryLabel.
   ///
   /// In es, this message translates to:

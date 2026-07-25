@@ -122,6 +122,14 @@ export interface SessionSnapshot {
   externalConfirmed?: Array<{ from: string; to: string; amount: Cents }>;
 }
 
+export interface TicketParticipantProjection {
+  ticketId: string;
+  pid: string;
+  /** Identidad ESTABLE del participante; nunca el nombre. */
+  manualId?: string;
+  claimedByDevice?: string;
+}
+
 export interface RecomputeResult {
   accountTotals: Record<string, { grandTotal: Cents }>;
   sessionTotals: {
@@ -154,6 +162,14 @@ export interface RecomputeResult {
   };
   /** Obligaciones originales por ticket, reconstruibles y explicables. */
   economicEntries: EconomicEntryDraft[];
+  /**
+   * Proyección DERIVADA y autoritativa de quién participa en cada ticket
+   * (Sprint 5, ADR-036). No interviene en ningún cálculo económico: existe
+   * para que las Rules puedan DEMOSTRAR, con un exists() sobre una ruta
+   * determinista, que un participante pertenece de verdad a un ticket. Sin
+   * ella esa condición dependería de un array escrito por el cliente.
+   */
+  ticketParticipants: TicketParticipantProjection[];
   /** Espejo de pagos legacy confirmados/pendientes con participantes UID. */
   legacyPayments: LegacyPaymentDraft[];
 }
@@ -238,6 +254,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
   const accountTotals: RecomputeResult['accountTotals'] = {};
   const contributions: TicketContribution[] = [];
   const economicEntries: EconomicEntryDraft[] = [];
+  const ticketParticipants: TicketParticipantProjection[] = [];
 
   for (const account of s.accounts) {
     let accountTotal = 0;
@@ -280,6 +297,25 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         grandTotal: ticket.grandTotal,
         consumption,
       });
+
+      // Participa quien consume algo o quien paga. Se proyecta la identidad
+      // estable (manualId / claimedByDevice), nunca el nombre.
+      const participatingPids = new Set<string>([paidBy]);
+      for (const [pid, amount] of Object.entries(consumption)) {
+        if (amount > 0) participatingPids.add(pid);
+      }
+      for (const pid of participatingPids) {
+        const participant = participants.find((p) => p.id === pid);
+        if (!participant) continue;
+        ticketParticipants.push({
+          ticketId: ticket.id,
+          pid,
+          ...(participant.manualId ? { manualId: participant.manualId } : {}),
+          ...(participant.claimedByDevice
+            ? { claimedByDevice: participant.claimedByDevice }
+            : {}),
+        });
+      }
 
       // P5 conserva la deuda ORIGINAL por ticket entre dos ACTORES. Un actor
       // es una cuenta (su UID) o un participante MANUAL (`manual:{id}`), que
@@ -414,6 +450,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
       ).length,
     settlementSync: { writes, untouched, removals },
     economicEntries,
+    ticketParticipants,
     legacyPayments,
   };
 }
@@ -794,6 +831,79 @@ export async function recomputeSession(sid: string): Promise<void> {
         : {}),
     });
   }
+  // Proyección de participación por ticket (ADR-036). Derivada, idempotente
+  // y escrita SOLO por Admin: es la fuente que las Rules consultan para
+  // demostrar que un participante pertenece de verdad a un ticket. No
+  // interviene en ningún cálculo económico.
+  const ticketParticipantsRef = sessionRef.collection('ticketParticipants');
+  const existingProjection = await ticketParticipantsRef.get();
+  const desiredProjection = new Map(
+    result.ticketParticipants.map((entry) => [
+      `${entry.ticketId}_${entry.pid}`,
+      {
+        ticketId: entry.ticketId,
+        pid: entry.pid,
+        ...(entry.manualId ? { manualId: entry.manualId } : {}),
+        ...(entry.claimedByDevice
+          ? { claimedByDevice: entry.claimedByDevice }
+          : {}),
+        schemaVersion: 1,
+      } as Record<string, unknown>,
+    ]),
+  );
+  for (const doc of existingProjection.docs) {
+    if (!desiredProjection.has(doc.id)) batch.delete(doc.ref);
+  }
+  for (const [id, data] of desiredProjection) {
+    const existing = existingProjection.docs.find((doc) => doc.id === id);
+    // "Escribe solo si cambia": sin esto, cada recompute tocaría todos los
+    // documentos y dispararía cascadas inútiles.
+    if (existing && comparable(existing.data()) === comparable(data)) continue;
+    batch.set(ticketParticipantsRef.doc(id), data);
+  }
+
+  // Señal de PROYECCIÓN PREPARADA (ADR-036). Va en el MISMO batch que las
+  // entradas y sus borrados, así que Firestore garantiza que nunca se marca
+  // como lista una proyección a medias: o entra todo o no entra nada. Sin
+  // esta señal no se podría distinguir «el ticket todavía se está
+  // procesando» de «esta persona no participa», y esa ambigüedad es lo que
+  // obligaría a un fallback inseguro al crear el enlace.
+  const projectionsRef = sessionRef.collection('ticketParticipantProjections');
+  const existingMarkers = await projectionsRef.get();
+  const pidsByTicket = new Map<string, string[]>();
+  for (const entry of result.ticketParticipants) {
+    pidsByTicket.set(entry.ticketId, [
+      ...(pidsByTicket.get(entry.ticketId) ?? []),
+      entry.pid,
+    ]);
+  }
+  const desiredMarkers = new Map(
+    [...pidsByTicket.entries()].map(([ticketId, pids]) => [
+      ticketId,
+      {
+        ticketId,
+        ready: true,
+        // Huella determinista del reparto vigente: cambia en cuanto entra o
+        // sale alguien, así que sirve para detectar proyecciones antiguas.
+        fingerprint: [...pids].sort().join(','),
+        schemaVersion: 1,
+      } as Record<string, unknown>,
+    ]),
+  );
+  // Un ticket borrado (o sin participación) pierde su señal: el enlace deja
+  // de poder crearse y el acceso antiguo deja de sostenerse.
+  for (const doc of existingMarkers.docs) {
+    if (!desiredMarkers.has(doc.id)) batch.delete(doc.ref);
+  }
+  for (const [id, data] of desiredMarkers) {
+    const existing = existingMarkers.docs.find((doc) => doc.id === id);
+    if (existing && comparable(existing.data()) === comparable(data)) continue;
+    batch.set(projectionsRef.doc(id), {
+      ...data,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
   await batch.commit();
   logger.info('Sesión recalculada', {
     sid,

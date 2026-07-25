@@ -1,5 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
+**Versión:** 1.16 · **Fecha:** 2026-07-25 · **Changelog:** v1.16 — enlaces de
+ticket con identificación TEMPORAL de participantes MANUAL, sin vinculación ni
+cambio de actor económico (ADR-036). Versión anterior:
 **Versión:** 1.15 · **Fecha:** 2026-07-25 · **Changelog:** v1.15 — el enlace
 de grupo entra SOLO a quien ya tiene identidad, conserva el enlace mientras
 uno se identifica y admite caducidad opcional (ADR-035). v1.14 — enlaces de
@@ -1506,6 +1509,43 @@ este mecanismo en vez de inventar otro; y en el Sprint 6 tener presente que
 un MANUAL y un INVITADO que sean la misma persona siguen siendo dos actores
 distintos — entrar por enlace no lo empeora, pero tampoco lo resuelve.
 
+### ADR-036: Enlace de ticket con identificación temporal, no vinculación
+**Estado:** Aceptada · **Fecha:** 2026-07-25 (Sprint 5)
+**Contexto:** faltaba compartir UN gasto con quien no tiene por qué entrar en
+el grupo — típicamente alguien sin cuenta anotado como participante MANUAL
+(ADR-033). Hacerle elegir quién es toca de lleno el problema que el Sprint 6
+tiene que decidir, así que había que dar acceso sin prejuzgarlo.
+**Decisión:** [HECHO] colección PROPIA `ticketLinks/{token}`, no `spaceLinks`:
+el alcance y las amenazas son distintos y compartirlas habría convertido una
+fuga de enlace de ticket en acceso al grupo entero. Se reutiliza de ADR-035
+lo que sí es igual (token de 128 bits como id, `list` restringido al dueño de
+la sesión, revocación y caducidad opcional e inmutable). El enlace publica
+únicamente el comercio y los nombres de los MANUAL de ESE ticket,
+denormalizados porque quien no se ha identificado todavía no puede leer los
+participantes — y para leerlos necesitaría el acceso que intenta obtener.
+El acceso tiene DOS grados separables: lectura del ticket sin decir ser nadie
+(`sessions/{sid}/ticketAccess/{uid}`), e identificación como un MANUAL
+concreto, que además exige el cerrojo determinista
+`ticketClaims/{ticketId}_{manualId}` escrito en el MISMO batch. `create` solo
+prospera si el cerrojo no existe: el primero que llega gana y el segundo
+recibe permission-denied. `hasTicketAccess` revalida el enlace en CADA
+lectura, así que revocar o dejar caducar corta al instante.
+**La identificación es TEMPORAL, no vinculación:** no escribe `linkedUid`, no
+cambia el actor económico —`manual:{manualId}` sigue intacto— y `recompute`
+no la lee jamás; borrarla no mueve un céntimo.
+**Por qué NO se usó `claimedByDevice`:** habría sido más corto y catastrófico.
+`recompute.ts` da PRECEDENCIA a esa vía sobre `manualId`, así que el actor
+habría migrado a un UID por la puerta de atrás — justo la vinculación
+definitiva que el Sprint 6 debe decidir con su propio ADR.
+**Consecuencias:** P5 no cambia ni una línea (con pruebas que lo demuestran).
+Poseer el enlace no da acceso a la sesión, a otros tickets, a las
+liquidaciones ni al espacio. Con un único MANUAL elegible se confirma igual,
+porque autoseleccionar convertiría un enlace reenviado por error en una
+suplantación silenciosa. Contrato en `docs/ENLACES_TICKET.md`.
+**Revisión:** en el Sprint 6, sustituir o invalidar estas pruebas al vincular
+—un MANUAL con `linkedUid` ya deja de ser elegible en Rules— sin tocar el
+historial económico, del que nunca formaron parte.
+
 ---
 
 <a name="parte-x"></a>
@@ -1544,6 +1584,7 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
 | Relaciones económicas | `docs/RELACIONES_ECONOMICAS.md` | 029 | `economic_ledger.dart` + `economicLedger.ts`, `economicPayments.ts`, `features/economy/**` | golden `economic_ledger.json`, tests de dominio/Functions/Flutter/Rules |
 | Relaciones y grupos | `docs/ESPACIOS.md` | 028, 030 | `features/spaces/**`, `features/home/**`, contexto en `features/sessions/**` | `spaces_repository_test.dart`, `session_repository_test.dart`, `app_smoke_test.dart`, Rules |
+| Enlaces de ticket | `docs/ENLACES_TICKET.md` | 036 (sobre 033, 035) | `ticket_links_repository.dart`, `join_ticket_screen.dart`, `linked_ticket_screen.dart`, `firestore.rules` (ticketLinks + ticketAccess + ticketClaims) | `ticket_links_test.dart` (12), Rules «enlaces de ticket» (17) |
 | Enlaces de grupo | `docs/ESPACIOS.md` | 035 (sobre 012, 033, 034) | `spaces_repository.dart`, `space_link_screen.dart`, `join_space_screen.dart`, `router.dart`, `AndroidManifest.xml`, `firestore.rules` (spaceLinks + joinGrants) | `space_links_test.dart` (18), `join_space_screen_test.dart` (5), `join_route_test.dart` (2), Rules «enlaces de grupo» (20) |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |

@@ -81,6 +81,114 @@ service cloud.firestore {
         && data.schemaVersion == 1;
     }
 
+    // ── Enlaces de TICKET (Sprint 5, ADR-036) ──────────────────────────
+    // Colección PROPIA, no `spaceLinks`: el alcance y las amenazas son
+    // distintos. Un enlace de grupo incorpora a alguien de forma permanente
+    // a un contexto; uno de ticket concede lectura de UN ticket y permite
+    // identificarse TEMPORALMENTE como uno de sus participantes MANUAL.
+    // Mezclarlos habría convertido cualquier fuga en acceso al grupo entero.
+    function ticketLinkData(token) {
+      return get(/databases/$(database)/documents/ticketLinks/$(token)).data;
+    }
+
+    // Vivo = existe, sin revocar y sin caducar. Se comprueba en CADA uso,
+    // no solo al canjearlo (misma política que ADR-035).
+    function ticketLinkUsable(token) {
+      return token is string
+        && exists(/databases/$(database)/documents/ticketLinks/$(token))
+        && ticketLinkData(token).status == 'active'
+        && (ticketLinkData(token).get('expiresAt', null) == null
+          || ticketLinkData(token).expiresAt > request.time);
+    }
+
+    function validTicketLink(data) {
+      return data.keys().hasOnly([
+          'sessionId', 'accountId', 'ticketId', 'merchantName', 'spaceId',
+          'manuals', 'createdByUid', 'status', 'createdAt', 'updatedAt',
+          'expiresAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'sessionId', 'accountId', 'ticketId', 'merchantName',
+          'createdByUid', 'status', 'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.sessionId is string
+        && data.accountId is string
+        && data.ticketId is string
+        // Lo ÚNICO que se ve antes de identificarse. Ni importe, ni líneas,
+        // ni participantes: un enlace filtrado no revela cuánto se gastó.
+        && data.merchantName is string
+        && data.merchantName.size() <= 60
+        // Nombres de los MANUAL del ticket, denormalizados por el dueño al
+        // crear el enlace. Es la ÚNICA forma de pintar «¿Quién eres?» antes
+        // de tener acceso, y a la vez la más estrecha: la lista contiene
+        // exactamente los manuales de ESTE ticket, nunca cuentas, invitados
+        // ni miembros del grupo, así que no revela su tamaño.
+        && (data.get('manuals', []) is list
+          && data.get('manuals', []).size() <= 30)
+        && data.status in ['active', 'revoked']
+        && (data.get('expiresAt', null) == null || data.expiresAt is timestamp)
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    // Un MANUAL ya vinculado de forma definitiva (Sprint 6) deja de ser
+    // elegible: a partir de ahí quien participa es la cuenta. Hoy
+    // `linkedUid` es siempre null, así que esto nunca excluye a nadie; se
+    // deja escrito para que el sprint de vinculación no tenga que volver a
+    // tocar esta regla. Sin espacio (histórico sin organizar) no hay
+    // identidad manual que consultar.
+    function manualIsLinked(data) {
+      return ticketLinkData(data.token).get('spaceId', '') != ''
+        && exists(/databases/$(database)/documents/spaces/$(ticketLinkData(data.token).spaceId)/manualParticipants/$(data.manualId))
+        && get(/databases/$(database)/documents/spaces/$(ticketLinkData(data.token).spaceId)/manualParticipants/$(data.manualId))
+            .data.get('linkedUid', null) != null;
+    }
+
+    // Identificación TEMPORAL del dispositivo (Sprint 5). NO es vinculación:
+    // no toca `linkedUid`, no cambia el actor económico `manual:{id}` y
+    // recompute jamás la lee. Un doc por sesión y dispositivo.
+    // La prueba cuelga de (ticketId, UID), no del UID solo: abrir un segundo
+    // ticket ya NO invalida el acceso al primero. Y se liga al UID —que es
+    // una identidad, no un dispositivo— porque para una cuenta el mismo UID
+    // vale en varios dispositivos y eso es lo correcto.
+    function ticketAccessData(sid, tid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)/ticketAccess/$(tid + '_' + request.auth.uid)).data;
+    }
+
+    // Acceso a UN ticket concreto. Revalidar el enlace en cada lectura es lo
+    // que hace que revocar o dejar caducar cierre la puerta al instante,
+    // aunque la prueba siga escrita.
+    function hasTicketAccessTo(sid, tid) {
+      return canParticipate()
+        && exists(/databases/$(database)/documents/sessions/$(sid)/ticketAccess/$(tid + '_' + request.auth.uid))
+        && ticketAccessData(sid, tid).ticketId == tid
+        && ticketLinkUsable(ticketAccessData(sid, tid).token)
+        && ticketLinkData(ticketAccessData(sid, tid).token).sessionId == sid
+        && ticketLinkData(ticketAccessData(sid, tid).token).ticketId == tid;
+    }
+
+    // Proyección AUTORITATIVA escrita por recompute (Admin): demuestra que un
+    // participante pertenece de verdad a un ticket. Sustituye a confiar en el
+    // array `manuals` del enlace, que lo escribe el cliente.
+    function participatesInTicket(sid, tid, pid) {
+      return exists(/databases/$(database)/documents/sessions/$(sid)/ticketParticipants/$(tid + '_' + pid));
+    }
+
+    // Señal AUTORITATIVA de que la proyección del ticket está completa. La
+    // escribe recompute en el MISMO batch que las entradas, así que nunca
+    // marca como lista una proyección a medias. Distingue «el ticket todavía
+    // se está procesando» de «esta persona no participa», que es lo que
+    // evita tener que inventar un fallback inseguro.
+    function ticketProjectionReady(sid, tid) {
+      return exists(/databases/$(database)/documents/sessions/$(sid)/ticketParticipantProjections/$(tid))
+        && get(/databases/$(database)/documents/sessions/$(sid)/ticketParticipantProjections/$(tid))
+            .data.ready == true;
+    }
+
+    function participantData(sid, pid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)/participants/$(pid)).data;
+    }
+
     function sessionData(sid) {
       return get(/databases/$(database)/documents/sessions/$(sid)).data;
     }
@@ -788,6 +896,56 @@ service cloud.firestore {
         && resource.data.status == 'revoked';
     }
 
+    // ── Enlaces de TICKET (Sprint 5, ADR-036) ──────────────────────────
+    // Mismo patrón que ADR-035 —el ID del documento ES el secreto— pero
+    // colección aparte: este enlace abre UN ticket, no incorpora a nadie a
+    // ningún grupo. Poseerlo no da acceso al espacio ni a los demás tickets.
+    match /ticketLinks/{token} {
+      // Conocer el token permite ver a qué ticket lleva (solo el comercio),
+      // para poder decidir antes de identificarse.
+      allow get: if signedIn();
+      // Jamás enumerable: solo el dueño de la sesión lista los suyos.
+      allow list: if isOwner(resource.data.sessionId);
+
+      allow create: if canUseSocial()
+        && validTicketLink(request.resource.data)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt is timestamp
+        // No puede nacer caducado (misma política que los de grupo).
+        && (request.resource.data.get('expiresAt', null) == null
+          || request.resource.data.expiresAt > request.time)
+        // Solo el dueño de la sesión del ticket, y con la sesión abierta.
+        && isOwner(request.resource.data.sessionId)
+        && isOpen(request.resource.data.sessionId)
+        // El ticket tiene que existir DONDE dice el enlace: así un enlace no
+        // puede apuntar a un ticket de otra sesión ni a uno inventado.
+        && exists(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId)/accounts/$(request.resource.data.accountId)/tickets/$(request.resource.data.ticketId))
+        // La carrera de consistencia se resuelve AQUÍ, no con un fallback:
+        // un enlace no puede nacer mientras la proyección del ticket no esté
+        // completa, así que jamás existe un enlace que vaya a fallar por
+        // consistencia eventual.
+        && ticketProjectionReady(
+          request.resource.data.sessionId, request.resource.data.ticketId);
+
+      // Revocar/reactivar y refrescar el rótulo. El destino es inmutable:
+      // reapuntar un enlace a otro ticket sería un secuestro.
+      allow update: if isOwner(resource.data.sessionId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'merchantName', 'updatedAt'])
+        && validTicketLink(request.resource.data)
+        && request.resource.data.sessionId == resource.data.sessionId
+        && request.resource.data.accountId == resource.data.accountId
+        && request.resource.data.ticketId == resource.data.ticketId
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.get('expiresAt', null)
+          == resource.data.get('expiresAt', null);
+
+      allow delete: if isOwner(resource.data.sessionId)
+        && resource.data.status == 'revoked';
+    }
+
     match /spaceInvites/{inviteId} {
       // Ve la invitación su receptor o el owner del espacio.
       //
@@ -954,7 +1112,126 @@ service cloud.firestore {
       }
 
       // ── Participantes ──────────────────────────────────────────────────
+      // ── Identificación TEMPORAL por enlace de ticket (ADR-036) ───────
+      // Dice «este dispositivo actúa, para ESTE ticket, como el participante
+      // MANUAL pid». NO es vinculación: no escribe `linkedUid`, no cambia el
+      // actor económico (`manual:{id}` sigue intacto) y recompute nunca la
+      // lee. Borrarla no altera un solo balance.
+      //
+      // OJO al diseño: reclamar por `claimedByDevice` habría sido más corto
+      // y catastrófico — recompute da PRECEDENCIA a esa vía sobre `manualId`
+      // (recompute.ts), así que habría migrado el actor a un UID por la
+      // puerta de atrás, que es justo lo que el sprint de vinculación tiene
+      // que decidir con un ADR propio.
+      match /ticketAccess/{accessId} {
+        // Solo su titular la lee. Nadie audita quién dice ser quién — ni
+        // siquiera el dueño de la sesión, que sí puede BORRARLA.
+        allow get: if canParticipate()
+          && accessId == resource.data.ticketId + '_' + request.auth.uid;
+        allow list: if false;
+
+        // Poseer el enlace NO basta para leer: hay que representar a alguien
+        // del ticket. O bien se es un participante ya reclamado por este UID
+        // (cuenta o invitado conocido), o bien se elige un MANUAL válido y se
+        // toma su cerrojo. No hay lectura anónima previa.
+        allow create, update: if canParticipate()
+          && accessId == request.resource.data.ticketId + '_' + request.auth.uid
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'token', 'ticketId', 'pid', 'manualId', 'createdAt',
+             'schemaVersion'])
+          && request.resource.data.keys().hasAll(
+            ['uid', 'token', 'ticketId', 'pid', 'createdAt', 'schemaVersion'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.schemaVersion == 1
+          // El enlace manda: vivo y de ESTE ticket.
+          && ticketLinkUsable(request.resource.data.token)
+          && ticketLinkData(request.resource.data.token).sessionId == sid
+          && ticketLinkData(request.resource.data.token).ticketId
+            == request.resource.data.ticketId
+          // AUTORITATIVO: el pid participa de verdad en el ticket, según la
+          // proyección que escribe recompute. No se confía en el enlace.
+          && participatesInTicket(
+            sid, request.resource.data.ticketId, request.resource.data.pid)
+          && (
+            // (a) Ya es suyo: cuenta o invitado que reclamó ese participante.
+            (participantData(sid, request.resource.data.pid)
+                .get('claimedByDevice', '') == request.auth.uid
+              && request.resource.data.get('manualId', '') == '')
+            // (b) Se identifica como un MANUAL del ticket.
+            || (
+              request.resource.data.get('manualId', '') != ''
+              && participantData(sid, request.resource.data.pid)
+                  .get('manualId', '') == request.resource.data.manualId
+              && participantData(sid, request.resource.data.pid)
+                  .get('active', true) == true
+              // Ya vinculado de forma definitiva (Sprint 6) ⇒ no elegible.
+              && !manualIsLinked(request.resource.data)
+              // Cerrojo del MISMO batch y a nombre propio.
+              && getAfter(/databases/$(database)/documents/sessions/$(sid)/ticketClaims/$(request.resource.data.ticketId + '_' + request.resource.data.manualId))
+                  .data.uid == request.auth.uid
+            )
+          );
+
+        // Recuperación: la suelta su titular, o la retira el DUEÑO de la
+        // sesión cuando alguien se ha identificado por error o de mala fe.
+        allow delete: if (canParticipate()
+            && accessId == resource.data.ticketId + '_' + request.auth.uid)
+          || isOwner(sid);
+      }
+
+      // Cerrojo determinista por (ticket, MANUAL): su ID hace imposible que
+      // existan dos. El primero que escribe gana; el segundo recibe
+      // permission-denied y la app lo presenta como «ya no disponible».
+      //
+      // El «primero gana» NO deja al verdadero MANUAL bloqueado: el dueño de
+      // la sesión puede liberar el cerrojo (y la prueba), y revocar o rotar
+      // el enlace invalida todas las identificaciones de golpe, porque se
+      // revalida en cada lectura.
+      match /ticketClaims/{claimId} {
+        allow get: if canParticipate()
+          && (resource == null || resource.data.uid == request.auth.uid);
+        allow list: if isOwner(sid);
+
+        allow create: if canParticipate()
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'ticketId', 'manualId', 'createdAt', 'schemaVersion'])
+          && request.resource.data.uid == request.auth.uid
+          && claimId == request.resource.data.ticketId + '_'
+            + request.resource.data.manualId
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.schemaVersion == 1;
+
+        allow update: if canParticipate()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.ticketId == resource.data.ticketId
+          && request.resource.data.manualId == resource.data.manualId;
+
+        allow delete: if (canParticipate()
+            && resource.data.uid == request.auth.uid)
+          || isOwner(sid);
+      }
+
+      // Proyección autoritativa de participación por ticket (ADR-036). La
+      // escribe SOLO recompute (Admin); ningún cliente la toca. Se lee para
+      // que el dueño pueda preparar el enlace.
+      match /ticketParticipants/{projectionId} {
+        allow read: if canRead(sid);
+        allow write: if false;
+      }
+
+      // Señal de proyección preparada. La escribe SOLO recompute (Admin); el
+      // dueño la lee para saber cuándo puede compartir el enlace.
+      match /ticketParticipantProjections/{ticketId} {
+        allow read: if canRead(sid);
+        allow write: if false;
+      }
+
       match /participants/{pid} {
+        // El enlace de ticket NO abre los participantes: los nombres de los
+        // demás no son suyos. Rules sí los consulta internamente con get()
+        // para validar una identificación.
         allow read: if canRead(sid);
         allow create: if isOwner(sid) && isOpen(sid);
         allow delete: if isOwner(sid) && isOpen(sid);
@@ -986,7 +1263,9 @@ service cloud.firestore {
         allow delete: if isOwner(sid) && isOpen(sid);
 
         match /tickets/{tid} {
-          allow read: if canRead(sid);
+          // Enlace de ticket: SOLO el ticket del enlace. Ni los demás
+          // tickets de la sesión, ni la sesión, ni el espacio.
+          allow read: if canRead(sid) || hasTicketAccessTo(sid, tid);
           // spaceId (P4): un ticket pertenece a UN espacio como máximo y
           // solo puede vincularlo el dueño de la sesión a un espacio del
           // que sea miembro. '' o ausente = sin espacio (compatibilidad).
@@ -1003,7 +1282,7 @@ service cloud.firestore {
           allow delete: if isOwner(sid) && isOpen(sid);
 
           match /lines/{lid} {
-            allow read: if canRead(sid);
+            allow read: if canRead(sid) || hasTicketAccessTo(sid, tid);
             allow create, delete: if isOwner(sid) && isOpen(sid);
             allow update: if (isOwner(sid) && isOpen(sid))
               || guestCanEditLine(sid, aid, tid)
