@@ -999,6 +999,63 @@ describe('spaces', () => {
   it('cuenta completa crea espacio + membresía owner en batch', () =>
     assertSucceeds(createSpace(db(FOURTH), FOURTH, 'nuevo')));
 
+  // REGRESIÓN: la app NO escribe a ciegas. Invitar y crear una relación
+  // empiezan leyendo dentro de una transacción el documento que van a
+  // crear (para ser idempotentes), y ese documento todavía NO existe.
+  // Si `read` no contempla `resource == null`, la transacción muere con
+  // permission-denied antes de escribir nada.
+  it('grupo: invitar lee la invitación inexistente y la crea (como la app)',
+      async () => {
+    const f = db(SOCIAL_OUTSIDER); // owner de sp1
+    const inviteId = `sp1_${FOURTH}`;
+    await assertSucceeds(runTransaction(f, async (tx) => {
+      const existing = await tx.get(doc(f, `spaceInvites/${inviteId}`));
+      assert.equal(existing.exists(), false);
+      tx.set(doc(f, `spaceInvites/${inviteId}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: FOURTH, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }));
+  });
+
+  it('relación: se lee el espacio inexistente y se crea entero (como la app)',
+      async () => {
+    const relationId = `relationship_${FOURTH}~${THIRD}`;
+    const f = db(FOURTH);
+    await assertSucceeds(runTransaction(f, async (tx) => {
+      const existing = await tx.get(doc(f, `spaces/${relationId}`));
+      assert.equal(existing.exists(), false);
+      tx.set(doc(f, `spaces/${relationId}`), {
+        name: 'Relación', ownerUid: FOURTH, kind: 'relationship',
+        relationshipUids: [FOURTH, THIRD], status: 'active',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+      tx.set(doc(f, `spaces/${relationId}/members/${FOURTH}`), {
+        uid: FOURTH, joinedAt: serverTimestamp(),
+      });
+      tx.set(doc(f, `spaceInvites/${relationId}_${THIRD}`), {
+        spaceId: relationId, spaceName: 'Relación', fromUid: FOURTH,
+        toUid: THIRD, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }));
+  });
+
+  it('invitar comprueba antes si el destino ya es miembro (get ajeno)', () =>
+    assertSucceeds(
+      getDoc(doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${FOURTH}`))));
+
+  it('leer un espacio o invitación ajenos inexistentes SIGUE denegado',
+      async () => {
+    // El hueco de lectura no puede convertirse en un oráculo de existencia
+    // para terceros: FOURTH no participa en esta pareja ni en sp2.
+    await assertFails(getDoc(
+      doc(db(FOURTH), `spaces/relationship_${THIRD}~${SOCIAL_OUTSIDER}`)));
+    await assertFails(getDoc(doc(db(FOURTH), `spaceInvites/sp2_${THIRD}`)));
+  });
+
   it('crea una relación canónica con invitación en el mismo batch', async () => {
     const relationId = `relationship_${FOURTH}~${THIRD}`;
     const f = db(FOURTH);

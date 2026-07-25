@@ -327,6 +327,33 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
     }
 
+    // El ID canónico de una relación reserva la pareja: `relationship_a~b`
+    // con los UID ordenados. Reconocerse en él NO revela nada de terceros,
+    // así que autoriza a sondear ese documento mientras aún no existe.
+    function relationshipIdInvolvesSelf(spaceId) {
+      return spaceId.matches('^relationship_' + request.auth.uid + '~.*$')
+        || spaceId.matches('^relationship_.*~' + request.auth.uid + '$');
+    }
+
+    // Owner comprobado sin asumir que el espacio exista (get() sobre un
+    // documento ausente aborta la evaluación con "Null value error").
+    function isExistingSpaceOwner(spaceId) {
+      return canUseSocial()
+        && exists(/databases/$(database)/documents/spaces/$(spaceId))
+        && spaceData(spaceId).ownerUid == request.auth.uid;
+    }
+
+    // El ID de invitación es `{spaceId}_{toUid}`: el destinatario es el
+    // último segmento y el espacio, todo lo anterior (los UID de Firebase
+    // son alfanuméricos, nunca contienen '_').
+    function inviteTargetUid(inviteId) {
+      return inviteId.split('_')[inviteId.split('_').size() - 1];
+    }
+
+    function inviteSpaceIdOf(inviteId) {
+      return inviteId.split('_')[0:inviteId.split('_').size() - 1].join('_');
+    }
+
     function spaceMemberJoinedAt(spaceId) {
       return get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
           .data.joinedAt;
@@ -387,7 +414,18 @@ service cloud.firestore {
     // definición — y las reglas nunca necesitan get() sobre docs del mismo
     // batch (que fallaría).
     match /spaces/{spaceId} {
-      allow read: if canUseSocial() && isSpaceMember(spaceId);
+      // Crear una relación empieza leyendo su documento canónico DENTRO de
+      // la transacción (idempotencia: A→B y B→A son el mismo contexto), y
+      // ese documento todavía no existe. `isSpaceMember` sería false y la
+      // transacción moriría antes de escribir. Mismo patrón que P3 para
+      // amistades: con el documento ausente se autoriza por el ID, que solo
+      // permite sondear relaciones en las que uno participa.
+      allow get: if canUseSocial()
+        && (resource == null
+          ? relationshipIdInvolvesSelf(spaceId)
+          : isSpaceMember(spaceId));
+
+      allow list: if canUseSocial() && isSpaceMember(spaceId);
 
       // Alta atómica: espacio + SU membresía en el mismo batch.
       allow create: if canUseSocial()
@@ -495,7 +533,22 @@ service cloud.firestore {
 
     match /spaceInvites/{inviteId} {
       // Ve la invitación su receptor o el owner del espacio.
-      allow read: if canUseSocial()
+      //
+      // Invitar empieza leyendo el documento determinista dentro de la
+      // transacción para ser idempotente (reenviar tras rechazo reutiliza
+      // el doc), y la PRIMERA vez ese documento no existe: sin la rama de
+      // `resource == null` la lectura fallaba con "Null value error" y la
+      // transacción moría antes de escribir. Con el documento ausente se
+      // autoriza por el ID: solo el destinatario y el owner de ESE espacio
+      // pueden sondearlo, así que no hay oráculo de existencia ajeno.
+      allow get: if canUseSocial()
+        && (resource == null
+          ? (inviteTargetUid(inviteId) == request.auth.uid
+            || isExistingSpaceOwner(inviteSpaceIdOf(inviteId)))
+          : (resource.data.toUid == request.auth.uid
+            || resource.data.fromUid == request.auth.uid));
+
+      allow list: if canUseSocial()
         && (resource.data.toUid == request.auth.uid
           || resource.data.fromUid == request.auth.uid);
 
