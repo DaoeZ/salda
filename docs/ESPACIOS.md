@@ -164,6 +164,49 @@ persona activas. El mecanismo tendrá que cubrir al menos:
   propias en ese mismo contexto (fusión de saldos frente a coexistencia
   histórica).
 
+## Invitados (GUEST, ADR-034)
+
+Tercer tipo de participante, entre la cuenta y el manual: **usa la app** pero
+**no crea cuenta**.
+
+```text
+guestIdentities/{uid}
+  uid · displayName (1..40) · createdAt · updatedAt · schemaVersion: 1
+spaces/{spaceId}/members/{uid}
+  kind: account|guest · displayName?   // snapshot SOLO para invitados
+spaces/{spaceId}.guestsCanCreateExpenses: bool   // política del anfitrión
+```
+
+**Persistencia**: su identidad es la sesión anónima de Firebase Auth, que el
+SDK guarda en el dispositivo y sobrevive a reinicios y cierres de la app. El
+UID no cambia, así que su historial económico tampoco. `guestIdentities/{uid}`
+solo añade el nombre visible que él elige.
+
+**No es un perfil público**: sin username, sin búsqueda y con `list` prohibido
+en Rules. Solo se lee conociendo el UID (el anfitrión al invitarlo, o los
+miembros del contexto para pintar su nombre). Por eso su nombre viaja también
+como snapshot en la membresía: no hay perfil del que leerlo en vivo.
+
+**Puede**: participar en relaciones y grupos, aparecer en balances y
+liquidaciones, ver la cronología de lo que le afecta, recibir y aceptar
+invitaciones, y renombrarse (sin perder identidad ni historial).
+
+**No puede**: crear relaciones o grupos, invitar, administrar miembros,
+transferir, archivar, tener perfil público ni amistades. Rules lo separa con
+dos predicados: `canParticipate()` (cuenta **o** invitado) para participar, y
+`canUseSocial()` (solo cuenta) para todo lo que crea o gobierna el contexto.
+
+**Gastos bajo permiso del anfitrión**: un invitado solo origina gasto en un
+contexto con `guestsCanCreateExpenses: true`, que únicamente fija su
+propietario. Ausente equivale a `false` (valor conservador). Un miembro con
+cuenta nunca depende de esa bandera.
+
+**Identidad económica**: un invitado tiene UID, así que es un actor de cuenta
+para ADR-033 (`uid` sin prefijo) y encaja en P5 sin ningún cambio.
+
+Fuera de alcance: enlaces, deep links, vinculación con cuentas y reclamación
+de participantes manuales.
+
 ## Tickets y política de privacidad
 
 Todo ticket nuevo pertenece a UN contexto. La sesión y el ticket llevan

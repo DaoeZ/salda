@@ -877,6 +877,46 @@ class AppLocalizationsEs extends AppLocalizations {
   String get activityPaymentCancelled => 'Canceló un pago';
 
   @override
+  String get guestNameTitle => 'Tu nombre';
+
+  @override
+  String get guestNameBody =>
+      'Estás usando Salda como invitado: no hace falta cuenta. Elige el nombre con el que te verán en los grupos y relaciones.';
+
+  @override
+  String get guestNameLabel => 'Nombre visible';
+
+  @override
+  String get guestNameRequired => 'Escribe un nombre para continuar';
+
+  @override
+  String get guestNameSaved => 'Nombre guardado';
+
+  @override
+  String get guestNameError =>
+      'No se pudo guardar el nombre. Inténtalo de nuevo.';
+
+  @override
+  String get guestNameBannerTitle => 'Elige tu nombre para participar';
+
+  @override
+  String get guestNameBannerAction => 'Elegir nombre';
+
+  @override
+  String get guestLimitsBody =>
+      'Como invitado participas en gastos y balances. Crear grupos o relaciones, invitar personas y tener perfil público requieren una cuenta. Podrás crear gastos si el anfitrión lo permite.';
+
+  @override
+  String get guestBadge => 'Invitado';
+
+  @override
+  String get guestPolicyTitle => 'Permitir gastos a los invitados';
+
+  @override
+  String get guestPolicyBody =>
+      'Si lo activas, los invitados de este contexto podrán crear gastos.';
+
+  @override
   String get manualParticipantsTitle => 'Personas sin cuenta';
 
   @override

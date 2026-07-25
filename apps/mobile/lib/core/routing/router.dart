@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/ai/presentation/ai_providers_screen.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/presentation/guest_name_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/activity/presentation/activity_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
@@ -46,15 +47,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return location == '/verify-email' ? null : '/verify-email';
       }
       if (user.isAnonymous) {
-        final isSocialRoute =
+        // GUEST (ADR-034): participa en contextos, balances y cronología,
+        // pero NUNCA en lo que exige cuenta — perfil público, amistades y
+        // búsqueda de personas siguen fuera de su alcance.
+        final isAccountOnlyRoute =
             location == '/home/profile' ||
             location == '/home/friends' ||
-            location.startsWith('/home/economy') ||
-            location.startsWith('/home/activity') ||
             location == '/home/people' ||
-            location.startsWith('/home/person/') ||
-            location.startsWith('/home/spaces');
-        if (isSocialRoute) return '/home';
+            location.startsWith('/home/person/');
+        if (isAccountOnlyRoute) return '/home';
         if (location == '/register' || location.startsWith('/home')) {
           return null;
         }
@@ -98,6 +99,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const CreateRelationshipScreen(),
           ),
           GoRoute(path: 'profile', builder: (_, _) => const ProfileScreen()),
+          // Identidad del invitado: su nombre visible (ADR-034).
+          GoRoute(
+            path: 'guest-name',
+            builder: (_, _) => const GuestNameScreen(),
+          ),
           GoRoute(path: 'friends', builder: (_, _) => const FriendsScreen()),
           GoRoute(path: 'activity', builder: (_, _) => const ActivityScreen()),
           GoRoute(

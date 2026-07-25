@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../auth/data/auth_repository.dart';
+import '../auth/data/guest_identity_repository.dart';
 import '../economy/presentation/economic_overview_screen.dart';
 import '../profile/data/profile_repository.dart';
 import '../review/application/draft_store.dart';
@@ -38,6 +39,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text(Brand.appName),
         actions: [
+          // GUEST (ADR-034): participa, así que ve cronología y balances;
+          // el resto de accesos siguen siendo de cuenta.
+          if (ref.watch(isOperationalGuestProvider)) ...[
+            IconButton(
+              tooltip: l10n.activityTitle,
+              onPressed: () => context.push('/home/activity'),
+              icon: const Icon(Icons.history),
+            ),
+            IconButton(
+              tooltip: l10n.economyTitle,
+              onPressed: () => context.push('/home/economy'),
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+            ),
+          ],
           if (ref.watch(currentAppUserProvider)?.isFullAccount ?? false) ...[
             IconButton(
               tooltip: l10n.activityTitle,
@@ -69,6 +84,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       body: Column(
         children: [
+          const _GuestNameBanner(),
           const _ProfileBanner(),
           const _DraftBanner(),
           Expanded(
@@ -320,6 +336,34 @@ Future<void> _showCreateContextSheet(BuildContext context, WidgetRef ref) =>
         );
       },
     );
+
+/// Aviso al INVITADO que aún no ha elegido nombre (ADR-034). Sin nombre no
+/// puede participar: es lo único que necesita, sin crear ninguna cuenta.
+class _GuestNameBanner extends ConsumerWidget {
+  const _GuestNameBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final user = ref.watch(currentAppUserProvider);
+    if (user == null || !user.isAnonymous) return const SizedBox.shrink();
+    final identity = ref.watch(myGuestIdentityProvider);
+    // Solo cuando SABEMOS que no hay identidad (no mientras carga).
+    if (identity.isLoading || identity.value != null) {
+      return const SizedBox.shrink();
+    }
+    return MaterialBanner(
+      leading: const Icon(Icons.person_pin_circle_outlined),
+      content: Text(l10n.guestNameBannerTitle),
+      actions: [
+        FilledButton.tonal(
+          onPressed: () => context.push('/home/guest-name'),
+          child: Text(l10n.guestNameBannerAction),
+        ),
+      ],
+    );
+  }
+}
 
 /// Aviso de perfil público pendiente (P2): las cuentas completas sin perfil
 /// lo crean desde aquí (cubre registro por email, Google y conversiones de

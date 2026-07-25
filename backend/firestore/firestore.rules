@@ -50,6 +50,37 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
     }
 
+    // GUEST (ADR-034): usa la app con identidad persistente del dispositivo
+    // (Auth anónimo) y nombre visible propio, pero SIN cuenta ni perfil
+    // público. Participa en contextos y balances; nunca crea contextos,
+    // invita, administra miembros ni tiene identidad buscable.
+    function isGuest() {
+      return isAnonymous()
+        && exists(/databases/$(database)/documents/guestIdentities/$(request.auth.uid));
+    }
+
+    // Quien puede PARTICIPAR en un contexto: cuenta completa o invitado.
+    // Ojo: participar ≠ administrar. Todo lo que crea o gobierna el
+    // contexto sigue exigiendo canUseSocial().
+    function canParticipate() {
+      return canUseSocial() || isGuest();
+    }
+
+    function validGuestIdentity(data, uid) {
+      return data.keys().hasOnly([
+          'uid', 'displayName', 'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'uid', 'displayName', 'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.uid == uid
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
     function sessionData(sid) {
       return get(/databases/$(database)/documents/sessions/$(sid)).data;
     }
@@ -287,13 +318,13 @@ service cloud.firestore {
     // Ambos recursos los escribe exclusivamente Admin SDK (recompute o
     // callables). El cliente solo consulta los pares en los que participa.
     match /economicEntries/{entryId} {
-      allow read: if canUseSocial()
+      allow read: if canParticipate()
         && request.auth.uid in resource.data.memberUids;
       allow create, update, delete: if false;
     }
 
     match /economicPayments/{paymentId} {
-      allow read: if canUseSocial()
+      allow read: if canParticipate()
         && request.auth.uid in resource.data.memberUids;
       allow create, update, delete: if false;
     }
@@ -305,9 +336,25 @@ service cloud.firestore {
     // heredan actividad anterior. Las queries siempre incluyen
     // array-contains sobre el propio uid (así la regla es demostrable).
     match /activityEvents/{eventId} {
-      allow read: if canUseSocial()
+      allow read: if canParticipate()
         && request.auth.uid in resource.data.memberUids;
       allow create, update, delete: if false;
+    }
+
+    // ── Identidad de invitado (ADR-034) ────────────────────────────────
+    // NO es un perfil público: no tiene username, no es buscable y solo la
+    // lee quien ya conoce el UID (el anfitrión al invitarlo, o los miembros
+    // del contexto para pintar su nombre). El propio invitado la crea y
+    // mantiene; nadie más puede escribirla ni suplantarla.
+    match /guestIdentities/{uid} {
+      allow get: if signedIn();
+      allow list: if false; // jamás buscable: no es identidad pública
+      allow create, update: if isAnonymous()
+        && request.auth.uid == uid
+        && validGuestIdentity(request.resource.data, uid)
+        && (request.method == 'update'
+          || request.resource.data.createdAt is timestamp);
+      allow delete: if isAnonymous() && request.auth.uid == uid;
     }
 
     // ── Espacios compartidos (P4, ADR-028) ─────────────────────────────
@@ -397,12 +444,20 @@ service cloud.firestore {
       return canUseSocial() && spaceData(spaceId).ownerUid == request.auth.uid;
     }
 
+    // Política del anfitrión sobre los invitados (ADR-034). Ausente = el
+    // valor conservador: los invitados NO crean gastos.
+    function guestsMayCreateExpenses(spaceId) {
+      return spaceData(spaceId).get('guestsCanCreateExpenses', false) == true;
+    }
+
     function validSpaceShape(data) {
       return data.keys().hasOnly([
           'name', 'avatarEmoji', 'ownerUid', 'status',
           'createdAt', 'updatedAt', 'schemaVersion', 'kind',
-          'relationshipUids'
+          'relationshipUids', 'guestsCanCreateExpenses'
         ])
+        && (!('guestsCanCreateExpenses' in data)
+          || data.guestsCanCreateExpenses is bool)
         && data.name is string
         && data.name.size() >= 2
         && data.name.size() <= 40
@@ -442,14 +497,16 @@ service cloud.firestore {
       // transacción moriría antes de escribir. Mismo patrón que P3 para
       // amistades: con el documento ausente se autoriza por el ID, que solo
       // permite sondear relaciones en las que uno participa.
-      allow get: if canUseSocial()
-        && (resource == null
-          ? relationshipIdInvolvesSelf(spaceId)
-          : isSpaceMember(spaceId));
+      // Un INVITADO lee el contexto del que ya es miembro (ADR-034), pero
+      // nunca sondea relaciones por ID: no crea ni reserva contextos.
+      allow get: if resource == null
+        ? (canUseSocial() && relationshipIdInvolvesSelf(spaceId))
+        : (canParticipate() && isSpaceMember(spaceId));
 
-      allow list: if canUseSocial() && isSpaceMember(spaceId);
+      allow list: if canParticipate() && isSpaceMember(spaceId);
 
-      // Alta atómica: espacio + SU membresía en el mismo batch.
+      // Alta atómica: espacio + SU membresía en el mismo batch. Crear un
+      // contexto exige cuenta: un invitado jamás es propietario.
       allow create: if canUseSocial()
         && validSpaceShape(request.resource.data)
         && request.resource.data.ownerUid == request.auth.uid
@@ -516,13 +573,24 @@ service cloud.firestore {
       }
 
       match /members/{memberUid} {
-        // Cualquier miembro ve la lista de miembros.
-        allow read: if canUseSocial() && isSpaceMember(spaceId);
+        // Cualquier miembro ve la lista de miembros, invitados incluidos.
+        allow read: if canParticipate() && isSpaceMember(spaceId);
 
-        allow create: if canUseSocial()
-          && request.resource.data.keys().hasOnly(['uid', 'joinedAt'])
+        // Un invitado se une exactamente igual (aceptando su invitación),
+        // pero guarda `displayName` porque no tiene perfil público del que
+        // leerlo: es un snapshot del contexto, no identidad buscable.
+        allow create: if canParticipate()
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'joinedAt', 'kind', 'displayName'])
           && request.resource.data.uid == memberUid
           && request.resource.data.joinedAt is timestamp
+          && (request.resource.data.get('kind', 'account') == 'guest'
+            ? (isGuest()
+              && request.resource.data.displayName is string
+              && request.resource.data.displayName.size() >= 1
+              && request.resource.data.displayName.size() <= 40)
+            : (canUseSocial()
+              && !('displayName' in request.resource.data)))
           && memberUid == request.auth.uid
           && (futureSpaceData(spaceId).get('kind', 'group') != 'relationship'
             || memberUid in futureSpaceData(spaceId).relationshipUids)
@@ -590,14 +658,14 @@ service cloud.firestore {
       // transacción moría antes de escribir. Con el documento ausente se
       // autoriza por el ID: solo el destinatario y el owner de ESE espacio
       // pueden sondearlo, así que no hay oráculo de existencia ajeno.
-      allow get: if canUseSocial()
+      allow get: if canParticipate()
         && (resource == null
           ? (inviteTargetUid(inviteId) == request.auth.uid
             || isExistingSpaceOwner(inviteSpaceIdOf(inviteId)))
           : (resource.data.toUid == request.auth.uid
             || resource.data.fromUid == request.auth.uid));
 
-      allow list: if canUseSocial()
+      allow list: if canParticipate()
         && (resource.data.toUid == request.auth.uid
           || resource.data.fromUid == request.auth.uid);
 
@@ -621,10 +689,14 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
-        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.toUid))
+        // El destino debe existir como identidad: cuenta con perfil público
+        // o INVITADO (ADR-034). El invitado no es buscable, así que el
+        // anfitrión llega a él por su identificador, nunca por búsqueda.
+        && (exists(/databases/$(database)/documents/profiles/$(request.resource.data.toUid))
+          || exists(/databases/$(database)/documents/guestIdentities/$(request.resource.data.toUid)))
         && !exists(/databases/$(database)/documents/spaces/$(request.resource.data.spaceId)/members/$(request.resource.data.toUid));
 
-      allow update: if canUseSocial()
+      allow update: if canParticipate()
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'updatedAt'])
         && request.resource.data.updatedAt is timestamp
@@ -682,7 +754,12 @@ service cloud.firestore {
           || (request.resource.data.contextModelVersion == 1
             && request.resource.data.spaceId is string
             && request.resource.data.spaceId != ''
-            && isSpaceMember(request.resource.data.spaceId)))
+            && isSpaceMember(request.resource.data.spaceId)
+            // GUEST (ADR-034): origina gasto SOLO si el anfitrión lo permite
+            // en ese contexto. Sin la bandera participa y ve sus balances,
+            // pero no puede crear el gasto.
+            && (!isGuest()
+              || guestsMayCreateExpenses(request.resource.data.spaceId))))
         // Agregados: o ausentes o a cero; a partir de aquí, solo la function.
         && request.resource.data.get('computeVersion', 0) == 0
         && request.resource.data.get('pendingSettlements', 0) == 0

@@ -1674,5 +1674,197 @@ describe('activityEvents', () => {
   });
 });
 
+// ─── Modo invitado (GUEST, ADR-034) ─────────────────────────────────────
+describe('guest', () => {
+  // GUEST = Auth anónimo CON identidad de invitado. La identidad persiste
+  // en el dispositivo (la sesión anónima de Firebase sobrevive a reinicios).
+  const identity = (uid, overrides = {}) => ({
+    uid,
+    displayName: 'Invitada',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `guestIdentities/${GUEST}`), {
+        uid: GUEST, displayName: 'Alba invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      // El invitado ya es miembro de sp1 (su alta se prueba aparte).
+      await setDoc(doc(f, `spaces/sp1/members/${GUEST}`), {
+        uid: GUEST, kind: 'guest', displayName: 'Alba invitada',
+        joinedAt: serverTimestamp(),
+      });
+    });
+  });
+
+  it('crea y mantiene su identidad; nadie más puede escribirla', async () => {
+    await assertSucceeds(setDoc(
+      doc(db(OTHER), `guestIdentities/${OTHER}`), identity(OTHER)));
+    // Renombrarse: el nombre visible es suyo.
+    await assertSucceeds(updateDoc(
+      doc(db(GUEST), `guestIdentities/${GUEST}`),
+      { displayName: 'Alba G.', updatedAt: serverTimestamp() }));
+    // Suplantación y escritura ajena: denegadas.
+    await assertFails(setDoc(
+      doc(db(OTHER), `guestIdentities/${GUEST}`), identity(GUEST)));
+    await assertFails(updateDoc(
+      doc(db(STRANGER), `guestIdentities/${GUEST}`),
+      { displayName: 'Hack', updatedAt: serverTimestamp() }));
+    // Forma inválida (nombre vacío o campo de más).
+    await assertFails(setDoc(
+      doc(db(OTHER), `guestIdentities/${OTHER}`),
+      identity(OTHER, { displayName: '' })));
+    await assertFails(setDoc(
+      doc(db(OTHER), `guestIdentities/${OTHER}`),
+      identity(OTHER, { username: 'alba' })));
+  });
+
+  it('la identidad NO es pública: se lee por UID pero jamás es buscable',
+      async () => {
+    await assertSucceeds(getDoc(doc(db(OWNER), `guestIdentities/${GUEST}`)));
+    await assertFails(getDocs(collection(db(OWNER), 'guestIdentities')));
+  });
+
+  it('participa: lee su contexto, sus miembros y sus balances', async () => {
+    await assertSucceeds(getDoc(doc(db(GUEST), 'spaces/sp1')));
+    await assertSucceeds(
+      getDocs(collection(db(GUEST), 'spaces/sp1/members')));
+    await assertSucceeds(getDocs(query(
+      collection(db(GUEST), 'economicEntries'),
+      where('memberUids', 'array-contains', GUEST))));
+  });
+
+  it('NO crea contextos, ni invita, ni administra, ni tiene perfil público',
+      async () => {
+    // Crear un espacio (aunque sea con su propia membresía en el batch).
+    const f = db(GUEST);
+    const batch = writeBatch(f);
+    batch.set(doc(f, 'spaces/guest-space'), {
+      name: 'Mío', ownerUid: GUEST, status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 1,
+    });
+    batch.set(doc(f, `spaces/guest-space/members/${GUEST}`), {
+      uid: GUEST, joinedAt: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+
+    // Invitar a alguien a un contexto del que es miembro.
+    await assertFails(setDoc(doc(f, `spaceInvites/sp1_${FOURTH}`), {
+      spaceId: 'sp1', spaceName: 'Viaje', fromUid: GUEST, toUid: FOURTH,
+      status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    // Administrar: renombrar, archivar, transferir o expulsar.
+    await assertFails(updateDoc(doc(f, 'spaces/sp1'),
+      { name: 'Renombrado', updatedAt: serverTimestamp() }));
+    await assertFails(
+      deleteDoc(doc(f, `spaces/sp1/members/${STRANGER}`)));
+    // Perfil público y amistades: fuera de su alcance.
+    await assertFails(setDoc(doc(f, `profiles/${GUEST}`), {
+      displayName: 'Alba', displayNameLower: 'alba', username: 'albaguest',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 1,
+    }));
+    await assertFails(setDoc(
+      doc(f, `friendships/${friendshipId(GUEST, STRANGER)}`),
+      friendshipData(GUEST, STRANGER)));
+  });
+
+  it('el anfitrión puede invitar a un invitado (sin perfil público)',
+      async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(
+      doc(ctx.firestore(), `guestIdentities/${OTHER}`), {
+        uid: OTHER, displayName: 'Lucía invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      }));
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${OTHER}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: OTHER, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+    // Un UID sin ninguna identidad (ni perfil ni invitado) sigue denegado.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceInvites/sp1_fantasma-uid'), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: 'fantasma-uid', status: 'pending',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      }));
+  });
+
+  it('se une aceptando su invitación, con su nombre como snapshot',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `guestIdentities/${OTHER}`), {
+        uid: OTHER, displayName: 'Lucía invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, `spaceInvites/sp1_${OTHER}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: OTHER, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+
+    const f = db(OTHER);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/sp1_${OTHER}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${OTHER}`), {
+      uid: OTHER, kind: 'guest', displayName: 'Lucía invitada',
+      joinedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('gastos: solo si el anfitrión lo permite en ese contexto', async () => {
+    const session = {
+      ownerUid: GUEST, kind: 'single', name: 'Cena', status: 'open',
+      splitModeDefault: 'equal', shareCode: 'GUEST-CODE-16CHARS',
+      currency: 'EUR', computeVersion: 0,
+      contextModelVersion: 1, spaceId: 'sp1',
+    };
+    // Por defecto (bandera ausente) el invitado NO origina gasto.
+    await assertFails(setDoc(doc(db(GUEST), 'sessions/guest-1'), session));
+
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(
+      doc(ctx.firestore(), 'spaces/sp1'), { guestsCanCreateExpenses: true }));
+    await assertSucceeds(setDoc(doc(db(GUEST), 'sessions/guest-2'), session));
+
+    // Un miembro con cuenta nunca depende de esa bandera.
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(
+      doc(ctx.firestore(), 'spaces/sp1'), { guestsCanCreateExpenses: false }));
+    await assertSucceeds(setDoc(doc(db(OWNER), 'sessions/host-1'),
+      { ...session, ownerUid: OWNER, shareCode: 'HOST-CODE-16CHARSX' }));
+  });
+
+  it('la política de invitados solo la fija el owner del contexto',
+      async () => {
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1'),
+      { guestsCanCreateExpenses: true, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(GUEST), 'spaces/sp1'),
+      { guestsCanCreateExpenses: true, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(STRANGER), 'spaces/sp1'),
+      { guestsCanCreateExpenses: true, updatedAt: serverTimestamp() }));
+  });
+
+  it('un anónimo SIN identidad de invitado no participa', async () => {
+    // OTHER es anónimo pero aún no ha elegido nombre: no es guest.
+    await assertFails(getDoc(doc(db(OTHER), 'spaces/sp1')));
+  });
+});
+
 // Nota: assert está importado para fallos explícitos en helpers futuros.
 void assert;

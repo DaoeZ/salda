@@ -1624,6 +1624,78 @@ abstract class AppLocalizations {
   /// **'Canceló un pago'**
   String get activityPaymentCancelled;
 
+  /// No description provided for @guestNameTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu nombre'**
+  String get guestNameTitle;
+
+  /// No description provided for @guestNameBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás usando Salda como invitado: no hace falta cuenta. Elige el nombre con el que te verán en los grupos y relaciones.'**
+  String get guestNameBody;
+
+  /// No description provided for @guestNameLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre visible'**
+  String get guestNameLabel;
+
+  /// No description provided for @guestNameRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe un nombre para continuar'**
+  String get guestNameRequired;
+
+  /// No description provided for @guestNameSaved.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre guardado'**
+  String get guestNameSaved;
+
+  /// No description provided for @guestNameError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo guardar el nombre. Inténtalo de nuevo.'**
+  String get guestNameError;
+
+  /// No description provided for @guestNameBannerTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Elige tu nombre para participar'**
+  String get guestNameBannerTitle;
+
+  /// No description provided for @guestNameBannerAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Elegir nombre'**
+  String get guestNameBannerAction;
+
+  /// No description provided for @guestLimitsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Como invitado participas en gastos y balances. Crear grupos o relaciones, invitar personas y tener perfil público requieren una cuenta. Podrás crear gastos si el anfitrión lo permite.'**
+  String get guestLimitsBody;
+
+  /// No description provided for @guestBadge.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitado'**
+  String get guestBadge;
+
+  /// No description provided for @guestPolicyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Permitir gastos a los invitados'**
+  String get guestPolicyTitle;
+
+  /// No description provided for @guestPolicyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Si lo activas, los invitados de este contexto podrán crear gastos.'**
+  String get guestPolicyBody;
+
   /// No description provided for @manualParticipantsTitle.
   ///
   /// In es, this message translates to:

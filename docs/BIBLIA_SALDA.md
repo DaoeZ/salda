@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.12 · **Fecha:** 2026-07-25 · **Changelog:** v1.12 —
+**Versión:** 1.13 · **Fecha:** 2026-07-25 · **Changelog:** v1.13 — modo
+invitado: participante sin cuenta con identidad persistente de dispositivo y
+gastos bajo permiso del anfitrión (ADR-034). v1.12 —
 participantes manuales como actores económicos sin cuenta ni migración
 (ADR-033). v1.11 — P7 chat
 contextual privado por membresía y fecha de alta, separado de actividad y
@@ -1371,6 +1373,35 @@ leer; y decisión sobre qué hacer si la cuenta ya tenía obligaciones propias
 en ese mismo contexto (fusión frente a coexistencia histórica).
 **Revisión:** al abrir la fase de vinculación, resolver la decisión anterior
 y registrarla en un ADR propio antes de escribir código.
+
+### ADR-034: Invitado como participante sin cuenta con identidad de dispositivo
+**Estado:** Aceptada · **Fecha:** 2026-07-25
+**Contexto:** entre la cuenta completa y el participante manual faltaba quien
+USA la app pero no quiere registrarse. Necesitaba identidad propia y estable
+—para que su historial económico sea suyo— sin abrirle la puerta a gobernar
+contextos ni a tener presencia pública.
+**Decisión:** [HECHO] el invitado es la sesión ANÓNIMA de Firebase Auth (que
+el SDK persiste en el dispositivo y sobrevive a reinicios) más
+`guestIdentities/{uid}` con el nombre visible que él elige. NO es un perfil
+público: sin username, sin búsqueda y con `list` denegado en Rules; solo se
+lee conociendo el UID, y su nombre viaja además como snapshot en la
+membresía (`kind: guest`, `displayName`) porque no hay perfil del que leerlo
+en vivo. Rules separa dos predicados: `canParticipate()` = cuenta **o**
+invitado, para participar (leer el contexto y sus miembros, recibir y aceptar
+invitaciones, ver balances y cronología propios); y `canUseSocial()` = solo
+cuenta, para todo lo que crea o gobierna (crear contextos, invitar,
+administrar, transferir, archivar, perfil y amistades). Los gastos del
+invitado dependen de `spaces/{id}.guestsCanCreateExpenses`, que solo fija el
+propietario y cuya ausencia equivale a `false`. El anfitrión puede invitar a
+un invitado porque la regla acepta como destino un perfil público **o** una
+identidad de invitado.
+**Consecuencias:** el invitado tiene UID, así que para ADR-033 es un actor de
+cuenta y encaja en P5 sin cambios; renombrarse no altera identidad ni
+historial. Un anónimo SIN identidad de invitado no participa en nada (sigue
+siendo el invitado web de sesión de P1, mecanismo intacto). Enlaces, deep
+links, vinculación con cuentas y reclamación de manuales siguen fuera.
+**Revisión:** al implementar enlaces, decidir el canal por el que el
+anfitrión descubre el UID del invitado sin exponer identidades.
 
 ---
 

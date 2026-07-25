@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/data/auth_repository.dart';
+import '../../auth/data/guest_identity_repository.dart';
 import '../domain/space_models.dart';
 
 enum SpaceFailureCode {
@@ -31,11 +32,17 @@ class SpacesRepository {
     required this.firestore,
     required this.uid,
     required this.isFullAccount,
+    this.guestDisplayName,
   });
 
   final FirebaseFirestore firestore;
   final String Function() uid;
   final bool Function() isFullAccount;
+
+  /// Nombre visible del INVITADO activo (ADR-034), o null si la identidad
+  /// es una cuenta. Un invitado no tiene perfil público del que leerlo, así
+  /// que viaja como snapshot al unirse a un contexto.
+  final String Function()? guestDisplayName;
 
   CollectionReference<Map<String, dynamic>> get _spaces =>
       firestore.collection('spaces');
@@ -85,6 +92,10 @@ class SpacesRepository {
             SpaceMember(
               uid: d.id,
               joinedAt: (d.data()['joinedAt'] as Timestamp?)?.toDate(),
+              kind: d.data()['kind'] == 'guest'
+                  ? SpaceMemberKind.guest
+                  : SpaceMemberKind.account,
+              displayName: d.data()['displayName'] as String?,
             ),
         ],
       );
@@ -170,9 +181,10 @@ class SpacesRepository {
         createdAt: (doc.data()['createdAt'] as Timestamp?)?.toDate(),
       );
 
-  /// Invitaciones que YO he recibido y siguen pendientes.
+  /// Invitaciones que YO he recibido y siguen pendientes. Recibirlas y
+  /// responderlas es PARTICIPAR: también las ve un invitado (ADR-034).
   Stream<List<SpaceInvite>> watchMyInvites() {
-    _requireAccount();
+    if (guestDisplayName?.call() == null) _requireAccount();
     return _invites
         .where('toUid', isEqualTo: uid())
         .where('status', isEqualTo: 'pending')
@@ -364,7 +376,9 @@ class SpacesRepository {
   /// una invitación cancelada ya no puede aceptarse (la regla exige
   /// pending → accepted).
   Future<void> acceptInvite(SpaceInvite invite) async {
-    _requireAccount();
+    // Aceptar es PARTICIPAR, no administrar: también lo hace un invitado.
+    final guestName = guestDisplayName?.call();
+    if (guestName == null) _requireAccount();
     final batch = firestore.batch();
     batch.update(_invites.doc(invite.id), {
       'status': 'accepted',
@@ -373,6 +387,11 @@ class SpacesRepository {
     batch.set(_spaces.doc(invite.spaceId).collection('members').doc(uid()), {
       'uid': uid(),
       'joinedAt': FieldValue.serverTimestamp(),
+      // Un invitado congela su nombre aquí porque no tiene perfil público.
+      if (guestName != null) ...{
+        'kind': 'guest',
+        'displayName': guestName,
+      },
     });
     await batch.commit();
   }
@@ -436,10 +455,21 @@ class SpacesRepository {
         for (final value in (data['relationshipUids'] as List?) ?? const [])
           if (value is String) value,
       ],
+      guestsCanCreateExpenses:
+          (data['guestsCanCreateExpenses'] as bool?) ?? false,
       avatarEmoji: data['avatarEmoji'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
+  }
+
+  /// Política de invitados del contexto (ADR-034). Solo el owner.
+  Future<void> setGuestsCanCreateExpenses(String spaceId, bool allowed) {
+    _requireAccount();
+    return _spaces.doc(spaceId).update({
+      'guestsCanCreateExpenses': allowed,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   SpaceInvite _inviteFrom(QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
@@ -463,10 +493,16 @@ class SpacesRepository {
 final spacesRepositoryProvider = Provider<SpacesRepository>((ref) {
   final userId = ref.watch(currentUserIdProvider);
   final user = ref.watch(currentAppUserProvider);
+  // Nombre del invitado activo (null para cuentas): lo necesita el alta de
+  // membresía, que para un invitado congela su nombre visible (ADR-034).
+  final guestName = (user?.isAnonymous ?? false)
+      ? ref.watch(myGuestIdentityProvider).value?.displayName
+      : null;
   return SpacesRepository(
     firestore: FirebaseFirestore.instance,
     uid: () => userId,
     isFullAccount: () => user?.isFullAccount ?? false,
+    guestDisplayName: guestName == null ? null : () => guestName,
   );
 });
 

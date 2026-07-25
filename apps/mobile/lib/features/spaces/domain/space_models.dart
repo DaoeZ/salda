@@ -32,6 +32,7 @@ class Space {
     required this.status,
     this.kind = SpaceKind.group,
     this.relationshipUids = const [],
+    this.guestsCanCreateExpenses = false,
     this.avatarEmoji,
     this.createdAt,
     this.updatedAt,
@@ -52,6 +53,10 @@ class Space {
   final String? avatarEmoji;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// Política del anfitrión (ADR-034): si los INVITADOS de este contexto
+  /// pueden originar gastos. Por defecto NO (valor conservador).
+  final bool guestsCanCreateExpenses;
 
   bool get isActive => status == SpaceStatus.active;
   bool get isRelationship => kind == SpaceKind.relationship;
@@ -75,11 +80,28 @@ String relationshipSpaceId(String leftUid, String rightUid) {
 /// quien coincide con `space.ownerUid` (fuente única de verdad, lo que hace
 /// atómica la transferencia); miembro, el resto.
 class SpaceMember {
-  const SpaceMember({required this.uid, this.joinedAt});
+  const SpaceMember({
+    required this.uid,
+    this.joinedAt,
+    this.kind = SpaceMemberKind.account,
+    this.displayName,
+  });
 
   final String uid;
   final DateTime? joinedAt;
+
+  /// Cuenta o INVITADO (ADR-034). Un invitado participa igual, pero no
+  /// administra nada ni tiene perfil público.
+  final SpaceMemberKind kind;
+
+  /// Nombre visible congelado al unirse, SOLO para invitados: no tienen
+  /// perfil público del que leerlo en vivo.
+  final String? displayName;
+
+  bool get isGuest => kind == SpaceMemberKind.guest;
 }
+
+enum SpaceMemberKind { account, guest }
 
 /// Participante MANUAL (ADR-033): una persona sin cuenta que el anfitrión
 /// escribe a mano. No tiene UID ni dispositivo — no lee ni confirma nada —

@@ -107,7 +107,11 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
             (
               uid: member.uid,
               manualId: '',
-              name: member.uid == myUid
+              // Un INVITADO no tiene perfil público: su nombre es el que
+              // congeló al unirse al contexto (ADR-034).
+              name: member.isGuest
+                  ? (member.displayName ?? '…')
+                  : member.uid == myUid
                   ? ref.watch(hostDisplayNameProvider)
                   : ref
                             .watch(publicProfileProvider(member.uid))

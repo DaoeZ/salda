@@ -184,6 +184,25 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
             spaceId: space.id,
             canEdit: amOwner && space.isActive,
           ),
+          if (amOwner)
+            Card(
+              child: SwitchListTile(
+                value: space.guestsCanCreateExpenses,
+                onChanged: space.isActive
+                    ? (allowed) => _guarded(
+                        () => repo.setGuestsCanCreateExpenses(
+                          space.id,
+                          allowed,
+                        ),
+                      )
+                    : null,
+                title: Text(l10n.guestPolicyTitle),
+                subtitle: Text(
+                  l10n.guestPolicyBody,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ),
           if (!contextReady) ...[
             const SizedBox(height: TokenSpacing.md),
             Card(
@@ -348,23 +367,28 @@ class _MemberTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final profile = ref.watch(publicProfileProvider(member.uid)).value;
+    // Un INVITADO no tiene perfil público: su nombre es el snapshot que
+    // congeló al unirse (ADR-034); las cuentas se resuelven en vivo.
+    final profile = member.isGuest
+        ? null
+        : ref.watch(publicProfileProvider(member.uid)).value;
+    final name = member.isGuest
+        ? (member.displayName ?? l10n.guestBadge)
+        : profile?.displayName;
     return ListTile(
-      leading: profile == null
+      leading: name == null
           ? const CircleAvatar(radius: 16, child: Icon(Icons.person, size: 16))
-          : ProfileAvatar(
-              seed: member.uid,
-              displayName: profile.displayName,
-              radius: 16,
-            ),
+          : ProfileAvatar(seed: member.uid, displayName: name, radius: 16),
       title: Text(
-        profile?.displayName ?? '…',
+        name ?? '…',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
         isOwnerMember
             ? l10n.spaceOwnerBadge
+            : member.isGuest
+            ? l10n.guestBadge
             : profile == null
             ? ''
             : '@${profile.username}',
