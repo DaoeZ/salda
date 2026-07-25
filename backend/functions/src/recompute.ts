@@ -34,6 +34,30 @@ import {
 
 // ── Modelo en memoria (independiente de Firestore para poder testearlo) ──
 
+/**
+ * UID económico de un participante de sesión.
+ *
+ * `registeredUids` son las identidades REALES existentes: cuentas con perfil
+ * público (P2) **e invitados** con identidad de dispositivo (ADR-034). Un
+ * invitado no tiene perfil público por diseño, pero tiene UID propio y
+ * participa económicamente igual que una cuenta: excluirlo dejaría sus
+ * gastos fuera de los balances.
+ *
+ * Un `claimedByDevice` sin identidad registrada (invitado web de sesión, P1)
+ * NO se eleva a identidad económica global: sigue viviendo en el balance de
+ * su sesión, sin inventar una relación permanente.
+ */
+export function resolveParticipantUid(params: {
+  isOwner?: boolean;
+  claimedByDevice?: string;
+  sessionOwnerUid?: string;
+  registeredUids: ReadonlySet<string>;
+}): string | undefined {
+  if (params.isOwner === true) return params.sessionOwnerUid;
+  const claimed = params.claimedByDevice;
+  return claimed && params.registeredUids.has(claimed) ? claimed : undefined;
+}
+
 export interface ParticipantDoc {
   id: string;
   isOwner?: boolean;
@@ -552,24 +576,29 @@ export async function recomputeSession(sid: string): Promise<void> {
         .filter((value): value is string => Boolean(value)),
     ),
   ];
-  const claimedProfiles = claimedUids.length === 0
+  // Identidad registrada = perfil público (P2) O identidad de invitado
+  // (ADR-034). El invitado no tiene perfil por diseño, pero tiene UID propio
+  // y participa económicamente igual que una cuenta.
+  const claimedIdentities = claimedUids.length === 0
     ? []
     : await db.getAll(
       ...claimedUids.map((claimedUid) => db.doc(`profiles/${claimedUid}`)),
+      ...claimedUids.map((claimedUid) =>
+        db.doc(`guestIdentities/${claimedUid}`)),
     );
   const registeredClaims = new Set(
-    claimedProfiles.filter((profile) => profile.exists).map((profile) => profile.id),
+    claimedIdentities.filter((doc) => doc.exists).map((doc) => doc.id),
   );
   const sessionOwnerUid = sessionSnap.data()?.ownerUid as string | undefined;
   const pidByUid = new Map<string, string>();
   for (const participant of participantsSnap.docs) {
     const data = participant.data();
-    const claimed = data.claimedByDevice as string | undefined;
-    const uid = data.isOwner === true
-      ? sessionOwnerUid
-      : claimed && registeredClaims.has(claimed)
-      ? claimed
-      : undefined;
+    const uid = resolveParticipantUid({
+      isOwner: data.isOwner as boolean | undefined,
+      claimedByDevice: data.claimedByDevice as string | undefined,
+      sessionOwnerUid,
+      registeredUids: registeredClaims,
+    });
     if (uid) pidByUid.set(uid, participant.id);
   }
   const currentEntryIds = new Set(economicEntriesSnap.docs.map((doc) => doc.id));
@@ -600,11 +629,12 @@ export async function recomputeSession(sid: string): Promise<void> {
         isOwner,
         active: p.data().active as boolean | undefined,
         order: p.data().order as number | undefined,
-        userUid: isOwner
-          ? sessionOwnerUid
-          : claimed && registeredClaims.has(claimed)
-          ? claimed
-          : undefined,
+        userUid: resolveParticipantUid({
+          isOwner,
+          claimedByDevice: claimed,
+          sessionOwnerUid,
+          registeredUids: registeredClaims,
+        }),
         manualId: p.data().manualId as string | undefined,
         claimedByDevice: claimed,
       };

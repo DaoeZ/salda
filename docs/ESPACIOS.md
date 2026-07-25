@@ -113,11 +113,13 @@ El identificador es opaco y estable, **nunca el nombre**: renombrar no toca
 ninguna obligación derivada, y retirar a la persona del contexto no borra su
 historial (las entradas conservan su actor).
 
-### Vinculación con una cuenta: DECISIÓN PENDIENTE
+### Vinculación con una cuenta: DECISIÓN PENDIENTE (Sprint 6)
 
 **La vinculación queda expresamente fuera del alcance de este sprint.** Aquí
 solo se documenta la restricción que hay que respetar y lo que queda por
-decidir; nada de esto está implementado.
+decidir; nada de esto está implementado. **Se abordará en el Sprint 6
+(vinculación de identidad)**, que deberá cubrir los dos casos con el mismo
+mecanismo: manual↔cuenta y manual↔invitado (ver la sección de invitados).
 
 Restricción firme: el actor `manual:{manualId}` **debe permanecer estable**.
 Es la clave con la que están escritas las obligaciones ya derivadas, así que
@@ -147,8 +149,9 @@ las consolida al leer y no impide duplicidades; sin la decisión anterior y
 su mecanismo, un `linkedUid` relleno no cambiaría ni un balance.
 
 **Duplicidad a evitar** (mismo humano contando dos veces en un contexto,
-como actor manual y como UID): la fase de vinculación deberá garantizar que
-un contexto no pueda tener simultáneamente ambas identidades de la misma
+como actor manual y como UID —sea de una cuenta o de un INVITADO, que
+también tiene UID propio—): la fase de vinculación deberá garantizar que un
+contexto no pueda tener simultáneamente ambas identidades de la misma
 persona activas. El mecanismo tendrá que cubrir al menos:
 
 - vinculación e incorporación como miembro resueltas de forma **atómica**,
@@ -177,15 +180,23 @@ spaces/{spaceId}/members/{uid}
 spaces/{spaceId}.guestsCanCreateExpenses: bool   // política del anfitrión
 ```
 
-**Persistencia**: su identidad es la sesión anónima de Firebase Auth, que el
-SDK guarda en el dispositivo y sobrevive a reinicios y cierres de la app. El
-UID no cambia, así que su historial económico tampoco. `guestIdentities/{uid}`
-solo añade el nombre visible que él elige.
+**Persistencia**: su identidad es **Firebase Anonymous Auth**. El SDK guarda
+esa sesión en el dispositivo, así que **se mantiene entre reinicios y cierres
+de la app**: el UID no cambia y su historial económico tampoco.
+`guestIdentities/{uid}` solo añade el nombre visible que él elige.
 
-**No es un perfil público**: sin username, sin búsqueda y con `list` prohibido
-en Rules. Solo se lee conociendo el UID (el anfitrión al invitarlo, o los
-miembros del contexto para pintar su nombre). Por eso su nombre viaja también
-como snapshot en la membresía: no hay perfil del que leerlo en vivo.
+**NO es un perfil público**: **no tiene username** y **no puede aparecer en
+búsquedas** (Rules deniega `list` sobre `guestIdentities`). Solo se lee
+conociendo el UID (el anfitrión al invitarlo, o los miembros del contexto
+para pintar su nombre). Por eso su nombre viaja también como snapshot en la
+membresía: no hay perfil del que leerlo en vivo.
+
+**El nombre visible es SOLO un atributo de presentación.** No es identidad
+ni clave relacional: cambiarlo **no afecta a la identidad económica** —el UID
+sigue siendo el mismo— ni a obligaciones, balances, pagos o historial ya
+existentes. Los snapshots congelados en membresías anteriores conservan el
+nombre de entonces, exactamente como ocurre con cualquier otro rótulo
+histórico.
 
 **Puede**: participar en relaciones y grupos, aparecer en balances y
 liquidaciones, ver la cronología de lo que le afecta, recibir y aceptar
@@ -201,11 +212,37 @@ contexto con `guestsCanCreateExpenses: true`, que únicamente fija su
 propietario. Ausente equivale a `false` (valor conservador). Un miembro con
 cuenta nunca depende de esa bandera.
 
-**Identidad económica**: un invitado tiene UID, así que es un actor de cuenta
-para ADR-033 (`uid` sin prefijo) y encaja en P5 sin ningún cambio.
+**Identidad económica**: un invitado **participa económicamente igual que una
+cuenta porque dispone de UID propio**. Para ADR-033 es un actor de cuenta
+(`uid` sin prefijo, sin `manual:`), así que entra en obligaciones, neteo
+bilateral y liquidaciones de P5 sin ningún cambio ni caso especial.
 
-Fuera de alcance: enlaces, deep links, vinculación con cuentas y reclamación
-de participantes manuales.
+### Incorporación: FUERA del alcance de este sprint
+
+La incorporación cómoda de invitados **mediante enlaces queda expresamente
+fuera del alcance de este sprint**. Hoy el anfitrión solo puede invitar a un
+invitado si conoce su UID, porque un invitado no es buscable por diseño.
+
+**El flujo de invitación actual NO es el definitivo**: es el mínimo que
+permite validar el modelo, no una decisión de producto cerrada. **El Sprint 4
+(Enlaces) resolverá la incorporación**, y al hacerlo deberá decidir el canal
+por el que el anfitrión alcanza a un invitado sin exponer identidades ni
+convertir al invitado en buscable.
+
+### Consolidación con participantes MANUAL: Sprint 6
+
+Hoy nada impide que una misma persona esté en un contexto **a la vez** como
+participante MANUAL (creado por el anfitrión) y como INVITADO (con su propio
+UID): serían dos actores económicos distintos y su saldo aparecería partido.
+**Esa consolidación se resolverá en el Sprint 6 (vinculación de identidad)**,
+junto con la vinculación manual↔cuenta descrita arriba; los dos casos
+comparten exactamente el mismo problema y deben resolverse con el mismo
+mecanismo. Este sprint no introduce ninguna decisión al respecto y **no
+prejuzga** la elección entre migración de referencias y resolución mediante
+alias.
+
+Fuera de alcance de este sprint: enlaces, deep links, vinculación con cuentas
+y reclamación de participantes manuales.
 
 ## Tickets y política de privacidad
 

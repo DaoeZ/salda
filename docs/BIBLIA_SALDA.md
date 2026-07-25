@@ -1364,15 +1364,17 @@ consulta inasumibles). `linkedUid` **NO resuelve por sí solo** la
 vinculación: es solo un marcador de intención; no reescribe obligaciones, no
 las consolida al leer ni impide duplicidades.
 **Duplicidad a evitar:** ningún contexto puede tener a la misma persona
-activa a la vez como actor manual y como UID. El mecanismo deberá cubrir:
-vinculación e incorporación como miembro **atómicas**; la identidad manual
-deja de ser seleccionable en repartos nuevos una vez vinculada; Rules exige
-que un participante declare exactamente una identidad (invariante ya vigente
-en este sprint); consolidación de ambas vertientes en el balance bilateral al
-leer; y decisión sobre qué hacer si la cuenta ya tenía obligaciones propias
-en ese mismo contexto (fusión frente a coexistencia histórica).
-**Revisión:** al abrir la fase de vinculación, resolver la decisión anterior
-y registrarla en un ADR propio antes de escribir código.
+activa a la vez como actor manual y como UID —sea el UID de una cuenta o el
+de un INVITADO (ADR-034), que también tiene el suyo—. El mecanismo deberá
+cubrir: vinculación e incorporación como miembro **atómicas**; la identidad
+manual deja de ser seleccionable en repartos nuevos una vez vinculada; Rules
+exige que un participante declare exactamente una identidad (invariante ya
+vigente); consolidación de ambas vertientes en el balance bilateral al leer;
+y decisión sobre qué hacer si la cuenta ya tenía obligaciones propias en ese
+mismo contexto (fusión frente a coexistencia histórica).
+**Revisión:** en el **Sprint 6 (vinculación de identidad)**, resolver la
+decisión anterior —cubriendo manual↔cuenta y manual↔invitado con el mismo
+mecanismo— y registrarla en un ADR propio antes de escribir código.
 
 ### ADR-034: Invitado como participante sin cuenta con identidad de dispositivo
 **Estado:** Aceptada · **Fecha:** 2026-07-25
@@ -1395,13 +1397,28 @@ invitado dependen de `spaces/{id}.guestsCanCreateExpenses`, que solo fija el
 propietario y cuya ausencia equivale a `false`. El anfitrión puede invitar a
 un invitado porque la regla acepta como destino un perfil público **o** una
 identidad de invitado.
-**Consecuencias:** el invitado tiene UID, así que para ADR-033 es un actor de
-cuenta y encaja en P5 sin cambios; renombrarse no altera identidad ni
-historial. Un anónimo SIN identidad de invitado no participa en nada (sigue
-siendo el invitado web de sesión de P1, mecanismo intacto). Enlaces, deep
-links, vinculación con cuentas y reclamación de manuales siguen fuera.
-**Revisión:** al implementar enlaces, decidir el canal por el que el
-anfitrión descubre el UID del invitado sin exponer identidades.
+**Consecuencias:** el invitado **participa económicamente igual que una
+cuenta porque dispone de UID propio** — para ADR-033 es un actor de cuenta
+(sin prefijo `manual:`) y encaja en P5 sin cambios ni casos especiales. El
+**nombre visible es solo un atributo de presentación**: cambiarlo NO afecta a
+la identidad económica ni a obligaciones, balances o historial. Un anónimo
+SIN identidad de invitado no participa en nada (sigue siendo el invitado web
+de sesión de P1, mecanismo intacto).
+**[FUERA DE ALCANCE] Incorporación mediante enlaces.** Hoy el anfitrión solo
+invita a un invitado si conoce su UID, porque por diseño no es buscable. **El
+flujo de invitación actual NO es el definitivo**: es el mínimo para validar
+el modelo. **El Sprint 4 (Enlaces) resolverá la incorporación** y decidirá el
+canal por el que el anfitrión alcanza a un invitado sin exponer identidades
+ni hacerlo buscable.
+**[DECISIÓN PENDIENTE — Sprint 6] Consolidación con MANUAL.** Nada impide
+todavía que la misma persona esté en un contexto a la vez como participante
+manual y como invitado con UID: serían dos actores y el saldo aparecería
+partido. Se resolverá en el Sprint 6 (vinculación de identidad) con el MISMO
+mecanismo que la vinculación manual↔cuenta de ADR-033, porque es el mismo
+problema. Este ADR **no prejuzga** la elección entre migración de referencias
+y resolución mediante alias, que sigue abierta en ADR-033.
+**Revisión:** al cerrar el Sprint 4, comprobar que el canal de incorporación
+elegido no convierte la identidad de invitado en buscable.
 
 ---
 

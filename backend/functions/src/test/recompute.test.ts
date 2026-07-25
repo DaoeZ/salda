@@ -8,6 +8,7 @@ import { test } from 'node:test';
 
 import {
   computeAggregates,
+  resolveParticipantUid,
   settlementId,
   type SessionSnapshot,
 } from '../recompute.js';
@@ -731,6 +732,55 @@ test('P2.1 REGRESIÓN Alba/Pedro: tras confirmar el pago de Alba, lo nuevo ' +
     { from: 'p3', to: 'p2', amount: 500 },
   ]);
   assert.equal(settlementId(r.settlementSync.writes[0]), 'pending_p3_p2');
+});
+
+// ─── Identidad económica del participante (ADR-034) ───────────────────────
+
+test('GUEST: un invitado con identidad registrada SÍ tiene UID económico',
+    () => {
+  // Las identidades registradas son perfiles públicos E invitados: el
+  // invitado no tiene perfil por diseño, pero participa igual que una
+  // cuenta porque tiene UID propio.
+  const registeredUids = new Set(['uid-cuenta', 'uid-invitado']);
+
+  assert.equal(
+    resolveParticipantUid({
+      claimedByDevice: 'uid-invitado',
+      registeredUids,
+    }),
+    'uid-invitado',
+  );
+  assert.equal(
+    resolveParticipantUid({ claimedByDevice: 'uid-cuenta', registeredUids }),
+    'uid-cuenta',
+  );
+});
+
+test('un claim SIN identidad registrada no se eleva a identidad global', () => {
+  // Invitado web de sesión (P1): sigue en el balance de su sesión.
+  assert.equal(
+    resolveParticipantUid({
+      claimedByDevice: 'uid-anonimo-de-enlace',
+      registeredUids: new Set(['uid-cuenta']),
+    }),
+    undefined,
+  );
+  // Sin reclamar: tampoco.
+  assert.equal(
+    resolveParticipantUid({ registeredUids: new Set(['uid-cuenta']) }),
+    undefined,
+  );
+});
+
+test('el anfitrión siempre resuelve a su UID, esté o no reclamado', () => {
+  assert.equal(
+    resolveParticipantUid({
+      isOwner: true,
+      sessionOwnerUid: 'uid-edgar',
+      registeredUids: new Set(),
+    }),
+    'uid-edgar',
+  );
 });
 
 // ─── Participantes manuales (ADR-033) ─────────────────────────────────────
