@@ -350,13 +350,31 @@ permite pegar el enlace a mano. Aceptar la URL completa pegada desde WhatsApp
 es el caso normal, así que el token se normaliza a partir de ella.
 
 **Android**: `AndroidManifest.xml` declara un intent-filter con `autoVerify`
-para `https://{salda-dev|salda-prod}.web.app/g/`, así que el enlace abre la
-app.
+para `https://{salda-dev|salda-prod}.web.app/g/`.
 
-**Pendiente de Hosting** (no es código de app): publicar
-`/.well-known/assetlinks.json` para que Android VERIFIQUE ese intent-filter
-—sin él ofrece elegir app en vez de abrirla sola— y servir `/g/{token}` como
-página de aterrizaje para quien no tenga la app instalada.
+**Digital Asset Links**: `apps/guest_web/public/.well-known/assetlinks.json`
+se despliega con el Hosting y declara el paquete `dev.salda.salda_mobile`
+junto al SHA-256 del certificado. Dos ajustes de `firebase.json` lo hacen
+posible y conviene no deshacerlos:
+
+- `ignore` ya NO incluye `**/.*`: ese patrón excluía del despliegue cualquier
+  ruta con punto, y `.well-known` es exactamente eso — el archivo se subía
+  «correctamente» sin llegar nunca al servidor.
+- `appAssociation: "NONE"` desactiva la generación automática de Hosting,
+  para que el archivo servido sea el del repositorio y no uno inventado.
+
+El archivo se sirve como fichero estático, así que gana a la reescritura
+`**` → `index.html` sin necesidad de excepción alguna.
+
+**Certificado**: hoy `buildTypes.release` sigue firmando con
+`signingConfigs.debug` (el TODO de la plantilla de Flutter), así que debug,
+desarrollo y release comparten certificado y basta un fingerprint. **Cuando
+exista una clave de release propia habrá que añadir su SHA-256** —y el de
+Play App Signing si se publica en Play— o los App Links dejarán de
+verificarse en esas variantes.
+
+**Pendiente de Hosting**: servir `/g/{token}` como página de aterrizaje para
+quien NO tenga la app instalada (hoy responde el SPA de invitados).
 
 ## Tickets y política de privacidad
 

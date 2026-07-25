@@ -1490,11 +1490,17 @@ cuenta. Quien conserve un enlace vivo puede volver a entrar tras ser
 expulsado —igual que en cualquier grupo de mensajería—: para cerrar de verdad
 hay que rotar o revocar, y así está documentado en la UI.
 `AndroidManifest.xml` declara el intent-filter `autoVerify` de
-`https://{salda-dev|salda-prod}.web.app/g/`, así que el enlace abre la app.
-**Pendiente (no es código de app):** publicar
-`/.well-known/assetlinks.json` para que Android VERIFIQUE ese filtro —sin él
-ofrece elegir app en vez de abrirla sola— y servir `/g/{token}` como página
-de aterrizaje para quien no tenga la app. Contrato en `docs/ESPACIOS.md`.
+`https://{salda-dev|salda-prod}.web.app/g/` y el Hosting de `salda-dev` sirve
+`/.well-known/assetlinks.json` con el paquete `dev.salda.salda_mobile` y el
+SHA-256 del certificado (comprobado con la API de Digital Asset Links de
+Google, que es lo que consulta Android). Dos ajustes de `firebase.json` lo
+sostienen: `ignore` ya no excluye `**/.*` —ese patrón dejaba fuera del
+despliegue la carpeta `.well-known` entera— y `appAssociation: "NONE"` impide
+que Hosting genere el archivo por su cuenta. Mientras `buildTypes.release`
+siga firmando con la config de debug, un único fingerprint cubre las tres
+variantes; **al crear una clave de release habrá que añadir su SHA-256**.
+**Pendiente (no es código de app):** servir `/g/{token}` como página de
+aterrizaje para quien no tenga la app. Contrato en `docs/ESPACIOS.md`.
 **Revisión:** al implementar los enlaces de TICKET (Sprint 5), reutilizar
 este mecanismo en vez de inventar otro; y en el Sprint 6 tener presente que
 un MANUAL y un INVITADO que sean la misma persona siguen siendo dos actores

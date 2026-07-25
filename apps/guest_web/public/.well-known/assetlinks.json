@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "dev.salda.salda_mobile",
+      "sha256_cert_fingerprints": [
+        "E7:90:AB:4B:6A:18:30:C9:56:B2:6D:BC:F4:E6:92:B2:5D:B9:BF:56:F7:60:79:61:49:11:6E:92:BE:54:F3:70"
+      ]
+    }
+  }
+]
