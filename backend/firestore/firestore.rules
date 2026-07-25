@@ -450,6 +450,43 @@ service cloud.firestore {
       return spaceData(spaceId).get('guestsCanCreateExpenses', false) == true;
     }
 
+    // ── Enlaces de grupo (Sprint 4, ADR-035) ───────────────────────────
+    // El IDENTIFICADOR del documento ES el secreto (128 bits base64url):
+    // conocerlo es la autorización, igual que el shareCode de una sesión
+    // (ADR-012). De ahí las dos mitades de la política: `get` abierto a
+    // quien acierte el token (imposible por fuerza bruta) y `list` reservado
+    // al propietario, para que el enlace NUNCA sea enumerable.
+    function spaceLinkData(token) {
+      return get(/databases/$(database)/documents/spaceLinks/$(token)).data;
+    }
+
+    // Un enlace vivo de ESTE grupo. Se comprueba en cada uso (no solo al
+    // canjearlo), así que revocarlo cierra la puerta de inmediato.
+    function spaceLinkOpensGroup(token, spaceId) {
+      return token is string
+        && exists(/databases/$(database)/documents/spaceLinks/$(token))
+        && spaceLinkData(token).spaceId == spaceId
+        && spaceLinkData(token).status == 'active';
+    }
+
+    function validSpaceLink(data) {
+      return data.keys().hasOnly([
+          'spaceId', 'spaceName', 'createdByUid', 'status',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'spaceId', 'spaceName', 'createdByUid', 'status',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.spaceId is string
+        && data.spaceName is string
+        && data.spaceName.size() >= 2
+        && data.spaceName.size() <= 40
+        && data.status in ['active', 'revoked']
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
     function validSpaceShape(data) {
       return data.keys().hasOnly([
           'name', 'avatarEmoji', 'ownerUid', 'status',
@@ -553,7 +590,9 @@ service cloud.firestore {
       // deberá conservar el historial reescribiendo solo la referencia.
       match /manualParticipants/{manualId} {
         // Los ve cualquier miembro: son participantes del contexto común.
-        allow read: if canUseSocial() && isSpaceMember(spaceId);
+        // Un INVITADO también, porque comparte reparto con ellos; crearlos
+        // y editarlos sigue siendo exclusivo del propietario.
+        allow read: if canParticipate() && isSpaceMember(spaceId);
 
         allow create: if isSpaceOwner(spaceId)
           && spaceData(spaceId).status == 'active'
@@ -599,10 +638,24 @@ service cloud.firestore {
             getAfter(/databases/$(database)/documents/spaces/$(spaceId))
                 .data.ownerUid == request.auth.uid
             // (b) Aceptar invitación: el receptor se une y el MISMO batch
-            // resuelve la invitación a accepted.
-            || (spaceData(spaceId).status == 'active'
+            // resuelve la invitación a accepted. El existsAfter() previo es
+            // obligatorio desde que hay una tercera vía: sin él, entrar por
+            // enlace moría con "Null value error" al leer una invitación
+            // que no existe (mismo fallo que corrigió `ce61bdd` al leer).
+            || (existsAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
+              && spaceData(spaceId).status == 'active'
               && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
                   .data.status == 'accepted')
+            // (c) Enlace de grupo (ADR-035): la prueba de conocimiento del
+            // token viaja en el MISMO batch, y aquí se revalida que el
+            // enlace siga vivo y siga siendo de este grupo. Una relación
+            // nunca se abre por enlace: su pareja de UID es inmutable.
+            || (existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/joinGrants/$(request.auth.uid))
+              && spaceData(spaceId).status == 'active'
+              && spaceData(spaceId).get('kind', 'group') == 'group'
+              && spaceLinkOpensGroup(
+                getAfter(/databases/$(database)/documents/spaces/$(spaceId)/joinGrants/$(request.auth.uid)).data.token,
+                spaceId))
           );
 
         // Única mutación: el owner marca `removedBy` en el MISMO batch del
@@ -619,6 +672,32 @@ service cloud.firestore {
         allow delete: if canUseSocial()
           && resource.data.uid != spaceData(spaceId).ownerUid
           && (memberUid == request.auth.uid || isSpaceOwner(spaceId));
+      }
+
+      // Prueba de conocimiento del enlace de grupo (ADR-035), calcada del
+      // mecanismo de invitados de sesión (ADR-012): el cliente presenta el
+      // token y la regla lo compara contra el enlace real.
+      //
+      // Es un documento de SOLO ESCRITURA — nadie lo lee, ni siquiera el
+      // propietario — precisamente para que el token no se filtre a los
+      // demás miembros a través de él. Si el token viviera en la membresía,
+      // cualquier miembro podría reenviar el enlace y se saltaría la
+      // política de que solo el propietario incorpora gente.
+      match /joinGrants/{grantUid} {
+        allow read: if false;
+
+        // Reescribir la prueba (reintento, o volver a entrar tras salir)
+        // vuelve a exigir un enlace VIVO: create y update comparten
+        // condición a propósito.
+        allow create, update: if canParticipate()
+          && grantUid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['uid', 'token', 'createdAt'])
+          && request.resource.data.keys().hasAll(['uid', 'token', 'createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.createdAt is timestamp
+          && spaceLinkOpensGroup(request.resource.data.token, spaceId);
+
+        allow delete: if false;
       }
 
       // P7: conversación contextual. La fecha de alta es una frontera de
@@ -646,6 +725,47 @@ service cloud.firestore {
           && resource.data.authorUid == request.auth.uid
           && resource.data.createdAt >= spaceMemberJoinedAt(spaceId);
       }
+    }
+
+    // ── Enlaces de grupo (Sprint 4, ADR-035) ───────────────────────────
+    // El token es el id del documento. Nada de identidades aquí dentro: un
+    // enlace solo dice a qué grupo abre y cómo se llama, así que compartirlo
+    // no revela quién está dentro ni convierte a nadie en buscable.
+    match /spaceLinks/{token} {
+      // Conocer el token (128 bits) ES la prueba de conocimiento: quien
+      // recibe el enlace puede leer el nombre del grupo para decidir si
+      // entra, antes de ser miembro y sin poder leer el espacio.
+      allow get: if signedIn();
+
+      // Jamás enumerable: solo el propietario ACTUAL del grupo lista los
+      // enlaces de su grupo (para volver a compartirlo o revocarlo). Sin
+      // esto, un `list` abierto convertiría cada enlace en descubrible.
+      allow list: if isSpaceOwner(resource.data.spaceId);
+
+      allow create: if canUseSocial()
+        && validSpaceLink(request.resource.data)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt is timestamp
+        && isSpaceOwner(request.resource.data.spaceId)
+        && spaceData(request.resource.data.spaceId).status == 'active'
+        // Solo GRUPOS: una relación reserva una pareja canónica de UID y no
+        // admite un tercero, así que un enlace no tendría a quién admitir.
+        && spaceData(request.resource.data.spaceId).get('kind', 'group') == 'group';
+
+      // Revocar/reactivar y refrescar el rótulo tras renombrar el grupo. El
+      // enlace no cambia nunca de grupo ni de autor; rotar = revocar + crear.
+      allow update: if isSpaceOwner(resource.data.spaceId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'spaceName', 'updatedAt'])
+        && validSpaceLink(request.resource.data)
+        && request.resource.data.spaceId == resource.data.spaceId
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      // Nada destructivo mientras el enlace siga vivo: primero se revoca.
+      allow delete: if isSpaceOwner(resource.data.spaceId)
+        && resource.data.status == 'revoked';
     }
 
     match /spaceInvites/{inviteId} {
@@ -724,9 +844,12 @@ service cloud.firestore {
         && resource.data.status != 'pending';
     }
 
-    // "Mis espacios": collection group SOLO sobre la propia membresía.
+    // "Mis contextos": collection group SOLO sobre la propia membresía.
+    // Un INVITADO también lo necesita: sin esta query no tendría forma de
+    // llegar a los grupos de los que YA es miembro (ADR-034 le reconoce la
+    // participación, pero hasta ahora la consulta exigía cuenta).
     match /{path=**}/members/{memberUid} {
-      allow read: if canUseSocial()
+      allow read: if canParticipate()
         && resource.data.uid == request.auth.uid;
     }
 

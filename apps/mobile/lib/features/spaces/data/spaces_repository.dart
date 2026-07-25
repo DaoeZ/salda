@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:domain/domain.dart' show ShareCode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/data/auth_repository.dart';
@@ -50,8 +51,19 @@ class SpacesRepository {
   CollectionReference<Map<String, dynamic>> get _invites =>
       firestore.collection('spaceInvites');
 
+  CollectionReference<Map<String, dynamic>> get _links =>
+      firestore.collection('spaceLinks');
+
   void _requireAccount() {
     if (!isFullAccount()) {
+      throw const SpaceFailure(SpaceFailureCode.accountRequired);
+    }
+  }
+
+  /// Cuenta o INVITADO: lo que basta para PARTICIPAR (ADR-034). Espejo en
+  /// cliente de `canParticipate()` de Rules.
+  void _requireParticipant() {
+    if (!isFullAccount() && guestDisplayName?.call() == null) {
       throw const SpaceFailure(SpaceFailureCode.accountRequired);
     }
   }
@@ -61,8 +73,12 @@ class SpacesRepository {
   /// Mis espacios: collection group sobre MIS membresías; cada cambio de
   /// membresía relee los espacios. (Editar el nombre de un espacio se
   /// refleja al entrar en su detalle, que sí escucha el doc en vivo.)
+  ///
+  /// También para INVITADOS: participar incluye poder llegar a los grupos
+  /// de los que ya se es miembro. Sin esto, entrar por enlace dejaba al
+  /// invitado dentro del grupo pero sin ninguna pantalla desde la que verlo.
   Stream<List<Space>> watchMySpaces() {
-    _requireAccount();
+    _requireParticipant();
     return firestore
         .collectionGroup('members')
         .where('uid', isEqualTo: uid())
@@ -367,6 +383,161 @@ class SpacesRepository {
     });
   }
 
+  // ── Enlaces de grupo (Sprint 4, ADR-035) ──────────────────────────────
+
+  /// Enlace vivo del grupo (vista del propietario). Rules restringe este
+  /// `list` al propietario ACTUAL, así que el token no es enumerable por
+  /// nadie más — ni siquiera por los demás miembros.
+  Stream<SpaceJoinLink?> watchActiveJoinLink(String spaceId) => _links
+      .where('spaceId', isEqualTo: spaceId)
+      .where('status', isEqualTo: 'active')
+      .snapshots()
+      .map((snap) {
+        final links = [for (final d in snap.docs) _linkFrom(d)];
+        // Rotar deja el anterior revocado, así que en la práctica hay 0 o 1;
+        // ante un empate por carrera gana el más reciente, nunca dos vivos
+        // compitiendo en la UI.
+        links.sort(
+          (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+            a.createdAt ?? DateTime(0),
+          ),
+        );
+        return links.isEmpty ? null : links.first;
+      });
+
+  /// Crea el enlace del grupo. El token es un secreto de 128 bits
+  /// (`ShareCode`, la misma primitiva del enlace de invitados) y ES el id
+  /// del documento: así Rules puede validar el conocimiento sin que el
+  /// secreto tenga que copiarse a ningún documento legible.
+  Future<SpaceJoinLink> createJoinLink(String spaceId, String spaceName) async {
+    _requireAccount();
+    final token = ShareCode.generate().value;
+    final name = spaceName.trim();
+    await _links.doc(token).set({
+      'spaceId': spaceId,
+      'spaceName': name,
+      'createdByUid': uid(),
+      'status': 'active',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'schemaVersion': 1,
+    });
+    return SpaceJoinLink(
+      token: token,
+      spaceId: spaceId,
+      spaceName: name,
+      createdByUid: uid(),
+      revoked: false,
+    );
+  }
+
+  /// Revocar corta el acceso de inmediato: la membresía revalida el enlace
+  /// en cada canje, así que un token ya repartido deja de servir aunque
+  /// alguien lo hubiera guardado.
+  Future<void> revokeJoinLink(String token) => _links.doc(token).update({
+    'status': 'revoked',
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+
+  /// Rotar = revocar el anterior y crear uno nuevo. Son dos documentos
+  /// distintos a propósito: el token viejo queda demostrablemente muerto en
+  /// lugar de reciclarse.
+  Future<SpaceJoinLink> rotateJoinLink(
+    String spaceId,
+    String spaceName, {
+    String? previousToken,
+  }) async {
+    _requireAccount();
+    if (previousToken != null) await revokeJoinLink(previousToken);
+    return createJoinLink(spaceId, spaceName);
+  }
+
+  /// Mantiene el rótulo del enlace al día tras renombrar el grupo (solo es
+  /// presentación: el enlace nunca cambia de grupo).
+  Future<void> syncJoinLinkName(String token, String spaceName) =>
+      _links.doc(token).update({
+        'spaceName': spaceName.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+  /// Mira el enlace ANTES de entrar: quien lo recibe ve a qué grupo va sin
+  /// ser todavía miembro. Devuelve null si el token no existe o fue
+  /// revocado — la app no distingue ambos casos para no dar un oráculo.
+  Future<SpaceJoinLink?> previewJoinLink(String token) async {
+    final doc = await _links.doc(_normalizeToken(token)).get();
+    if (!doc.exists) return null;
+    final link = _linkFrom(doc);
+    return link.isActive ? link : null;
+  }
+
+  /// Canjea el enlace: escribe la prueba de conocimiento y la membresía en
+  /// UN SOLO batch, que es lo que Rules valida (`existsAfter`). Cuenta e
+  /// invitado entran por el mismo camino; solo cambia lo que se guarda en
+  /// la membresía, porque el invitado no tiene perfil del que leer su
+  /// nombre en vivo.
+  Future<JoinLinkOutcome> joinWithLink(String token) async {
+    final normalized = _normalizeToken(token);
+    final link = await previewJoinLink(normalized);
+    if (link == null) return JoinLinkOutcome.invalid;
+
+    final guestName = guestDisplayName?.call();
+    if (guestName == null) {
+      // Ni cuenta ni invitado con nombre: la app le pide antes su nombre
+      // visible en vez de fallar con un permiso denegado.
+      if (!isFullAccount()) return JoinLinkOutcome.needsGuestName;
+    }
+
+    final member = _spaces.doc(link.spaceId).collection('members').doc(uid());
+    if ((await member.get()).exists) return JoinLinkOutcome.alreadyMember;
+
+    final batch = firestore.batch();
+    batch.set(_spaces.doc(link.spaceId).collection('joinGrants').doc(uid()), {
+      'uid': uid(),
+      'token': normalized,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    batch.set(member, {
+      'uid': uid(),
+      'joinedAt': FieldValue.serverTimestamp(),
+      if (guestName != null) ...{'kind': 'guest', 'displayName': guestName},
+    });
+    await batch.commit();
+    return JoinLinkOutcome.joined;
+  }
+
+  /// Acepta tanto el enlace completo como el token pelado: pegar la URL
+  /// entera desde WhatsApp es el caso normal.
+  static String _normalizeToken(String raw) {
+    var value = raw.trim();
+    if (value.isEmpty) return value;
+    final marker = value.lastIndexOf('/g/');
+    if (marker >= 0) value = value.substring(marker + 3);
+    // Restos de la URL que no forman parte del token base64url.
+    for (final separator in ['?', '#', '/']) {
+      final index = value.indexOf(separator);
+      if (index >= 0) value = value.substring(0, index);
+    }
+    return value.trim();
+  }
+
+  /// Enlace de grupo canónico. El token va en la RUTA, no en el fragment:
+  /// a diferencia del `#k=` de una sesión, aquí el servidor necesitará
+  /// resolverlo para pintar la página de aterrizaje.
+  static String joinUrlFor(String hostingDomain, String token) =>
+      'https://$hostingDomain/g/$token';
+
+  SpaceJoinLink _linkFrom(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const {};
+    return SpaceJoinLink(
+      token: doc.id,
+      spaceId: (data['spaceId'] as String?) ?? '',
+      spaceName: (data['spaceName'] as String?) ?? '',
+      createdByUid: (data['createdByUid'] as String?) ?? '',
+      revoked: data['status'] != 'active',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+    );
+  }
+
   Future<void> cancelInvite(String inviteId) => _invites.doc(inviteId).update({
     'status': 'cancelled',
     'updatedAt': FieldValue.serverTimestamp(),
@@ -541,6 +712,14 @@ final spaceInvitesProvider = StreamProvider.autoDispose
     .family<List<SpaceInvite>, String>(
       (ref, spaceId) =>
           ref.watch(spacesRepositoryProvider).watchSpaceInvites(spaceId),
+    );
+
+/// Enlace vivo del grupo. Solo devuelve algo al propietario: Rules restringe
+/// el `list` de `spaceLinks` al dueño del grupo.
+final spaceJoinLinkProvider = StreamProvider.autoDispose
+    .family<SpaceJoinLink?, String>(
+      (ref, spaceId) =>
+          ref.watch(spacesRepositoryProvider).watchActiveJoinLink(spaceId),
     );
 
 final spaceTicketsProvider = StreamProvider.autoDispose

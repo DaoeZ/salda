@@ -34,6 +34,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final l10n = AppLocalizations.of(context);
     final fullAccount =
         ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
+    // Un INVITADO con nombre PARTICIPA (ADR-034): ve sus grupos y sus
+    // invitaciones igual que una cuenta. Lo que sigue siendo exclusivo de
+    // una cuenta es CREAR contextos, que es lo que gobierna el FAB.
+    final participates = fullAccount || ref.watch(isOperationalGuestProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -75,6 +79,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               icon: const Icon(Icons.people_outline),
             ),
           ],
+          // Unirse por enlace no exige cuenta: es la puerta de entrada del
+          // invitado (ADR-035), así que está siempre visible.
+          IconButton(
+            tooltip: l10n.joinEntry,
+            onPressed: () => context.push('/join'),
+            icon: const Icon(Icons.link),
+          ),
           IconButton(
             tooltip: l10n.settingsTitle,
             onPressed: () => context.push('/home/settings'),
@@ -88,7 +99,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const _ProfileBanner(),
           const _DraftBanner(),
           Expanded(
-            child: fullAccount
+            child: participates
                 ? const _ContextsHome()
                 : const _AccountRequiredHome(),
           ),

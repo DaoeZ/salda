@@ -21,6 +21,8 @@ import '../../features/sessions/presentation/ticket_detail_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/spaces/presentation/space_detail_screen.dart';
 import '../../features/spaces/presentation/create_relationship_screen.dart';
+import '../../features/spaces/presentation/join_space_screen.dart';
+import '../../features/spaces/presentation/space_link_screen.dart';
 import '../../features/spaces/presentation/spaces_screen.dart';
 
 /// Rutas ANIDADAS bajo /home: navegar con go() a cualquier destino construye
@@ -36,10 +38,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return location == '/auth-loading' ? null : '/auth-loading';
       }
       final user = auth.value;
+      // El enlace de grupo (ADR-035) es público a propósito: quien lo abre
+      // sin sesión decide EN la propia pantalla si entra con cuenta o como
+      // invitado. Mandarlo al login perdería el enlace por el camino.
+      final isJoinLink = location.startsWith('/join');
       final isPublic =
           location == '/login' ||
           location == '/register' ||
-          location == '/forgot-password';
+          location == '/forgot-password' ||
+          isJoinLink;
       if (user == null) {
         return isPublic ? null : '/login';
       }
@@ -56,11 +63,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             location == '/home/people' ||
             location.startsWith('/home/person/');
         if (isAccountOnlyRoute) return '/home';
-        if (location == '/register' || location.startsWith('/home')) {
+        if (location == '/register' ||
+            isJoinLink ||
+            location.startsWith('/home')) {
           return null;
         }
         return '/home';
       }
+      if (isJoinLink) return null;
       if (isPublic ||
           location == '/verify-email' ||
           location == '/auth-loading') {
@@ -74,6 +84,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const AuthLoadingScreen(),
       ),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      // Enlace de grupo. La ruta CON token la abre un deep link; la ruta
+      // sin él permite pegar el enlace a mano, que es lo que funciona
+      // mientras Hosting no sirva la página de aterrizaje.
+      GoRoute(
+        path: '/join',
+        builder: (_, _) => const JoinSpaceScreen(),
+        routes: [
+          GoRoute(
+            path: ':token',
+            builder: (_, state) =>
+                JoinSpaceScreen(token: state.pathParameters['token']),
+          ),
+        ],
+      ),
       GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
       GoRoute(
         path: '/forgot-password',
@@ -136,6 +160,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 builder: (_, state) =>
                     SpaceDetailScreen(spaceId: state.pathParameters['sid']!),
                 routes: [
+                  GoRoute(
+                    path: 'link',
+                    builder: (_, state) =>
+                        SpaceLinkScreen(spaceId: state.pathParameters['sid']!),
+                  ),
                   GoRoute(
                     path: 'activity',
                     builder: (_, state) =>

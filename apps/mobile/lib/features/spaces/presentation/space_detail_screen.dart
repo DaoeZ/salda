@@ -95,11 +95,20 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
                 () => repo.setStatus(space.id, SpaceStatus.active),
               ),
               'leave' => _leave(),
+              'link' => context.push('/home/spaces/${space.id}/link'),
               _ => null,
             },
             itemBuilder: (_) => [
               if (amOwner) ...[
                 PopupMenuItem(value: 'edit', child: Text(l10n.spaceEditName)),
+                // Solo GRUPOS: una relación reserva una pareja canónica de
+                // UID y no admite un tercero (ADR-030), así que un enlace no
+                // tendría a quién admitir.
+                if (space.isActive && !space.isRelationship)
+                  PopupMenuItem(
+                    value: 'link',
+                    child: Text(l10n.spaceLinkAction),
+                  ),
                 if (space.isActive)
                   PopupMenuItem(
                     value: 'archive',

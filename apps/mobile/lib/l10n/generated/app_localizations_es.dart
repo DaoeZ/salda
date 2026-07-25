@@ -1517,4 +1517,77 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get ticketContextLocked =>
       'Este ticket pertenece a su contexto y no se puede desvincular';
+
+  @override
+  String get commonConfirm => 'Confirmar';
+
+  @override
+  String get spaceLinkTitle => 'Enlace del grupo';
+
+  @override
+  String get spaceLinkAction => 'Compartir enlace';
+
+  @override
+  String get spaceLinkEmpty =>
+      'Crea un enlace para que otras personas se unan a este grupo sin que tengas que buscarlas.';
+
+  @override
+  String get spaceLinkCreate => 'Crear enlace';
+
+  @override
+  String get spaceLinkHint =>
+      'Cualquiera con este enlace puede unirse al grupo. Revócalo cuando ya no lo necesites.';
+
+  @override
+  String get spaceLinkRotate => 'Generar un enlace nuevo';
+
+  @override
+  String get spaceLinkRotateConfirm =>
+      'El enlace actual dejará de funcionar y tendrás que repartir el nuevo. ¿Continuar?';
+
+  @override
+  String get spaceLinkRevoke => 'Revocar el enlace';
+
+  @override
+  String get spaceLinkRevokeConfirm =>
+      'Nadie más podrá unirse con este enlace. Los miembros actuales se quedan. ¿Continuar?';
+
+  @override
+  String get spaceLinkError => 'No hemos podido cargar el enlace';
+
+  @override
+  String get joinTitle => 'Unirse a un grupo';
+
+  @override
+  String get joinEntry => 'Unirme con un enlace';
+
+  @override
+  String get joinPasteHint => 'Pega aquí el enlace que te han enviado.';
+
+  @override
+  String get joinPasteLabel => 'Enlace del grupo';
+
+  @override
+  String get joinLookup => 'Continuar';
+
+  @override
+  String get joinInvitedTo => 'Te invitan a';
+
+  @override
+  String get joinIdentifyHint =>
+      'Identifícate para unirte. No hace falta crear una cuenta.';
+
+  @override
+  String get joinWithAccount => 'Entrar con mi cuenta';
+
+  @override
+  String get joinAction => 'Unirme al grupo';
+
+  @override
+  String get joinLinkInvalid =>
+      'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.';
+
+  @override
+  String get joinLinkError =>
+      'No hemos podido unirte al grupo. Inténtalo otra vez.';
 }

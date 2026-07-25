@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.13 · **Fecha:** 2026-07-25 · **Changelog:** v1.13 — modo
+**Versión:** 1.14 · **Fecha:** 2026-07-25 · **Changelog:** v1.14 — enlaces de
+grupo: token opaco no enumerable con prueba de conocimiento en batch, y el
+invitado por fin llega a sus contextos (ADR-035). v1.13 — modo
 invitado: participante sin cuenta con identidad persistente de dispositivo y
 gastos bajo permiso del anfitrión (ADR-034). v1.12 —
 participantes manuales como actores económicos sin cuenta ni migración
@@ -1420,6 +1422,61 @@ y resolución mediante alias, que sigue abierta en ADR-033.
 **Revisión:** al cerrar el Sprint 4, comprobar que el canal de incorporación
 elegido no convierte la identidad de invitado en buscable.
 
+### ADR-035: Enlace de grupo como token opaco con prueba de conocimiento
+**Estado:** Aceptada · **Fecha:** 2026-07-25 (Sprint 4)
+**Contexto:** incorporar gente exigía conocer su UID y buscarla, y a un
+INVITADO (ADR-034) sencillamente no se le podía alcanzar: por diseño no es
+buscable. ADR-034 dejó abierto el canal y pidió que, al resolverlo, no
+convirtiera la identidad de invitado en buscable ni expusiera identidades.
+**Alternativas descartadas:** (a) **reutilizar `spaceInvites`** — imposible:
+su ID determinista `{spaceId}_{toUid}` exige saber a quién invitas, que es
+justo lo que falta. (b) **Solicitud de acceso con aprobación del propietario**
+— convierte "unirse" en un trámite asíncrono que contradice el principio
+rector y deja al que llega esperando. (c) **Cloud Function `redeemGroupLink`
+callable** — resolvería el canje en servidor, pero añade una función nueva
+contra el techo de coste (§62), rompe la norma de que las functions solo se
+disparan por triggers de Firestore (CLAUDE.md §7) y no aporta nada que Rules
+no pueda demostrar: la checklist §58 obliga a preguntarse antes si basta con
+cliente + reglas. Aquí basta.
+**Decisión:** [HECHO] colección `spaceLinks/{token}` en la que el
+IDENTIFICADOR del documento ES el secreto (128 bits vía `ShareCode`, la misma
+primitiva del enlace de invitados). Conocerlo es la autorización, igual que
+ADR-012. `get` queda abierto a cualquier sesión que acierte el token —para
+previsualizar el nombre del grupo sin ser miembro— y `list` reservado al
+propietario ACTUAL: un enlace nunca es enumerable. El documento **no contiene
+identidades**: solo a qué grupo abre y cómo se llama.
+El canje escribe en UN batch la prueba de conocimiento
+`spaces/{id}/joinGrants/{uid}` (con el token) y la membresía, y Rules valida
+la segunda contra la primera con `existsAfter`, el mismo patrón que aceptar
+una invitación. La prueba es de **solo escritura** —no la lee nadie, ni el
+propietario— para que el token no se filtre a los demás miembros: si viviera
+en la membresía, cualquier miembro podría reenviar el enlace y saltarse la
+política de que solo el propietario incorpora gente. La membresía
+**revalida el enlace en cada canje**, así que revocar cierra la puerta al
+instante aunque quede una prueba antigua.
+Solo GRUPOS activos (una relación reserva una pareja inmutable de UID y no
+admite un tercero) y solo el propietario crea, rota o revoca; rotar emite un
+token nuevo y deja el viejo demostrablemente muerto. Cuenta e invitado entran
+por el mismo camino; MANUAL no aplica (no tiene dispositivo).
+**Consecuencias:** entrar por enlace es la vía natural del invitado, y por
+eso este ADR **corrige un vacío de ADR-034**: la app pintaba
+`_AccountRequiredHome` a todo el que no tuviera cuenta y la query de "mis
+contextos" exigía `canUseSocial()`, de modo que un invitado podía ser miembro
+en datos pero no tenía pantalla desde la que llegar al grupo. Ahora participa
+de verdad: ve sus contextos y sus invitaciones, y también a los participantes
+MANUAL con los que reparte. Crear contextos sigue siendo exclusivo de una
+cuenta. Quien conserve un enlace vivo puede volver a entrar tras ser
+expulsado —igual que en cualquier grupo de mensajería—: para cerrar de verdad
+hay que rotar o revocar, y así está documentado en la UI.
+**Pendiente (no es código de app):** servir `/g/{token}` en Hosting y
+publicar `assetlinks.json` para verificar los App Links de Android. Mientras
+tanto la vía operativa es pegar el enlace en `/join`, y la ruta con token ya
+está preparada. Contrato en `docs/ESPACIOS.md`.
+**Revisión:** al implementar los enlaces de TICKET (Sprint 5), reutilizar
+este mecanismo en vez de inventar otro; y en el Sprint 6 tener presente que
+un MANUAL y un INVITADO que sean la misma persona siguen siendo dos actores
+distintos — entrar por enlace no lo empeora, pero tampoco lo resuelve.
+
 ---
 
 <a name="parte-x"></a>
@@ -1458,6 +1515,7 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
 | Relaciones económicas | `docs/RELACIONES_ECONOMICAS.md` | 029 | `economic_ledger.dart` + `economicLedger.ts`, `economicPayments.ts`, `features/economy/**` | golden `economic_ledger.json`, tests de dominio/Functions/Flutter/Rules |
 | Relaciones y grupos | `docs/ESPACIOS.md` | 028, 030 | `features/spaces/**`, `features/home/**`, contexto en `features/sessions/**` | `spaces_repository_test.dart`, `session_repository_test.dart`, `app_smoke_test.dart`, Rules |
+| Enlaces de grupo | `docs/ESPACIOS.md` | 035 (sobre 012, 033, 034) | `spaces_repository.dart`, `space_link_screen.dart`, `join_space_screen.dart`, `firestore.rules` (spaceLinks + joinGrants) | `space_links_test.dart` (13), Rules «enlaces de grupo» (17) |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |
 | Contrato IA | spec §9, Biblia §29 | 011 | `packages/ai_providers/**` + `features/ai/**` | `ai_providers_test.dart` (10) + `ai_feature_test.dart` (6) |

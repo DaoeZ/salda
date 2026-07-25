@@ -198,9 +198,12 @@ existentes. Los snapshots congelados en membresías anteriores conservan el
 nombre de entonces, exactamente como ocurre con cualquier otro rótulo
 histórico.
 
-**Puede**: participar en relaciones y grupos, aparecer en balances y
-liquidaciones, ver la cronología de lo que le afecta, recibir y aceptar
-invitaciones, y renombrarse (sin perder identidad ni historial).
+**Puede**: participar en relaciones y grupos, **verlos en su inicio y entrar
+en ellos** (Sprint 4: hasta entonces podía ser miembro en datos pero no tenía
+pantalla desde la que llegar), aparecer en balances y liquidaciones, ver la
+cronología de lo que le afecta, recibir y aceptar invitaciones, entrar por
+enlace, ver a los participantes MANUAL con los que reparte, y renombrarse
+(sin perder identidad ni historial).
 
 **No puede**: crear relaciones o grupos, invitar, administrar miembros,
 transferir, archivar, tener perfil público ni amistades. Rules lo separa con
@@ -217,17 +220,12 @@ cuenta porque dispone de UID propio**. Para ADR-033 es un actor de cuenta
 (`uid` sin prefijo, sin `manual:`), así que entra en obligaciones, neteo
 bilateral y liquidaciones de P5 sin ningún cambio ni caso especial.
 
-### Incorporación: FUERA del alcance de este sprint
+### Incorporación: RESUELTA por los enlaces de grupo (Sprint 4)
 
-La incorporación cómoda de invitados **mediante enlaces queda expresamente
-fuera del alcance de este sprint**. Hoy el anfitrión solo puede invitar a un
-invitado si conoce su UID, porque un invitado no es buscable por diseño.
-
-**El flujo de invitación actual NO es el definitivo**: es el mínimo que
-permite validar el modelo, no una decisión de producto cerrada. **El Sprint 4
-(Enlaces) resolverá la incorporación**, y al hacerlo deberá decidir el canal
-por el que el anfitrión alcanza a un invitado sin exponer identidades ni
-convertir al invitado en buscable.
+Antes, el anfitrión solo podía invitar a un invitado si conocía su UID,
+porque un invitado no es buscable por diseño. El **enlace de grupo** (abajo)
+es el canal que resuelve esa incorporación: el anfitrión reparte un enlace en
+vez de buscar a una persona, así que **nadie tiene que volverse buscable**.
 
 ### Consolidación con participantes MANUAL: Sprint 6
 
@@ -241,8 +239,82 @@ mecanismo. Este sprint no introduce ninguna decisión al respecto y **no
 prejuzga** la elección entre migración de referencias y resolución mediante
 alias.
 
-Fuera de alcance de este sprint: enlaces, deep links, vinculación con cuentas
-y reclamación de participantes manuales.
+Fuera de alcance: vinculación con cuentas y reclamación de participantes
+manuales (Sprint 6).
+
+## Enlaces de grupo (Sprint 4, ADR-035)
+
+Un **GRUPO** puede tener un enlace de incorporación. Compartirlo es la forma
+normal de sumar gente: sustituye a buscar personas una a una y es lo único
+que permite alcanzar a un invitado, que por diseño no es buscable.
+
+```text
+spaceLinks/{token}
+  spaceId · spaceName (denormalizado solo para pintar) · createdByUid
+  status: active|revoked · createdAt · updatedAt · schemaVersion: 1
+spaces/{spaceId}/joinGrants/{uid}
+  uid · token · createdAt          // prueba de conocimiento, SOLO ESCRITURA
+```
+
+**El identificador del documento ES el secreto**: 128 bits generados con
+`ShareCode`, la misma primitiva del enlace de invitados de sesión. Conocer el
+token es la autorización (ADR-012); adivinarlo, inviable. De ahí las dos
+mitades de la política en Rules: `get` abierto a cualquier sesión que acierte
+el token —para que quien recibe el enlace vea a qué grupo entra antes de ser
+miembro— y `list` reservado al propietario ACTUAL del grupo, para que un
+enlace **nunca sea enumerable**.
+
+**El enlace no contiene identidades.** Solo dice a qué grupo abre y cómo se
+llama: compartirlo no revela quién está dentro, no expone UID y no convierte
+a nadie en buscable — la condición que ADR-034 exigía comprobar al cerrar
+este sprint.
+
+**Canje en un único batch**: el que entra escribe la prueba de conocimiento
+(`joinGrants/{uid}` con el token) y su membresía a la vez, y Rules valida la
+segunda contra la primera con `existsAfter`, exactamente como ya hacía
+aceptar una invitación. La prueba es un documento de **solo escritura**: no
+la lee nadie, ni siquiera el propietario. Si el token viviera en la
+membresía, cualquier miembro podría leerlo y reenviar el enlace, saltándose
+la regla de que **solo el propietario incorpora gente**.
+
+La membresía **revalida el enlace en cada canje**, no solo al escribir la
+prueba: revocar cierra la puerta de inmediato aunque alguien hubiera guardado
+el token o quedara una prueba antigua.
+
+Quién puede entrar por enlace:
+
+- **Cuenta** (verificada y con perfil): entra y se lee su nombre en vivo.
+- **Invitado** (ADR-034): entra igual, congelando su nombre visible en la
+  membresía. Es su vía natural de incorporación.
+- **Manual** (ADR-033): no aplica — no tiene dispositivo. Los sigue creando
+  el propietario dentro del grupo, sin cambios.
+
+Límites deliberados:
+
+- **Solo grupos.** Una relación reserva una pareja canónica e inmutable de
+  UID y Rules le impide un tercer miembro: un enlace no tendría a quién
+  admitir.
+- **Solo espacios activos**: uno archivado no admite ni crear ni canjear.
+- **Crear, rotar y revocar es exclusivo del propietario.** Rotar revoca el
+  anterior y emite un token nuevo; el viejo queda demostrablemente muerto en
+  vez de reciclarse.
+- **Expulsar no basta si el enlace sigue vivo**: quien conserve el enlace
+  puede volver a entrar, igual que en cualquier grupo de mensajería. Para
+  cerrar de verdad hay que rotar o revocar.
+- **Enlaces de TICKET y vinculación de identidad siguen fuera** (Sprint 5 y
+  Sprint 6).
+
+**Entrada en la app**: `/join/{token}` (deep link) o `/join` para pegar el
+enlace a mano. Una sola pantalla resuelve las tres situaciones —cuenta,
+invitado con nombre y sin sesión— sin perder el enlace por el camino: quien
+llega sin sesión elige ahí mismo entre cuenta o invitado. Aceptar la URL
+completa pegada desde WhatsApp es el caso normal, así que el token se
+normaliza a partir de ella.
+
+**Pendiente de Hosting** (no es código de app): servir `/g/{token}` como
+página de aterrizaje y publicar `assetlinks.json` para verificar los App
+Links de Android. Hasta entonces la vía operativa es pegar el enlace en
+`/join`, y la ruta con token queda ya preparada.
 
 ## Tickets y política de privacidad
 
@@ -292,6 +364,13 @@ composites).
 
 - `backend/firestore/test/rules.test.mjs` (bloque spaces): 19 casos
   positivos/negativos contra el emulador.
+- `rules.test.mjs` (bloque «enlaces de grupo»): 17 casos — gobierno del
+  enlace, no enumerabilidad, canje por cuenta e invitado, token inventado /
+  revocado / de otro grupo, alta de terceros, prueba de solo escritura,
+  revocación con prueba antigua, y regresión de las otras dos vías de alta.
+- `space_links_test.dart`: 13 casos del contrato del repositorio (ciclo de
+  vida, rotación, idempotencia del doble toque, URL pegada, invitado que
+  llega a sus grupos).
 - `spaces_repository_test.dart`: ciclo de vida, idempotencia de
   invitaciones, transferencia, salida/expulsión, vínculo de tickets y
   compatibilidad con tickets sin espacio.

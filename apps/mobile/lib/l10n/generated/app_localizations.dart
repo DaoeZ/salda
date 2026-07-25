@@ -2763,6 +2763,138 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Este ticket pertenece a su contexto y no se puede desvincular'**
   String get ticketContextLocked;
+
+  /// No description provided for @commonConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmar'**
+  String get commonConfirm;
+
+  /// No description provided for @spaceLinkTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Enlace del grupo'**
+  String get spaceLinkTitle;
+
+  /// No description provided for @spaceLinkAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartir enlace'**
+  String get spaceLinkAction;
+
+  /// No description provided for @spaceLinkEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea un enlace para que otras personas se unan a este grupo sin que tengas que buscarlas.'**
+  String get spaceLinkEmpty;
+
+  /// No description provided for @spaceLinkCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear enlace'**
+  String get spaceLinkCreate;
+
+  /// No description provided for @spaceLinkHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Cualquiera con este enlace puede unirse al grupo. Revócalo cuando ya no lo necesites.'**
+  String get spaceLinkHint;
+
+  /// No description provided for @spaceLinkRotate.
+  ///
+  /// In es, this message translates to:
+  /// **'Generar un enlace nuevo'**
+  String get spaceLinkRotate;
+
+  /// No description provided for @spaceLinkRotateConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'El enlace actual dejará de funcionar y tendrás que repartir el nuevo. ¿Continuar?'**
+  String get spaceLinkRotateConfirm;
+
+  /// No description provided for @spaceLinkRevoke.
+  ///
+  /// In es, this message translates to:
+  /// **'Revocar el enlace'**
+  String get spaceLinkRevoke;
+
+  /// No description provided for @spaceLinkRevokeConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Nadie más podrá unirse con este enlace. Los miembros actuales se quedan. ¿Continuar?'**
+  String get spaceLinkRevokeConfirm;
+
+  /// No description provided for @spaceLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido cargar el enlace'**
+  String get spaceLinkError;
+
+  /// No description provided for @joinTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirse a un grupo'**
+  String get joinTitle;
+
+  /// No description provided for @joinEntry.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirme con un enlace'**
+  String get joinEntry;
+
+  /// No description provided for @joinPasteHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Pega aquí el enlace que te han enviado.'**
+  String get joinPasteHint;
+
+  /// No description provided for @joinPasteLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Enlace del grupo'**
+  String get joinPasteLabel;
+
+  /// No description provided for @joinLookup.
+  ///
+  /// In es, this message translates to:
+  /// **'Continuar'**
+  String get joinLookup;
+
+  /// No description provided for @joinInvitedTo.
+  ///
+  /// In es, this message translates to:
+  /// **'Te invitan a'**
+  String get joinInvitedTo;
+
+  /// No description provided for @joinIdentifyHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Identifícate para unirte. No hace falta crear una cuenta.'**
+  String get joinIdentifyHint;
+
+  /// No description provided for @joinWithAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'Entrar con mi cuenta'**
+  String get joinWithAccount;
+
+  /// No description provided for @joinAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirme al grupo'**
+  String get joinAction;
+
+  /// No description provided for @joinLinkInvalid.
+  ///
+  /// In es, this message translates to:
+  /// **'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.'**
+  String get joinLinkInvalid;
+
+  /// No description provided for @joinLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido unirte al grupo. Inténtalo otra vez.'**
+  String get joinLinkError;
 }
 
 class _AppLocalizationsDelegate

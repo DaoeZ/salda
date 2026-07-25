@@ -85,6 +85,18 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)**, **P3
 (amistades)**, **P4 (espacios compartidos)**, **P5 (relaciones económicas)**,
 **P6 (actividad)** y **P7 (chat contextual)** completos a nivel de código.
+**Sprints 1–4 sobre Relaciones/Grupos:** invitaciones (lectura previa del doc
+inexistente), participantes MANUAL (ADR-033), modo GUEST (ADR-034) y
+**enlaces de grupo (ADR-035)**. El enlace es un token opaco de 128 bits cuyo
+ID de documento ES el secreto (`spaceLinks/{token}`, `list` solo para el
+propietario), se canjea escribiendo prueba de conocimiento + membresía en UN
+batch (`joinGrants/{uid}`, solo escritura) y se revalida en cada canje, así
+que revocarlo cierra la puerta al instante. Solo grupos activos; cuenta e
+invitado entran igual; MANUAL no aplica. El mismo sprint corrige el vacío de
+ADR-034: un invitado ya VE sus contextos e invitaciones en Inicio (antes era
+miembro en datos pero sin pantalla a la que llegar). Pendiente de Hosting:
+`/g/{token}` y `assetlinks.json` para los App Links; mientras tanto se pega
+el enlace en `/join`. Contrato: `docs/ESPACIOS.md`.
 **Reestructuración Relaciones/Grupos (ADR-030):** `spaces` es ahora la raíz
 visible del producto: `relationship` reserva una pareja canónica de UID y
 `group` representa contextos de tres o más miembros. Inicio ya no crea ni lista

@@ -162,6 +162,45 @@ class SpaceInvite {
   static String idFor(String spaceId, String toUid) => '${spaceId}_$toUid';
 }
 
+/// Enlace de incorporación a un GRUPO (Sprint 4, ADR-035).
+///
+/// El [token] es el identificador del documento y a la vez el secreto (128
+/// bits): conocerlo es la autorización, igual que el `shareCode` de una
+/// sesión (ADR-012). Por eso nunca se copia a la membresía ni a ningún otro
+/// documento legible por los demás miembros.
+///
+/// No contiene identidades: un enlace solo dice a qué grupo abre y cómo se
+/// llama, así que compartirlo no revela quién está dentro ni hace buscable
+/// a nadie — la restricción que ADR-034 exige revisar al cerrar este sprint.
+class SpaceJoinLink {
+  const SpaceJoinLink({
+    required this.token,
+    required this.spaceId,
+    required this.spaceName,
+    required this.createdByUid,
+    required this.revoked,
+    this.createdAt,
+  });
+
+  final String token;
+  final String spaceId;
+
+  /// Denormalizado SOLO para que quien recibe el enlace vea a qué grupo
+  /// entra antes de ser miembro (todavía no puede leer el espacio). Mismo
+  /// criterio que `SpaceInvite.spaceName`: no es clave relacional.
+  final String spaceName;
+  final String createdByUid;
+  final bool revoked;
+  final DateTime? createdAt;
+
+  bool get isActive => !revoked;
+}
+
+/// Resultado de mirar un enlace ANTES de entrar. Se distingue "no sirve" de
+/// "ya estás dentro" porque la salida de la app es distinta: error amable
+/// frente a navegar directamente al grupo.
+enum JoinLinkOutcome { joined, alreadyMember, invalid, needsGuestName }
+
 /// Resumen de un ticket vinculado, leído EN VIVO del propio documento del
 /// ticket (collection group por spaceId): nunca hay copia que desincronizar.
 class SpaceTicket {
