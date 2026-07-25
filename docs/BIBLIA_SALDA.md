@@ -1345,11 +1345,32 @@ persona no borra su historial.
 **Consecuencias:** el reparto, los balances y las liquidaciones de sesión
 funcionan igual para ambos tipos; los pagos P5 siguen exigiendo dos cuentas
 (saldar con un manual se hace por el flujo de sesión, que ya admite
-participantes sin dispositivo). La futura vinculación solo tendrá que
-reescribir la referencia del actor y rellenar `linkedUid`, sin mover
-importes. Invitados, enlaces y reclamación de identidad siguen fuera.
-**Revisión:** al implementar la vinculación, decidir si el actor histórico se
-reescribe o se resuelve con una tabla de alias.
+participantes sin dispositivo). Invitados, enlaces y reclamación de identidad
+siguen fuera.
+**[DECISIÓN PENDIENTE] Vinculación con una cuenta — FUERA del alcance de
+este sprint.** El actor `manual:{manualId}` debe permanecer ESTABLE: es la
+clave con la que están escritas las obligaciones ya derivadas. La futura fase
+deberá elegir explícitamente entre (a) **migración de referencias**,
+reescribiendo el actor en cada documento histórico —homogéneo pero masivo, no
+atómico entre colecciones, difícil de revertir e incompatible con los ids
+deterministas ya calculados—, o (b) **resolución mediante alias**,
+conservando el actor histórico y aplicando una equivalencia
+`manual:{manualId} → uid` al leer y consolidar —sin tocar documentos,
+reversible y demostrable—. **Opción preferente: alias**, salvo evidencia
+técnica que justifique lo contrario (coste de lectura o complejidad de
+consulta inasumibles). `linkedUid` **NO resuelve por sí solo** la
+vinculación: es solo un marcador de intención; no reescribe obligaciones, no
+las consolida al leer ni impide duplicidades.
+**Duplicidad a evitar:** ningún contexto puede tener a la misma persona
+activa a la vez como actor manual y como UID. El mecanismo deberá cubrir:
+vinculación e incorporación como miembro **atómicas**; la identidad manual
+deja de ser seleccionable en repartos nuevos una vez vinculada; Rules exige
+que un participante declare exactamente una identidad (invariante ya vigente
+en este sprint); consolidación de ambas vertientes en el balance bilateral al
+leer; y decisión sobre qué hacer si la cuenta ya tenía obligaciones propias
+en ese mismo contexto (fusión frente a coexistencia histórica).
+**Revisión:** al abrir la fase de vinculación, resolver la decisión anterior
+y registrarla en un ADR propio antes de escribir código.
 
 ---
 

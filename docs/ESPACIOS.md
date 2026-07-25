@@ -111,9 +111,58 @@ participantes sin dispositivo.
 
 El identificador es opaco y estable, **nunca el nombre**: renombrar no toca
 ninguna obligación derivada, y retirar a la persona del contexto no borra su
-historial (las entradas conservan su actor). `linkedUid` queda reservado —y
-fijado a `null` por Rules— para la futura vinculación con una cuenta real,
-que solo tendrá que reescribir la referencia del actor sin mover importes.
+historial (las entradas conservan su actor).
+
+### Vinculación con una cuenta: DECISIÓN PENDIENTE
+
+**La vinculación queda expresamente fuera del alcance de este sprint.** Aquí
+solo se documenta la restricción que hay que respetar y lo que queda por
+decidir; nada de esto está implementado.
+
+Restricción firme: el actor `manual:{manualId}` **debe permanecer estable**.
+Es la clave con la que están escritas las obligaciones ya derivadas, así que
+cualquier solución que lo altere sin más pierde o corrompe el historial
+económico.
+
+La futura fase deberá **elegir explícitamente** entre dos alternativas, que
+no son equivalentes:
+
+1. **Migración de referencias** — reescribir en cada documento histórico el
+   actor manual por el UID. Deja los datos homogéneos, pero es una escritura
+   masiva, no atómica sobre colecciones distintas, difícil de revertir y que
+   invalida los ids deterministas ya calculados a partir del actor.
+2. **Resolución mediante alias** — conservar intacto el actor histórico y
+   mantener una tabla de equivalencia `manual:{manualId} → uid` que se
+   aplique al leer y al consolidar. Los documentos no se tocan, la operación
+   es reversible y el historial queda demostrable.
+
+**Opción preferente: la resolución mediante alias**, salvo que aparezca
+evidencia técnica que justifique lo contrario (por ejemplo, un coste de
+lectura o una complejidad de consulta inasumibles al resolver el alias en
+cada consolidación).
+
+`linkedUid` **por sí solo NO resuelve la vinculación**: es únicamente un
+marcador de intención en la identidad manual. No reescribe obligaciones, no
+las consolida al leer y no impide duplicidades; sin la decisión anterior y
+su mecanismo, un `linkedUid` relleno no cambiaría ni un balance.
+
+**Duplicidad a evitar** (mismo humano contando dos veces en un contexto,
+como actor manual y como UID): la fase de vinculación deberá garantizar que
+un contexto no pueda tener simultáneamente ambas identidades de la misma
+persona activas. El mecanismo tendrá que cubrir al menos:
+
+- vinculación e incorporación como miembro resueltas de forma **atómica**,
+  de modo que no exista un instante con las dos identidades participables;
+- una vez vinculada, la identidad manual deja de ser **seleccionable** en
+  repartos nuevos: quien participa es la cuenta;
+- validación en Rules de que un participante de sesión declare exactamente
+  una identidad (`manualId` **o** cuenta, nunca ambas — invariante que este
+  sprint ya aplica);
+- consolidación de las dos vertientes en el balance bilateral **al leer**
+  (con la opción de alias), para que el saldo no se presente partido;
+- decisión sobre qué ocurre si la cuenta vinculada ya tenía obligaciones
+  propias en ese mismo contexto (fusión de saldos frente a coexistencia
+  histórica).
 
 ## Tickets y política de privacidad
 
