@@ -732,3 +732,106 @@ test('P2.1 REGRESIÓN Alba/Pedro: tras confirmar el pago de Alba, lo nuevo ' +
   ]);
   assert.equal(settlementId(r.settlementSync.writes[0]), 'pending_p3_p2');
 });
+
+// ─── Participantes manuales (ADR-033) ─────────────────────────────────────
+
+const withManual = (): SessionSnapshot => {
+  const snapshot = base();
+  snapshot.ownerUid = 'uid-edgar';
+  snapshot.currency = 'EUR';
+  snapshot.participants = [
+    { id: 'p1', isOwner: true, order: 0, userUid: 'uid-edgar' },
+    { id: 'p2', order: 1, userUid: 'uid-alba' },
+    { id: 'p3', order: 2, manualId: 'mp-lucia' }, // sin cuenta
+  ];
+  return snapshot;
+};
+
+test('MANUAL: un participante sin cuenta genera obligación como una cuenta',
+    () => {
+  const r = computeAggregates(withManual());
+  const manual = r.economicEntries.filter(
+    (entry) => entry.debtorUid === 'manual:mp-lucia');
+  assert.ok(manual.length > 0, 'el manual debe deber al pagador');
+  // Pesa EXACTAMENTE lo mismo que un registrado: su obligación coincide con
+  // el consumo que le atribuyó el motor de reparto.
+  assert.equal(
+    manual.reduce((sum, entry) => sum + entry.amount, 0),
+    r.balances.p3.consumed,
+  );
+  // Solo lo lee la cuenta real implicada: un manual no tiene con qué leer.
+  assert.deepEqual(manual[0].memberUids, ['uid-edgar']);
+  assert.equal(manual[0].creditorUid, 'uid-edgar');
+});
+
+test('MANUAL: acreedor manual conserva al deudor con cuenta como lector',
+    () => {
+  const snapshot = withManual();
+  // Paga el manual (adelanta el dinero Lucía, que no tiene cuenta).
+  snapshot.accounts[0].tickets[0].paidByParticipantId = 'p3';
+  const r = computeAggregates(snapshot);
+  const towardsManual = r.economicEntries.filter(
+    (entry) => entry.creditorUid === 'manual:mp-lucia');
+  assert.ok(towardsManual.length > 0);
+  for (const entry of towardsManual) {
+    assert.ok(entry.memberUids.every((uid) => !uid.startsWith('manual:')));
+    assert.ok(entry.memberUids.includes(entry.debtorUid));
+  }
+});
+
+test('MANUAL: entre dos manuales no se publica economía global', () => {
+  const snapshot = base();
+  snapshot.ownerUid = 'uid-edgar';
+  snapshot.participants = [
+    { id: 'p1', isOwner: true, order: 0, userUid: 'uid-edgar' },
+    { id: 'p2', order: 1, manualId: 'mp-a' },
+    { id: 'p3', order: 2, manualId: 'mp-b' },
+  ];
+  // Adelanta el dinero un manual: la deuda del OTRO manual hacia él no tiene
+  // ningún lector posible, así que se queda en el balance de la sesión.
+  snapshot.accounts[0].tickets[0].paidByParticipantId = 'p2';
+  const r = computeAggregates(snapshot);
+
+  assert.ok(!r.economicEntries.some((entry) =>
+    entry.debtorUid === 'manual:mp-b' && entry.creditorUid === 'manual:mp-a'));
+  // La cuenta real sí queda registrada frente al manual que pagó.
+  assert.ok(r.economicEntries.some((entry) =>
+    entry.debtorUid === 'uid-edgar' && entry.creditorUid === 'manual:mp-a'));
+  // El balance interno de la sesión conserva TODO, con lectores o sin ellos.
+  assert.ok(r.balances.p3.consumed > 0);
+  assert.equal(
+    r.balances.p1.consumed + r.balances.p2.consumed + r.balances.p3.consumed,
+    r.sessionTotals.grandTotal,
+  );
+});
+
+test('MANUAL: una cuenta nunca se degrada a manual y no se duplica', () => {
+  const snapshot = withManual();
+  snapshot.participants[1] = {
+    id: 'p2', order: 1, userUid: 'uid-alba', manualId: 'mp-antiguo',
+  };
+  const r = computeAggregates(snapshot);
+  assert.ok(r.economicEntries.some((e) => e.debtorUid === 'uid-alba'));
+  assert.ok(!r.economicEntries.some((e) => e.debtorUid === 'manual:mp-antiguo'));
+});
+
+test('MANUAL: un pago que salda al manual se espeja como pago legacy', () => {
+  const snapshot = withManual();
+  snapshot.settlements = [
+    { id: 'st1', from: 'p3', to: 'p1', amount: 400, state: 'confirmed' },
+  ];
+  const r = computeAggregates(snapshot);
+  const legacy = r.legacyPayments.find((p) => p.settlementId === 'st1');
+  assert.ok(legacy);
+  assert.equal(legacy.payerUid, 'manual:mp-lucia');
+  assert.equal(legacy.receiverUid, 'uid-edgar');
+  assert.deepEqual(legacy.memberUids, ['uid-edgar']);
+});
+
+test('MANUAL: sin identidad (solo nombre) sigue sin publicarse en P5', () => {
+  const snapshot = withManual();
+  snapshot.participants[2] = { id: 'p3', order: 2 }; // ni cuenta ni manual
+  const r = computeAggregates(snapshot);
+  assert.ok(!r.economicEntries.some((entry) =>
+    entry.debtorUid.startsWith('manual:')));
+});

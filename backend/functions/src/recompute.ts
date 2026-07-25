@@ -23,6 +23,7 @@ import {
   type SettlementDraft,
   type TicketContribution,
 } from './domain/balanceEngine.js';
+import { accountUidsOf, manualActor } from './domain/economicActor.js';
 import type { Cents } from './domain/money.js';
 import {
   splitTicket,
@@ -40,6 +41,11 @@ export interface ParticipantDoc {
   order?: number;
   /** P5: identidad registrada estable. No confundir con claimedByDevice. */
   userUid?: string;
+  /**
+   * ADR-033: participante MANUAL (sin cuenta ni UID). Su actor económico es
+   * `manual:{manualId}` y pesa igual que una cuenta en las obligaciones.
+   */
+  manualId?: string;
   claimedByDevice?: string;
 }
 
@@ -130,8 +136,15 @@ export interface RecomputeResult {
 
 export interface EconomicEntryDraft {
   id: string;
-  memberUids: [string, string];
+  /**
+   * UIDs REALES que pueden leer la obligación (Rules + array-contains). Con
+   * un participante manual queda un solo lector; nunca contiene actores
+   * manuales, que no tienen cuenta con la que leer.
+   */
+  memberUids: string[];
+  /** Actor deudor: UID de cuenta o `manual:{id}` (ADR-033). */
   debtorUid: string;
+  /** Actor acreedor: UID de cuenta o `manual:{id}`. */
   creditorUid: string;
   amount: Cents;
   currency: string;
@@ -144,8 +157,11 @@ export interface EconomicEntryDraft {
 
 export interface LegacyPaymentDraft {
   id: string;
-  memberUids: [string, string];
+  /** UIDs reales que pueden leerlo (ver EconomicEntryDraft.memberUids). */
+  memberUids: string[];
+  /** Actor pagador: UID de cuenta o `manual:{id}`. */
   payerUid: string;
+  /** Actor receptor: UID de cuenta o `manual:{id}`. */
   receiverUid: string;
   amount: Cents;
   currency: string;
@@ -185,11 +201,14 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
   const fallbackPayer =
     participants.find((p) => p.isOwner)?.id ?? activeIds[0];
   const currency = s.currency ?? 'EUR';
-  const uidByPid = new Map<string, string>();
+  // pid → actor económico: UID de cuenta, o `manual:{id}` sin cuenta. Un
+  // participante con cuenta nunca se degrada a manual (ADR-033).
+  const actorByPid = new Map<string, string>();
   for (const participant of participants) {
     const resolved = participant.userUid ??
-      (participant.isOwner ? s.ownerUid : undefined);
-    if (resolved) uidByPid.set(participant.id, resolved);
+      (participant.isOwner ? s.ownerUid : undefined) ??
+      (participant.manualId ? manualActor(participant.manualId) : undefined);
+    if (resolved) actorByPid.set(participant.id, resolved);
   }
 
   const accountTotals: RecomputeResult['accountTotals'] = {};
@@ -238,24 +257,33 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         consumption,
       });
 
-      // P5 conserva la deuda ORIGINAL por ticket. Una sesión puede seguir
-      // teniendo nombres sin cuenta: solo se publican pares con dos UID
-      // registrados, sin inventar identidad a partir del nombre.
-      const payerUid = uidByPid.get(paidBy);
-      if (payerUid) {
+      // P5 conserva la deuda ORIGINAL por ticket entre dos ACTORES. Un actor
+      // es una cuenta (su UID) o un participante MANUAL (`manual:{id}`), que
+      // económicamente pesa igual aunque no tenga cuenta ni dispositivo. Un
+      // nombre suelto sin identidad sigue sin publicarse: no se inventa
+      // identidad a partir del nombre (ADR-033).
+      const payerActor = actorByPid.get(paidBy);
+      if (payerActor) {
         const byDebtor = new Map<string, Cents>();
         for (const [pid, amount] of Object.entries(consumption)) {
-          const debtorUid = uidByPid.get(pid);
-          if (!debtorUid || debtorUid === payerUid || amount <= 0) continue;
-          byDebtor.set(debtorUid, (byDebtor.get(debtorUid) ?? 0) + amount);
+          const debtorActor = actorByPid.get(pid);
+          if (!debtorActor || debtorActor === payerActor || amount <= 0) {
+            continue;
+          }
+          byDebtor.set(debtorActor, (byDebtor.get(debtorActor) ?? 0) + amount);
         }
-        for (const [debtorUid, amount] of [...byDebtor.entries()]
+        for (const [debtorActor, amount] of [...byDebtor.entries()]
           .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+          // Entre dos manuales no hay nadie que pueda leerla: esa deuda vive
+          // en el balance de su sesión, no en la economía global.
+          const readers = accountUidsOf([debtorActor, payerActor]);
+          if (readers.length === 0) continue;
           economicEntries.push({
-            id: `${account.id}_${ticket.id}_${encodedPair(debtorUid, payerUid)}`,
-            memberUids: orderedUids(debtorUid, payerUid),
-            debtorUid,
-            creditorUid: payerUid,
+            id: `${account.id}_${ticket.id}_${
+              encodedPair(debtorActor, payerActor)}`,
+            memberUids: readers,
+            debtorUid: debtorActor,
+            creditorUid: payerActor,
             amount,
             currency,
             accountId: account.id,
@@ -280,13 +308,17 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
     // `pending` es una sugerencia de recompute, no un pago humano. Solo
     // `marked` (el deudor dice que pagó) y `confirmed` son movimientos.
     if (settlement.state === 'pending') continue;
-    const payerUid = uidByPid.get(settlement.from);
-    const receiverUid = uidByPid.get(settlement.to);
+    const payerUid = actorByPid.get(settlement.from);
+    const receiverUid = actorByPid.get(settlement.to);
     if (!payerUid || !receiverUid || payerUid === receiverUid ||
         settlement.amount <= 0) continue;
+    // Un pago que salda a un manual también reduce su deuda global; si nadie
+    // puede leerlo (manual↔manual) se queda en el balance de la sesión.
+    const readers = accountUidsOf([payerUid, receiverUid]);
+    if (readers.length === 0) continue;
     legacyPayments.push({
       id: `legacy_${settlement.id}`,
-      memberUids: orderedUids(payerUid, receiverUid),
+      memberUids: readers,
       payerUid,
       receiverUid,
       amount: settlement.amount,
@@ -573,6 +605,7 @@ export async function recomputeSession(sid: string): Promise<void> {
           : claimed && registeredClaims.has(claimed)
           ? claimed
           : undefined,
+        manualId: p.data().manualId as string | undefined,
         claimedByDevice: claimed,
       };
     }),

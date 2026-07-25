@@ -1,6 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.11 · **Fecha:** 2026-07-23 · **Changelog:** v1.11 — P7 chat
+**Versión:** 1.12 · **Fecha:** 2026-07-25 · **Changelog:** v1.12 —
+participantes manuales como actores económicos sin cuenta ni migración
+(ADR-033). v1.11 — P7 chat
 contextual privado por membresía y fecha de alta, separado de actividad y
 economía (ADR-032). v1.10 — P6 actividad
 como proyección de auditoría con IDs deterministas y audiencia congelada
@@ -1321,6 +1323,33 @@ adjuntos, edición, reacciones, recibos, no leídos, push ni invitados web.
 Contrato detallado en `docs/CHAT.md`.
 **Revisión:** si se añaden adjuntos o notificaciones, diseñarlos como extensiones
 independientes y revisar coste, retención y moderación antes de implementarlos.
+
+### ADR-033: Participantes manuales como actores económicos de primera clase
+**Estado:** Aceptada · **Fecha:** 2026-07-25
+**Contexto:** solo podían participar personas con cuenta, pero la mayoría de
+gastos reales incluye a alguien que no usa la app. Necesitábamos que pese
+económicamente igual sin inventarle una cuenta, y sin cerrar la puerta a que
+mañana reclame su identidad conservando el historial.
+**Decisión:** [HECHO] `spaces/{id}/manualParticipants/{manualId}` con nombre
+editable, `createdByUid` y `linkedUid: null` reservado; el participante de
+sesión guarda `manualId` (identidad) además del `claimedByDevice` existente.
+Toda obligación P5 pasa a expresarse entre ACTORES: el UID para una cuenta y
+`manual:{manualId}` para quien no la tiene. Como los UID de Firebase nunca
+contienen ':', el prefijo no colisiona y **no hace falta migrar ningún
+documento**: un valor sin prefijo es una cuenta por definición. `memberUids`
+sigue siendo solo UID reales (es lo que autorizan Rules y las queries
+array-contains): cuenta↔manual tiene un lector, manual↔manual no se publica
+en la economía global y se queda en el balance de su sesión. El id es opaco
+y estable, nunca el nombre: renombrar no toca obligaciones y retirar a la
+persona no borra su historial.
+**Consecuencias:** el reparto, los balances y las liquidaciones de sesión
+funcionan igual para ambos tipos; los pagos P5 siguen exigiendo dos cuentas
+(saldar con un manual se hace por el flujo de sesión, que ya admite
+participantes sin dispositivo). La futura vinculación solo tendrá que
+reescribir la referencia del actor y rellenar `linkedUid`, sin mover
+importes. Invitados, enlaces y reclamación de identidad siguen fuera.
+**Revisión:** al implementar la vinculación, decidir si el actor histórico se
+reescribe o se resuelve con una tabla de alias.
 
 ---
 

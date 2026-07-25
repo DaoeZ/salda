@@ -80,6 +80,41 @@ Decisiones clave:
 - **Sin administradores**: solo propietario y miembro. No hay necesidad real
   todavía (lista negra de sobre-ingeniería de la Biblia).
 
+## Participantes manuales (ADR-033)
+
+Un contexto puede incluir personas **sin cuenta**: el anfitrión escribe solo
+su nombre y participan en gastos y balances exactamente igual que un miembro
+registrado. No tienen UID, no instalan nada, no leen ni confirman nada.
+
+```text
+spaces/{spaceId}/manualParticipants/{manualId}
+  manualId · displayName (1..40) · linkedUid: null (reservado)
+  createdByUid · createdAt · updatedAt · schemaVersion: 1
+sessions/*/participants/{pid}.manualId?   // identidad del participante
+```
+
+**Identidad económica**: toda obligación de P5 se expresa entre dos ACTORES.
+Un actor es el UID de una cuenta, o `manual:{manualId}` para quien no la
+tiene. Los UID de Firebase son alfanuméricos y nunca contienen `:`, así que
+el prefijo no colisiona y **los documentos económicos anteriores siguen
+siendo válidos sin migración**: un valor sin prefijo es, por definición, una
+cuenta. Un participante es de cuenta **o** manual, nunca ambos, y una cuenta
+jamás se degrada a manual.
+
+`memberUids` sigue conteniendo solo UID reales, porque es lo que Rules y las
+queries `array-contains` usan para autorizar: una obligación entre cuenta y
+manual tiene un único lector, y entre dos manuales no se publica en la
+economía global (esa deuda vive en el balance de su sesión, que no necesita
+lectores). Los pagos P5 siguen exigiendo dos cuentas; saldar con una persona
+sin cuenta se hace por el flujo de liquidación de la sesión, que ya admite
+participantes sin dispositivo.
+
+El identificador es opaco y estable, **nunca el nombre**: renombrar no toca
+ninguna obligación derivada, y retirar a la persona del contexto no borra su
+historial (las entradas conservan su actor). `linkedUid` queda reservado —y
+fijado a `null` por Rules— para la futura vinculación con una cuenta real,
+que solo tendrá que reescribir la referencia del actor sin mover importes.
+
 ## Tickets y política de privacidad
 
 Todo ticket nuevo pertenece a UN contexto. La sesión y el ticket llevan

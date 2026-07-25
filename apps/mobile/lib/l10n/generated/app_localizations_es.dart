@@ -877,6 +877,33 @@ class AppLocalizationsEs extends AppLocalizations {
   String get activityPaymentCancelled => 'Canceló un pago';
 
   @override
+  String get manualParticipantsTitle => 'Personas sin cuenta';
+
+  @override
+  String get manualParticipantsEmpty =>
+      'Añade a quien no use Salda: solo necesitas su nombre y participará en los gastos igual que los demás.';
+
+  @override
+  String get manualParticipantAdd => 'Añadir';
+
+  @override
+  String get manualParticipantName => 'Nombre';
+
+  @override
+  String get manualParticipantHint => 'Sin cuenta · participa en los gastos';
+
+  @override
+  String get manualParticipantRename => 'Cambiar el nombre';
+
+  @override
+  String get manualParticipantRemove => 'Quitar del contexto';
+
+  @override
+  String manualParticipantRemoveBody(String name) {
+    return '$name dejará de aparecer en los gastos nuevos. Su historial, sus deudas y sus pagos no se tocan.';
+  }
+
+  @override
   String get spacesTitle => 'Espacios';
 
   @override

@@ -335,6 +335,28 @@ service cloud.firestore {
         || spaceId.matches('^relationship_.*~' + request.auth.uid + '$');
     }
 
+    // Participante manual (ADR-033): identidad opaca y estable, nombre
+    // editable y `linkedUid` reservado a null hasta la fase de vinculación.
+    function validManualParticipant(data, manualId) {
+      return data.keys().hasOnly([
+          'manualId', 'displayName', 'linkedUid', 'createdByUid',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'manualId', 'displayName', 'createdByUid', 'createdAt',
+          'updatedAt', 'schemaVersion'
+        ])
+        && data.manualId == manualId
+        // El ':' partiría el actor `manual:{id}`; el id nunca es el nombre.
+        && !manualId.matches('.*:.*')
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40
+        && data.get('linkedUid', null) == null
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
     // Owner comprobado sin asumir que el espacio exista (get() sobre un
     // documento ausente aborta la evaluación con "Null value error").
     function isExistingSpaceOwner(spaceId) {
@@ -465,6 +487,33 @@ service cloud.firestore {
       // Sin delete en P4: archivar es la única "baja" (nada destructivo
       // para espacios con actividad).
       allow delete: if false;
+
+      // Participantes MANUALES (ADR-033): personas sin cuenta que el
+      // anfitrión escribe a mano. No tienen UID ni dispositivo: nunca leen
+      // ni confirman nada, su identidad la custodia el espacio y su actor
+      // económico es `manual:{manualId}`. `linkedUid` queda reservado (y
+      // fijado a null) para la futura vinculación con una cuenta, que
+      // deberá conservar el historial reescribiendo solo la referencia.
+      match /manualParticipants/{manualId} {
+        // Los ve cualquier miembro: son participantes del contexto común.
+        allow read: if canUseSocial() && isSpaceMember(spaceId);
+
+        allow create: if isSpaceOwner(spaceId)
+          && spaceData(spaceId).status == 'active'
+          && validManualParticipant(request.resource.data, manualId)
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.createdByUid == request.auth.uid;
+
+        // Solo el nombre visible es mutable; identidad y vínculo, jamás.
+        allow update: if isSpaceOwner(spaceId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['displayName', 'updatedAt'])
+          && validManualParticipant(request.resource.data, manualId);
+
+        // Borrar la identidad no borra su historial económico: las
+        // obligaciones ya derivadas conservan el actor `manual:{id}`.
+        allow delete: if isSpaceOwner(spaceId);
+      }
 
       match /members/{memberUid} {
         // Cualquier miembro ve la lista de miembros.

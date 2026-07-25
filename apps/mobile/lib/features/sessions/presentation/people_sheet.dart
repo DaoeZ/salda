@@ -46,12 +46,17 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
     super.dispose();
   }
 
-  Future<void> create(List<({String uid, String name})> people) async {
+  Future<void> create(
+    List<({String uid, String manualId, String name})> people,
+  ) async {
     final sid = await ref
         .read(createSessionControllerProvider.notifier)
         .create(
           participantNames: people.map((person) => person.name).toList(),
           participantUids: people.map((person) => person.uid).toList(),
+          participantManualIds: people
+              .map((person) => person.manualId)
+              .toList(),
           payerIndex: payerIndex,
           splitMode: mode,
           sessionName: sessionName.text.trim().isEmpty
@@ -91,10 +96,17 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
         final myUid = ref.watch(currentUserIdFromSpacesProvider);
         final ordered = [...spaceMembers]
           ..sort((a, b) => a.uid == myUid ? -1 : (b.uid == myUid ? 1 : 0));
+        // Los participantes manuales del contexto entran en el reparto en
+        // igualdad de condiciones: no tienen cuenta, pero sí identidad
+        // estable y peso económico (ADR-033).
+        final manuals =
+            ref.watch(spaceManualParticipantsProvider(target.id)).value ??
+            const <ManualParticipant>[];
         final people = [
           for (final member in ordered)
             (
               uid: member.uid,
+              manualId: '',
               name: member.uid == myUid
                   ? ref.watch(hostDisplayNameProvider)
                   : ref
@@ -103,6 +115,8 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
                             ?.displayName ??
                         '…',
             ),
+          for (final manual in manuals)
+            (uid: '', manualId: manual.id, name: manual.displayName),
         ];
         final complete = target.kind == SpaceKind.relationship
             ? people.length == 2

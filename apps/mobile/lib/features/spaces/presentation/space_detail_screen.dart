@@ -180,6 +180,10 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
             ),
           ),
           if (amOwner) _PendingInvites(spaceId: space.id),
+          _ManualParticipants(
+            spaceId: space.id,
+            canEdit: amOwner && space.isActive,
+          ),
           if (!contextReady) ...[
             const SizedBox(height: TokenSpacing.md),
             Card(
@@ -425,6 +429,185 @@ class _MemberTile extends ConsumerWidget {
       ),
     );
     if (confirmed == true) action();
+  }
+}
+
+/// Personas sin cuenta del contexto (ADR-033). Solo hace falta su nombre:
+/// participan en gastos y balances como cualquier miembro registrado, pero
+/// no reciben invitación ni acceso porque no tienen dispositivo.
+class _ManualParticipants extends ConsumerWidget {
+  const _ManualParticipants({required this.spaceId, required this.canEdit});
+
+  final String spaceId;
+  final bool canEdit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final manuals =
+        ref.watch(spaceManualParticipantsProvider(spaceId)).value ??
+        const <ManualParticipant>[];
+    if (manuals.isEmpty && !canEdit) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: TokenSpacing.md),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                l10n.manualParticipantsTitle,
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            if (canEdit)
+              TextButton.icon(
+                onPressed: () => _editName(context, ref),
+                icon: const Icon(Icons.person_add_alt, size: 18),
+                label: Text(l10n.manualParticipantAdd),
+              ),
+          ],
+        ),
+        Card(
+          child: Column(
+            children: [
+              if (manuals.isEmpty)
+                ListTile(
+                  dense: true,
+                  title: Text(
+                    l10n.manualParticipantsEmpty,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                )
+              else
+                for (final manual in manuals)
+                  ListTile(
+                    dense: true,
+                    leading: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      child: Text(
+                        avatarInitials(manual.displayName),
+                        style: theme.textTheme.labelMedium,
+                      ),
+                    ),
+                    title: Text(
+                      manual.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(l10n.manualParticipantHint),
+                    trailing: canEdit
+                        ? PopupMenuButton<String>(
+                            onSelected: (action) => action == 'rename'
+                                ? _editName(context, ref, manual: manual)
+                                : _confirmRemove(context, ref, manual),
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'rename',
+                                child: Text(l10n.manualParticipantRename),
+                              ),
+                              PopupMenuItem(
+                                value: 'remove',
+                                child: Text(l10n.manualParticipantRemove),
+                              ),
+                            ],
+                          )
+                        : null,
+                  ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _editName(
+    BuildContext context,
+    WidgetRef ref, {
+    ManualParticipant? manual,
+  }) async {
+    final l10n = AppLocalizations.of(context);
+    final controller = TextEditingController(text: manual?.displayName ?? '');
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(spacesRepositoryProvider);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          manual == null
+              ? l10n.manualParticipantAdd
+              : l10n.manualParticipantRename,
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(labelText: l10n.manualParticipantName),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.of(dialogContext).pop();
+              try {
+                if (manual == null) {
+                  await repo.addManualParticipant(spaceId, name);
+                } else {
+                  await repo.renameManualParticipant(spaceId, manual.id, name);
+                }
+              } on Object {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(l10n.spaceActionError)),
+                );
+              }
+            },
+            child: Text(l10n.commonSave),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmRemove(
+    BuildContext context,
+    WidgetRef ref,
+    ManualParticipant manual,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(spacesRepositoryProvider);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.manualParticipantRemove),
+        content: Text(l10n.manualParticipantRemoveBody(manual.displayName)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.manualParticipantRemove),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await repo.removeManualParticipant(spaceId, manual.id);
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+    }
   }
 }
 

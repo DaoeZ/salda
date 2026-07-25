@@ -253,6 +253,87 @@ void main() {
     });
   });
 
+  group('participantes manuales (ADR-033)', () {
+    test('alta: identidad opaca y estable, nunca el nombre', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      final manual = await repo.addManualParticipant(id, '  Lucía  ');
+
+      expect(manual.displayName, 'Lucía');
+      expect(manual.id, isNotEmpty);
+      expect(manual.id, isNot(contains('Lucía')));
+      // El actor económico es lo que viaja a las obligaciones.
+      expect(manual.actor, 'manual:${manual.id}');
+      expect(manual.linkedUid, isNull); // vinculación: fase futura
+
+      final raw = (await firestore
+              .doc('spaces/$id/manualParticipants/${manual.id}')
+              .get())
+          .data()!;
+      expect(raw['manualId'], manual.id);
+      expect(raw['linkedUid'], isNull);
+      expect(raw['schemaVersion'], 1);
+    });
+
+    test('renombrar NO cambia la identidad económica', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      final manual = await repo.addManualParticipant(id, 'Lucia');
+
+      await repo.renameManualParticipant(id, manual.id, 'Lucía Gómez');
+
+      final listed = await repo.watchManualParticipants(id).first;
+      expect(listed.single.id, manual.id); // misma identidad
+      expect(listed.single.displayName, 'Lucía Gómez');
+      expect(listed.single.actor, manual.actor);
+    });
+
+    test('nombre vacío o desmesurado: rechazado', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      await expectLater(
+        repo.addManualParticipant(id, '   '),
+        throwsA(isA<SpaceFailure>()),
+      );
+      await expectLater(
+        repo.addManualParticipant(id, 'x' * 41),
+        throwsA(isA<SpaceFailure>()),
+      );
+    });
+
+    test('conviven varios y se listan por antigüedad', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Peña');
+      final first = await repo.addManualParticipant(id, 'Ana');
+      final second = await repo.addManualParticipant(id, 'Bruno');
+
+      final listed = await repo.watchManualParticipants(id).first;
+      expect(listed.map((m) => m.id), [first.id, second.id]);
+      expect(listed.map((m) => m.actor).toSet().length, 2); // ids únicos
+    });
+
+    test('retirar borra la identidad, no el historial economico', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      final manual = await repo.addManualParticipant(id, 'Lucía');
+      // Una obligación ya derivada conserva el actor aunque se retire.
+      await firestore.doc('economicEntries/e1').set({
+        'memberUids': ['uid-a'],
+        'debtorUid': manual.actor,
+        'creditorUid': 'uid-a',
+        'amount': 500,
+        'currency': 'EUR',
+      });
+
+      await repo.removeManualParticipant(id, manual.id);
+
+      expect(await repo.watchManualParticipants(id).first, isEmpty);
+      final entry = (await firestore.doc('economicEntries/e1').get()).data()!;
+      expect(entry['debtorUid'], manual.actor);
+      expect(entry['amount'], 500);
+    });
+  });
+
   group('tickets', () {
     const ticketPath = 'sessions/s1/accounts/a1/tickets/t1';
 

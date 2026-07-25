@@ -89,6 +89,87 @@ class SpacesRepository {
         ],
       );
 
+  // ── Participantes manuales (ADR-033) ─────────────────────────────────
+
+  /// Personas sin cuenta del espacio. Se leen igual que los miembros: son
+  /// participantes del contexto común, solo que sin dispositivo.
+  Stream<List<ManualParticipant>> watchManualParticipants(String spaceId) =>
+      _spaces
+          .doc(spaceId)
+          .collection('manualParticipants')
+          .orderBy('createdAt')
+          .snapshots()
+          .map((snap) => [for (final d in snap.docs) _manualFrom(d)]);
+
+  /// Crea la identidad manual. El id es opaco y estable (nunca el nombre):
+  /// renombrar después no afecta a ninguna obligación ya derivada.
+  Future<ManualParticipant> addManualParticipant(
+    String spaceId,
+    String displayName,
+  ) async {
+    _requireAccount();
+    final name = displayName.trim();
+    if (name.isEmpty || name.length > 40) {
+      throw const SpaceFailure(SpaceFailureCode.notAllowed);
+    }
+    final doc = _spaces.doc(spaceId).collection('manualParticipants').doc();
+    await doc.set({
+      'manualId': doc.id,
+      'displayName': name,
+      'linkedUid': null, // reservado a la futura vinculación
+      'createdByUid': uid(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'schemaVersion': 1,
+    });
+    return ManualParticipant(
+      id: doc.id,
+      displayName: name,
+      createdByUid: uid(),
+    );
+  }
+
+  /// Solo cambia el nombre visible: la identidad económica no se toca.
+  Future<void> renameManualParticipant(
+    String spaceId,
+    String manualId,
+    String displayName,
+  ) {
+    final name = displayName.trim();
+    if (name.isEmpty || name.length > 40) {
+      throw const SpaceFailure(SpaceFailureCode.notAllowed);
+    }
+    return _spaces
+        .doc(spaceId)
+        .collection('manualParticipants')
+        .doc(manualId)
+        .update({
+          'displayName': name,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+  }
+
+  /// Retira a la persona del contexto. NO borra su historial: las
+  /// obligaciones ya derivadas conservan el actor `manual:{id}`, igual que
+  /// expulsar a un miembro no borra sus deudas.
+  Future<void> removeManualParticipant(String spaceId, String manualId) =>
+      _spaces
+          .doc(spaceId)
+          .collection('manualParticipants')
+          .doc(manualId)
+          .delete();
+
+  ManualParticipant _manualFrom(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) =>
+      ManualParticipant(
+        id: doc.id,
+        displayName: (doc.data()['displayName'] as String?) ?? '',
+        linkedUid: doc.data()['linkedUid'] as String?,
+        createdByUid: (doc.data()['createdByUid'] as String?) ?? '',
+        createdAt: (doc.data()['createdAt'] as Timestamp?)?.toDate(),
+      );
+
   /// Invitaciones que YO he recibido y siguen pendientes.
   Stream<List<SpaceInvite>> watchMyInvites() {
     _requireAccount();
@@ -410,6 +491,14 @@ final spaceMembersProvider = StreamProvider.autoDispose
     .family<List<SpaceMember>, String>(
       (ref, spaceId) =>
           ref.watch(spacesRepositoryProvider).watchMembers(spaceId),
+    );
+
+/// Participantes manuales del espacio (ADR-033), en vivo.
+final spaceManualParticipantsProvider = StreamProvider.autoDispose
+    .family<List<ManualParticipant>, String>(
+      (ref, spaceId) => ref
+          .watch(spacesRepositoryProvider)
+          .watchManualParticipants(spaceId),
     );
 
 final spaceInvitesProvider = StreamProvider.autoDispose

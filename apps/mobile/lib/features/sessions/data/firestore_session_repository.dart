@@ -151,13 +151,22 @@ class FirestoreSessionRepository implements SessionRepository {
     // Paso 2: participantes, cuenta, ticket, líneas y actividad.
     final batch = firestore.batch();
     for (var i = 0; i < input.participantNames.length; i++) {
+      // Un participante es de CUENTA (claimedByDevice) o MANUAL (manualId),
+      // nunca ambos: el actor económico se deriva de esa identidad estable
+      // y no del nombre, que puede cambiar (ADR-033).
+      final manualId = i < input.participantManualIds.length
+          ? input.participantManualIds[i]
+          : '';
       batch.set(sessionRef.collection('participants').doc('p$i'), {
         'name': input.participantNames[i],
         'isOwner': i == 0,
         'order': i,
-        'claimedByDevice': i < input.participantUids.length
-            ? input.participantUids[i]
-            : '',
+        'claimedByDevice': manualId.isNotEmpty
+            ? ''
+            : (i < input.participantUids.length
+                  ? input.participantUids[i]
+                  : ''),
+        if (manualId.isNotEmpty) 'manualId': manualId,
         'active': true,
       });
     }

@@ -1624,6 +1624,54 @@ abstract class AppLocalizations {
   /// **'Canceló un pago'**
   String get activityPaymentCancelled;
 
+  /// No description provided for @manualParticipantsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Personas sin cuenta'**
+  String get manualParticipantsTitle;
+
+  /// No description provided for @manualParticipantsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Añade a quien no use Salda: solo necesitas su nombre y participará en los gastos igual que los demás.'**
+  String get manualParticipantsEmpty;
+
+  /// No description provided for @manualParticipantAdd.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir'**
+  String get manualParticipantAdd;
+
+  /// No description provided for @manualParticipantName.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre'**
+  String get manualParticipantName;
+
+  /// No description provided for @manualParticipantHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin cuenta · participa en los gastos'**
+  String get manualParticipantHint;
+
+  /// No description provided for @manualParticipantRename.
+  ///
+  /// In es, this message translates to:
+  /// **'Cambiar el nombre'**
+  String get manualParticipantRename;
+
+  /// No description provided for @manualParticipantRemove.
+  ///
+  /// In es, this message translates to:
+  /// **'Quitar del contexto'**
+  String get manualParticipantRemove;
+
+  /// No description provided for @manualParticipantRemoveBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} dejará de aparecer en los gastos nuevos. Su historial, sus deudas y sus pagos no se tocan.'**
+  String manualParticipantRemoveBody(String name);
+
   /// No description provided for @spacesTitle.
   ///
   /// In es, this message translates to:

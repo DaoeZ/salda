@@ -337,6 +337,7 @@ class NewSessionInput {
     required this.splitModeDefault,
     required this.participantNames,
     this.participantUids = const [],
+    this.participantManualIds = const [],
     this.payerIndex = 0,
     required this.ticket,
     this.spaceId,
@@ -352,6 +353,10 @@ class NewSessionInput {
   /// El índice 0 es SIEMPRE el anfitrión.
   final List<String> participantNames;
   final List<String> participantUids;
+
+  /// Identidad manual por posición (ADR-033), '' para quien tiene cuenta.
+  /// Un participante es de cuenta O manual, nunca ambos.
+  final List<String> participantManualIds;
   final int payerIndex;
   final NewTicketInput ticket;
   final String? spaceId;

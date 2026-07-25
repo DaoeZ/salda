@@ -1043,6 +1043,91 @@ describe('spaces', () => {
     }));
   });
 
+  // ── Participantes manuales (ADR-033) ──────────────────────────────────
+  const manualDoc = (manualId, overrides = {}) => ({
+    manualId,
+    displayName: 'Lucía',
+    linkedUid: null,
+    createdByUid: SOCIAL_OUTSIDER,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  it('MANUAL: el owner crea una persona sin cuenta y cualquier miembro la ve',
+      async () => {
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/mp1'),
+      manualDoc('mp1')));
+    await assertSucceeds(
+      getDoc(doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp1')));
+  });
+
+  it('MANUAL: solo el owner la crea; ni un miembro ni un extraño', async () => {
+    await assertFails(setDoc(
+      doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp2'),
+      manualDoc('mp2', { createdByUid: STRANGER })));
+    await assertFails(setDoc(
+      doc(db(FOURTH), 'spaces/sp1/manualParticipants/mp3'),
+      manualDoc('mp3', { createdByUid: FOURTH })));
+  });
+
+  it('MANUAL: forma inválida denegada (id, nombre, vínculo o autoría)',
+      async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    // manualId incompatible con el actor `manual:{id}`.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp:x'), manualDoc('mp:x')));
+    // El campo debe coincidir con el id del documento.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp4'), manualDoc('otro')));
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp5'),
+      manualDoc('mp5', { displayName: '' })));
+    // La vinculación con una cuenta es fase futura: hoy siempre null.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp6'),
+      manualDoc('mp6', { linkedUid: FOURTH })));
+    // No se puede atribuir la creación a otro.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp7'),
+      manualDoc('mp7', { createdByUid: STRANGER })));
+  });
+
+  it('MANUAL: se renombra, pero identidad y vínculo son inmutables',
+      async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    await setDoc(doc(f, 'spaces/sp1/manualParticipants/mp8'), manualDoc('mp8'));
+
+    await assertSucceeds(updateDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp8'),
+      { displayName: 'Lucía G.', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp8'),
+      { manualId: 'otro', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp8'),
+      { linkedUid: FOURTH, updatedAt: serverTimestamp() }));
+    // Un miembro cualquiera no la renombra.
+    await assertFails(updateDoc(
+      doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp8'),
+      { displayName: 'Hack', updatedAt: serverTimestamp() }));
+  });
+
+  it('MANUAL: la retira el owner; un miembro no', async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    await setDoc(doc(f, 'spaces/sp1/manualParticipants/mp9'), manualDoc('mp9'));
+    await assertFails(
+      deleteDoc(doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp9')));
+    await assertSucceeds(
+      deleteDoc(doc(f, 'spaces/sp1/manualParticipants/mp9')));
+  });
+
+  it('MANUAL: un extraño no lista las personas sin cuenta del espacio', () =>
+    assertFails(getDocs(collection(db(FOURTH),
+      'spaces/sp1/manualParticipants'))));
+
   it('invitar comprueba antes si el destino ya es miembro (get ajeno)', () =>
     assertSucceeds(
       getDoc(doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${FOURTH}`))));

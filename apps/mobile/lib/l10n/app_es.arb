@@ -316,6 +316,16 @@
   "activityPaymentConfirmed": "Confirmó que recibió un pago",
   "activityPaymentCancelled": "Canceló un pago",
 
+  "manualParticipantsTitle": "Personas sin cuenta",
+  "manualParticipantsEmpty": "Añade a quien no use Salda: solo necesitas su nombre y participará en los gastos igual que los demás.",
+  "manualParticipantAdd": "Añadir",
+  "manualParticipantName": "Nombre",
+  "manualParticipantHint": "Sin cuenta · participa en los gastos",
+  "manualParticipantRename": "Cambiar el nombre",
+  "manualParticipantRemove": "Quitar del contexto",
+  "manualParticipantRemoveBody": "{name} dejará de aparecer en los gastos nuevos. Su historial, sus deudas y sus pagos no se tocan.",
+  "@manualParticipantRemoveBody": { "placeholders": { "name": { "type": "String" } } },
+
   "spacesTitle": "Espacios",
   "spacesCreate": "Crear espacio",
   "spacesEmptyTitle": "Todavía no tienes espacios",

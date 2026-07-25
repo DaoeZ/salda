@@ -11,6 +11,8 @@
 /// altera membresías ni invitaciones.
 library;
 
+import 'package:domain/domain.dart' show manualActor;
+
 enum SpaceStatus { active, archived }
 
 /// Tipo funcional del contexto principal de Salda.
@@ -77,6 +79,35 @@ class SpaceMember {
 
   final String uid;
   final DateTime? joinedAt;
+}
+
+/// Participante MANUAL (ADR-033): una persona sin cuenta que el anfitrión
+/// escribe a mano. No tiene UID ni dispositivo — no lee ni confirma nada —
+/// pero económicamente pesa igual que una cuenta: su actor es
+/// `manual:{id}` y con él aparece en repartos, balances y obligaciones.
+///
+/// El identificador es opaco y estable, NUNCA el nombre: renombrar no toca
+/// el historial y una futura vinculación con una cuenta real solo tendrá
+/// que reescribir la referencia del actor (`linkedUid`, hoy siempre null).
+class ManualParticipant {
+  const ManualParticipant({
+    required this.id,
+    required this.displayName,
+    this.linkedUid,
+    this.createdByUid = '',
+    this.createdAt,
+  });
+
+  final String id;
+  final String displayName;
+
+  /// Reservado para la fase de vinculación; hoy siempre null.
+  final String? linkedUid;
+  final String createdByUid;
+  final DateTime? createdAt;
+
+  /// Identidad económica canónica de este participante.
+  String get actor => manualActor(id);
 }
 
 /// Invitación con ID determinista `{spaceId}_{toUid}`: por construcción no

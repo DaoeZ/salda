@@ -29,6 +29,8 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
     required int payerIndex,
     required SplitMode splitMode,
     required String sessionName,
+    /// Identidad manual por posición (ADR-033); '' para quien tiene cuenta.
+    List<String> participantManualIds = const [],
   }) async {
     final draft = ref.read(reviewDraftProvider);
     if (draft == null || participantNames.length < 2) return null;
@@ -44,6 +46,18 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
       if (!validCount || participantUids.length != participantNames.length) {
         throw const MissingTicketContextException();
       }
+      // Cada participante tiene UNA identidad: cuenta o manual. Sin ninguna
+      // no puede entrar en el reparto de un contexto (ADR-033).
+      final manualIds = participantManualIds.length == participantNames.length
+          ? participantManualIds
+          : List<String>.filled(participantNames.length, '');
+      for (var i = 0; i < participantNames.length; i++) {
+        final hasAccount = participantUids[i].isNotEmpty;
+        final hasManual = manualIds[i].isNotEmpty;
+        if (hasAccount == hasManual) {
+          throw const MissingTicketContextException();
+        }
+      }
       final user = ref.read(authRepositoryProvider).currentUser;
       // Un invitado no tiene users/{uid}; su snapshot y sus frecuentes son
       // vacíos hasta que proteja la cuenta.
@@ -56,6 +70,7 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
         splitModeDefault: splitMode,
         participantNames: participantNames,
         participantUids: participantUids,
+        participantManualIds: manualIds,
         payerIndex: payerIndex,
         spaceId: pendingSpace.id,
         spaceName: pendingSpace.name,
