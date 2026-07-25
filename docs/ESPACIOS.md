@@ -304,7 +304,9 @@ Límites deliberados:
 - **Enlaces de TICKET y vinculación de identidad siguen fuera** (Sprint 5 y
   Sprint 6).
 
-**Entrada en la app**: `/join/{token}` (deep link) o `/join` para pegar el
+**Entrada en la app**: `/g/{token}` —la ruta CANÓNICA, idéntica al camino de
+la URL compartida, para que el deep link resuelva sin traducciones— o `/join`
+para pegar el
 enlace a mano. Una sola pantalla resuelve las tres situaciones —cuenta,
 invitado con nombre y sin sesión— sin perder el enlace por el camino: quien
 llega sin sesión elige ahí mismo entre cuenta o invitado. Aceptar la URL
@@ -314,7 +316,7 @@ normaliza a partir de ella.
 **Pendiente de Hosting** (no es código de app): servir `/g/{token}` como
 página de aterrizaje y publicar `assetlinks.json` para verificar los App
 Links de Android. Hasta entonces la vía operativa es pegar el enlace en
-`/join`, y la ruta con token queda ya preparada.
+`/join`; la ruta canónica ya está registrada y cubierta por test.
 
 ## Tickets y política de privacidad
 

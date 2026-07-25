@@ -41,7 +41,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // El enlace de grupo (ADR-035) es público a propósito: quien lo abre
       // sin sesión decide EN la propia pantalla si entra con cuenta o como
       // invitado. Mandarlo al login perdería el enlace por el camino.
-      final isJoinLink = location.startsWith('/join');
+      final isJoinLink =
+          location.startsWith('/join') || location.startsWith('/g/');
       final isPublic =
           location == '/login' ||
           location == '/register' ||
@@ -84,9 +85,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const AuthLoadingScreen(),
       ),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
-      // Enlace de grupo. La ruta CON token la abre un deep link; la ruta
-      // sin él permite pegar el enlace a mano, que es lo que funciona
-      // mientras Hosting no sirva la página de aterrizaje.
+      // Enlace de grupo. `/g/:token` es la ruta CANÓNICA — la misma que
+      // lleva la URL compartida, para que el deep link resuelva en cuanto
+      // Hosting sirva la página y Android verifique los App Links. `/join`
+      // es la entrada manual (pegar el enlace), que es lo que funciona hoy.
+      GoRoute(
+        path: '/g/:token',
+        builder: (_, state) =>
+            JoinSpaceScreen(token: state.pathParameters['token']),
+      ),
       GoRoute(
         path: '/join',
         builder: (_, _) => const JoinSpaceScreen(),
