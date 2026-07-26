@@ -59,14 +59,47 @@ localizable:
 | Vía | ¿Válida en una relación? | Motivo |
 |---|---|---|
 | Cuenta existente | **Sí** | La búsqueda por username o nombre devuelve su UID |
-| Enlace de incorporación | **No** | El ID tendría que calcularse sin saber quién aceptará |
-| Participante MANUAL | **No** | No tiene UID: no puede ocupar una de las dos plazas |
+| Participante MANUAL | **Sí** (`schemaVersion: 3`) | Segunda plaza sin UID; el id del espacio se genera |
+| Enlace de incorporación | **No** | El ID canónico tendría que calcularse sin saber quién aceptará |
 | GUEST | Solo si se conoce su UID | Tiene UID propio, pero por diseño no es buscable (ADR-034) |
 
-Para compartir gastos con alguien sin cuenta está el **grupo**, que sí admite
-participantes MANUAL y enlaces. La pantalla de creación lo ofrece en vez de
-dejar un callejón sin salida. Rules impide explícitamente crear un
-`manualParticipant` en un espacio de tipo `relationship`. Rules impide otro ID, un tercer miembro o
+### Relación con alguien SIN cuenta (`schemaVersion: 3`)
+
+El caso real: quiero compartir gastos con Pablo, que no usa la app, y que eso
+sea **una relación de dos personas**, no un grupo. Exigir que el id derivara
+de dos UID lo hacía imposible, así que el esquema se desdobla:
+
+```text
+spaces/{idGenerado}
+  kind: relationship · schemaVersion: 3
+  relationshipUids: [uidDelPropietario]      ← una sola cuenta
+  relationshipManualId: {manualId}           ← la segunda identidad
+  manualParticipants/{manualId}              ← creado en el MISMO batch
+```
+
+Sigue habiendo **exactamente dos identidades económicas**: el UID del
+propietario y el actor `manual:{manualId}`, que participa en repartos,
+balances, pagos y liquidaciones igual que una cuenta (ADR-033). Rules impide
+un segundo manual, una tercera cuenta, retirar el manual de la segunda plaza
+y convertir la relación en grupo.
+
+**Las relaciones entre dos cuentas no cambian**: siguen en `schemaVersion: 2`
+con el id canónico `relationship_{uidMenor}~{uidMayor}`, que es lo que impide
+duplicados. Ambos esquemas conviven; no hay migración de datos ni de economía.
+
+Cuando Pablo se registre, la **vinculación del Sprint 6** (ADR-037) añade su
+UID en `linkedUid` sin tocar el actor histórico ni reescribir nada.
+
+**Un contexto está operativo por sus IDENTIDADES ECONÓMICAS, no por sus
+cuentas.** Una relación v3 tiene un solo miembro y aun así está completa: el
+manual ocupa la segunda plaza. El detalle cuenta `miembros + manuales`, igual
+que ya hacía la hoja de reparto de un ticket.
+
+Probado extremo a extremo contra el emulador
+(`relationshipManual.it.test.ts`): se reparte, los balances salen
++2000/−2000, se genera la liquidación del manual hacia la cuenta, y al
+vincular después se conserva el mismo documento, el mismo importe y el actor
+`manual:{id}` — lo único que cambia es que Pablo pasa a poder leerlo. Rules impide otro ID, un tercer miembro o
 una invitación fuera de la pareja. Un grupo mantiene membresía flexible, pero la
 app exige al menos tres miembros antes de permitir gastos nuevos.
 

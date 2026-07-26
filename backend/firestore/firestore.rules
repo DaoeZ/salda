@@ -679,7 +679,8 @@ service cloud.firestore {
       return data.keys().hasOnly([
           'name', 'avatarEmoji', 'ownerUid', 'status',
           'createdAt', 'updatedAt', 'schemaVersion', 'kind',
-          'relationshipUids', 'guestsCanCreateExpenses'
+          'relationshipUids', 'relationshipManualId',
+          'guestsCanCreateExpenses'
         ])
         && (!('guestsCanCreateExpenses' in data)
           || data.guestsCanCreateExpenses is bool)
@@ -695,6 +696,7 @@ service cloud.firestore {
             && !('relationshipUids' in data))
           || (data.schemaVersion == 2
             && data.kind in ['relationship', 'group']
+            && !('relationshipManualId' in data)
             && (
               (data.kind == 'group'
                 && data.get('relationshipUids', []).size() == 0)
@@ -706,6 +708,23 @@ service cloud.firestore {
                 && data.relationshipUids[0] < data.relationshipUids[1]
                 && data.ownerUid in data.relationshipUids)
             ))
+          // v3: RELACION CON UN PARTICIPANTE MANUAL (BUG-2). Sigue siendo un
+          // contexto de exactamente DOS identidades economicas, pero la
+          // segunda no tiene UID, asi que no puede formar parte del id
+          // canonico. De ahi que estas usen un id generado: exigir que el id
+          // derive de dos UID impedia el caso real de compartir gastos con
+          // alguien que no usa la app.
+          //
+          // Las de dos cuentas siguen en v2 con su id canonico, que es lo que
+          // garantiza que A->B y B->A sean el mismo contexto. Sin cambios.
+          || (data.schemaVersion == 3
+            && data.kind == 'relationship'
+            && data.relationshipUids is list
+            && data.relationshipUids.size() == 1
+            && data.relationshipUids[0] == data.ownerUid
+            && data.relationshipManualId is string
+            && data.relationshipManualId.size() > 0
+            && !data.relationshipManualId.matches('.*:.*'))
         )
         && data.updatedAt is timestamp;
     }
@@ -737,9 +756,15 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.status == 'active'
         && (request.resource.data.get('kind', 'group') != 'relationship'
+          || request.resource.data.schemaVersion == 3
           || spaceId == 'relationship_'
             + request.resource.data.relationshipUids[0] + '~'
             + request.resource.data.relationshipUids[1])
+        // La segunda plaza MANUAL se crea en el MISMO batch: sin ella el
+        // espacio quedaria con una sola identidad, que no es una relacion.
+        && (request.resource.data.get('schemaVersion', 2) != 3
+          || getAfter(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.relationshipManualId))
+              .data.manualId == request.resource.data.relationshipManualId)
         && request.resource.data.createdAt is timestamp
         && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
             .data.uid == request.auth.uid;
@@ -782,13 +807,19 @@ service cloud.firestore {
         // y editarlos sigue siendo exclusivo del propietario.
         allow read: if canParticipate() && isSpaceMember(spaceId);
 
-        // BUG-2: una RELACIÓN son exactamente DOS UID (ADR-030). Un MANUAL
-        // no tiene UID, así que meterlo ahí crearía un tercer actor
-        // económico en un contexto de dos personas — un estado que el
-        // modelo no contempla y que nada impedía hasta ahora.
-        allow create: if isSpaceOwner(spaceId)
-          && spaceData(spaceId).get('kind', 'group') == 'group'
-          && spaceData(spaceId).status == 'active'
+        // En un GRUPO, cualquier numero de manuales. En una RELACION, solo
+        // el que ocupa su segunda plaza: uno mas seria un tercer actor
+        // economico en un contexto de dos personas.
+        allow create: if canUseSocial()
+          && (
+            (futureSpaceData(spaceId).get('kind', 'group') == 'group'
+              && isSpaceOwner(spaceId))
+            || (futureSpaceData(spaceId).kind == 'relationship'
+              && futureSpaceData(spaceId).get('schemaVersion', 2) == 3
+              && futureSpaceData(spaceId).relationshipManualId == manualId
+              && futureSpaceData(spaceId).ownerUid == request.auth.uid)
+          )
+          && futureSpaceData(spaceId).status == 'active'
           && validManualParticipant(request.resource.data, manualId)
           // Nadie NACE vinculado: la vinculación solo llega por una
           // solicitud que el anfitrión aprueba (ADR-037).
@@ -833,7 +864,10 @@ service cloud.firestore {
         // Retirarlo de uso es otra cosa: no existe todavía, y hasta que
         // exista un vinculado se queda.
         allow delete: if isSpaceOwner(spaceId)
-          && resource.data.get('linkedUid', null) == null;
+          && resource.data.get('linkedUid', null) == null
+          // El MANUAL que ocupa la segunda plaza de una relacion no se
+          // retira: dejaria un contexto de una sola identidad.
+          && spaceData(spaceId).get('relationshipManualId', '') != manualId;
       }
 
       match /members/{memberUid} {

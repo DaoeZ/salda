@@ -144,6 +144,57 @@ class _CreateRelationshipScreenState
     }
   }
 
+  /// Relación con alguien que NO usa Salda. Sigue siendo una relación de dos
+  /// identidades: la mía y su actor `manual:{id}`, con el que participa en
+  /// gastos, balances y liquidaciones. Si más adelante se registra, se
+  /// vincula por el Sprint 6 sin tocar el histórico.
+  Future<void> _createWithManual() async {
+    final l10n = AppLocalizations.of(context);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: Text(l10n.relationshipManualTitle),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(labelText: l10n.relationshipManualName),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text.trim()),
+              child: Text(l10n.commonSave),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null || name.isEmpty || !mounted) return;
+
+    setState(() => creatingUid = '');
+    try {
+      final result = await ref
+          .read(spacesRepositoryProvider)
+          .createRelationshipWithManual(name: name, manualName: name);
+      if (mounted) context.go('/home/spaces/${result.id}');
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.spaceActionError)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => creatingUid = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -173,13 +224,11 @@ class _CreateRelationshipScreenState
             ),
             child: Card(
               child: ListTile(
-                leading: const Icon(Icons.groups_outlined),
-                title: Text(l10n.relationshipNoAccountTitle),
-                subtitle: Text(l10n.relationshipNoAccountBody),
+                leading: const Icon(Icons.person_add_alt),
+                title: Text(l10n.relationshipManualTitle),
+                subtitle: Text(l10n.relationshipManualBody),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: creatingUid == null
-                    ? () => context.go('/home')
-                    : null,
+                onTap: creatingUid == null ? _createWithManual : null,
               ),
             ),
           ),

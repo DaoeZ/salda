@@ -2752,6 +2752,24 @@ abstract class AppLocalizations {
   /// **'No puedes crear una relación contigo mismo.'**
   String get relationshipNotAllowed;
 
+  /// No description provided for @relationshipManualTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir a alguien sin cuenta'**
+  String get relationshipManualTitle;
+
+  /// No description provided for @relationshipManualBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Participa en gastos, saldos y pagos igual que tú. Si se registra más adelante, podréis vincularlo sin perder el historial.'**
+  String get relationshipManualBody;
+
+  /// No description provided for @relationshipManualName.
+  ///
+  /// In es, this message translates to:
+  /// **'Su nombre'**
+  String get relationshipManualName;
+
   /// No description provided for @relationshipNoAccountTitle.
   ///
   /// In es, this message translates to:

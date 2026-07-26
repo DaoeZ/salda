@@ -1281,6 +1281,13 @@ miembros para crear gastos; un ticket contextual no se desvincula. P5 conserva
 fuente de verdad, neteo, liquidaciones, permisos y trazabilidad sin cambios. La
 amistad continúa siendo independiente. P6/P7 no forman parte de esta decisión.
 Contrato detallado en `docs/ESPACIOS.md`.
+**ENMIENDA (2026-07-26, BUG-2):** el id derivado de DOS UID impedía un caso
+real — compartir gastos con alguien que no usa la app y que eso sea una
+relación, no un grupo. Se desdobla el esquema: `schemaVersion: 2` mantiene el
+id canónico para dos cuentas (y con él la unicidad), y `schemaVersion: 3`
+añade la relación con un participante MANUAL en la segunda plaza, con id
+generado y `relationshipManualId`. Siguen siendo exactamente dos identidades
+económicas. Ambos conviven sin migrar datos ni economía.
 **Revisión:** antes de permitir invitados no registrados dentro de un grupo,
 definir cómo se representa su identidad sin degradar el vínculo por UID.
 

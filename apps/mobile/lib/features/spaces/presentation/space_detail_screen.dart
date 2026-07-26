@@ -72,9 +72,17 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
         body: Center(child: Text(l10n.spaceGone)),
       );
     }
+    final manuals =
+        ref.watch(spaceManualParticipantsProvider(widget.spaceId)).value ??
+        const <ManualParticipant>[];
+    // Lo que hace a un contexto operativo son las IDENTIDADES ECONÓMICAS, no
+    // las cuentas. Una relación con un participante MANUAL (BUG-2) tiene un
+    // solo miembro y aun así está completa: el manual ocupa la segunda plaza
+    // y participa en repartos y balances igual que una cuenta.
+    final participants = members.length + manuals.length;
     final contextReady = space.isRelationship
-        ? members.length == 2
-        : members.length >= 3;
+        ? participants == 2
+        : participants >= 3;
 
     return Scaffold(
       appBar: AppBar(

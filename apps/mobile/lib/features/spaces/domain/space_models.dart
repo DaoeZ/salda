@@ -33,6 +33,7 @@ class Space {
     this.kind = SpaceKind.group,
     this.relationshipUids = const [],
     this.guestsCanCreateExpenses = false,
+    this.relationshipManualId = '',
     this.avatarEmoji,
     this.createdAt,
     this.updatedAt,
@@ -47,6 +48,14 @@ class Space {
   /// Pareja canónica reservada por una relación, incluso mientras la segunda
   /// persona todavía no haya aceptado la invitación.
   final List<String> relationshipUids;
+
+  /// Participante MANUAL que ocupa la segunda plaza de una relación sin
+  /// cuenta (schemaVersion 3). Vacío en las relaciones entre dos cuentas.
+  final String relationshipManualId;
+
+  /// Una relación cuya segunda identidad no tiene UID.
+  bool get isManualRelationship =>
+      isRelationship && relationshipManualId.isNotEmpty;
 
   /// Avatar básico opcional (un emoji). El COLOR se deriva siempre del id
   /// del espacio (avatarColorIndex), igual que los avatares de personas.

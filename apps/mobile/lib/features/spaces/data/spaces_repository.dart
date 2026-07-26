@@ -362,6 +362,62 @@ class SpacesRepository {
     return (id: space.id, outcome: RelationshipOutcome.created);
   }
 
+  /// Relación con una persona SIN cuenta (BUG-2).
+  ///
+  /// Sigue siendo un contexto de exactamente DOS identidades económicas: la
+  /// mía y el actor `manual:{manualId}`. La diferencia con una relación entre
+  /// cuentas es el identificador: como la segunda parte no tiene UID, no
+  /// puede derivarse del par canónico, así que se genera. Las de dos cuentas
+  /// siguen usando su id canónico —es lo que impide duplicados— y no cambian.
+  ///
+  /// El espacio, mi membresía y el participante manual se escriben en UN
+  /// batch: Rules exige el manual con `getAfter`, de modo que no puede
+  /// quedar una relación a medias con una sola identidad.
+  Future<RelationshipResult> createRelationshipWithManual({
+    required String name,
+    required String manualName,
+  }) async {
+    _requireAccount();
+    final personName = manualName.trim();
+    if (personName.isEmpty || personName.length > 40) {
+      throw const SpaceFailure(SpaceFailureCode.notAllowed);
+    }
+    final space = _spaces.doc();
+    final manual = space.collection('manualParticipants').doc();
+
+    final batch = firestore.batch();
+    batch.set(space, {
+      'name': name.trim(),
+      'ownerUid': uid(),
+      'kind': SpaceKind.relationship.name,
+      // Una sola cuenta; la segunda plaza la ocupa el manual.
+      'relationshipUids': [uid()],
+      'relationshipManualId': manual.id,
+      'status': 'active',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'schemaVersion': 3,
+    });
+    batch.set(space.collection('members').doc(uid()), {
+      'uid': uid(),
+      'joinedAt': FieldValue.serverTimestamp(),
+    });
+    batch.set(manual, {
+      'manualId': manual.id,
+      'displayName': personName,
+      // Reservado a la vinculación del Sprint 6: cuando Pablo se registre,
+      // su UID se añade aquí sin tocar el actor `manual:{id}` ni el
+      // histórico económico.
+      'linkedUid': null,
+      'createdByUid': uid(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'schemaVersion': 1,
+    });
+    await batch.commit();
+    return (id: space.id, outcome: RelationshipOutcome.created);
+  }
+
   /// Qué hacer cuando la relación canónica YA existe. Cada rama corresponde
   /// a una situación real distinta, y solo una es un error de verdad.
   Future<RelationshipResult> _resumeRelationship(
@@ -760,6 +816,8 @@ class SpacesRepository {
       ],
       guestsCanCreateExpenses:
           (data['guestsCanCreateExpenses'] as bool?) ?? false,
+      relationshipManualId:
+          (data['relationshipManualId'] as String?) ?? '',
       avatarEmoji: data['avatarEmoji'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),

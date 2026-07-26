@@ -501,4 +501,88 @@ void main() {
       );
     });
   });
+
+  group('BUG-2: relacion ACCOUNT + MANUAL (el caso de Pablo)', () {
+    test('crea una relacion de DOS identidades sin cuenta ajena', () async {
+      final rel = await repoFor('uid-a').createRelationshipWithManual(
+        name: 'Pablo', manualName: 'Pablo',
+      );
+      expect(rel.outcome, RelationshipOutcome.created);
+
+      final space = (await firestore.doc('spaces/${rel.id}').get()).data()!;
+      // Es una RELACION, no un grupo.
+      expect(space['kind'], 'relationship');
+      expect(space['schemaVersion'], 3);
+      // Una sola cuenta; la segunda plaza es el manual.
+      expect(space['relationshipUids'], ['uid-a']);
+      expect(space['relationshipManualId'], isNotNull);
+      // El id ya NO deriva de dos UID: por eso el caso es posible.
+      expect(rel.id, isNot(contains('~')));
+
+      final manual = (await firestore
+              .doc('spaces/${rel.id}/manualParticipants/'
+                  '${space['relationshipManualId']}')
+              .get())
+          .data()!;
+      expect(manual['displayName'], 'Pablo');
+      // Preparado para la vinculacion del Sprint 6.
+      expect(manual['linkedUid'], isNull);
+    });
+
+    test('aparece en Inicio como relacion, con su nombre', () async {
+      final rel = await repoFor('uid-a').createRelationshipWithManual(
+        name: 'Pablo', manualName: 'Pablo',
+      );
+      final mias = await repoFor('uid-a').watchMySpaces().first;
+      final relacion = mias.singleWhere((s) => s.id == rel.id);
+      expect(relacion.isRelationship, isTrue);
+      expect(relacion.isManualRelationship, isTrue);
+      expect(relacion.name, 'Pablo');
+    });
+
+    test('el actor economico del manual es manual:{id}', () async {
+      final rel = await repoFor('uid-a').createRelationshipWithManual(
+        name: 'Pablo', manualName: 'Pablo',
+      );
+      final manuales =
+          await repoFor('uid-a').watchManualParticipants(rel.id).first;
+      expect(manuales, hasLength(1));
+      // Es la clave con la que se escribiran sus obligaciones.
+      expect(manuales.single.actor, 'manual:${manuales.single.id}');
+    });
+
+    test('un nombre vacio o demasiado largo se rechaza', () async {
+      for (final malo in ['', '   ', 'x' * 41]) {
+        expect(
+          () => repoFor('uid-a').createRelationshipWithManual(
+            name: 'R', manualName: malo,
+          ),
+          throwsA(isA<SpaceFailure>()),
+        );
+      }
+    });
+
+    test('ACCOUNT + ACCOUNT sigue usando el id canonico, sin duplicados',
+        () async {
+      await firestore.doc('profiles/uid-b').set({'displayName': 'B'});
+      final rel = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      // El esquema anterior no cambia: id canonico y dos UID.
+      expect(rel.id, relationshipSpaceId('uid-a', 'uid-b'));
+      final space = (await firestore.doc('spaces/${rel.id}').get()).data()!;
+      expect(space['schemaVersion'], 2);
+      expect(space.containsKey('relationshipManualId'), isFalse);
+    });
+
+    test('varias relaciones MANUAL conviven: no comparten id', () async {
+      final pablo = await repoFor('uid-a').createRelationshipWithManual(
+        name: 'Pablo', manualName: 'Pablo',
+      );
+      final marta = await repoFor('uid-a').createRelationshipWithManual(
+        name: 'Marta', manualName: 'Marta',
+      );
+      // Con el id canonico esto era imposible: no hay UID que las distinga.
+      expect(pablo.id, isNot(marta.id));
+    });
+  });
 }

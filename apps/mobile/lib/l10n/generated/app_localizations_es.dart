@@ -1512,6 +1512,16 @@ class AppLocalizationsEs extends AppLocalizations {
       'No puedes crear una relación contigo mismo.';
 
   @override
+  String get relationshipManualTitle => 'Añadir a alguien sin cuenta';
+
+  @override
+  String get relationshipManualBody =>
+      'Participa en gastos, saldos y pagos igual que tú. Si se registra más adelante, podréis vincularlo sin perder el historial.';
+
+  @override
+  String get relationshipManualName => 'Su nombre';
+
+  @override
   String get relationshipNoAccountTitle => '¿No tiene cuenta en Salda?';
 
   @override

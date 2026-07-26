@@ -3030,5 +3030,113 @@ describe('BUG-3 relaciones: crear en ambos sentidos', () => {
   });
 });
 
+// ─── BUG-2: relacion ACCOUNT + MANUAL (schemaVersion 3) ───────────────
+describe('relacion con participante MANUAL', () => {
+  beforeEach(seedSocialProfiles);
+
+  /** Lo que escribe createRelationshipWithManual: espacio + membresia +
+   *  manual, todo en UN batch. */
+  const crear = (f, uid, spaceId, manualId, overrides = {}) => {
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${spaceId}`), {
+      name: 'Pablo', ownerUid: uid, kind: 'relationship',
+      relationshipUids: [uid], relationshipManualId: manualId,
+      status: 'active', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), schemaVersion: 3,
+      ...overrides,
+    });
+    batch.set(doc(f, `spaces/${spaceId}/members/${uid}`),
+      { uid, joinedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/${spaceId}/manualParticipants/${manualId}`), {
+      manualId, displayName: 'Pablo', linkedUid: null,
+      createdByUid: uid, createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), schemaVersion: 1,
+    });
+    return batch.commit();
+  };
+
+  it('una cuenta crea una relacion con alguien SIN cuenta', async () => {
+    await assertSucceeds(crear(db(FOURTH), FOURTH, 'relman1', 'pablo1'));
+  });
+
+  it('el MANUAL debe crearse en el MISMO batch: nada de relaciones a medias',
+      async () => {
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, 'spaces/relman2'), {
+      name: 'Pablo', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH], relationshipManualId: 'pablo2',
+      status: 'active', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), schemaVersion: 3,
+    });
+    batch.set(doc(f, `spaces/relman2/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() });
+    await assertFails(batch.commit());
+  });
+
+  it('NO admite un SEGUNDO manual: seria un tercer actor', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman3', 'pablo3');
+    await assertFails(setDoc(
+      doc(db(FOURTH), 'spaces/relman3/manualParticipants/otro'), {
+        manualId: 'otro', displayName: 'Tercero', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+  });
+
+  it('NO admite una tercera persona con cuenta', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman4', 'pablo4');
+    // relationshipUids solo contiene al propietario.
+    await assertFails(setDoc(
+      doc(db(THIRD), `spaces/relman4/members/${THIRD}`),
+      { uid: THIRD, joinedAt: serverTimestamp() }));
+    // Ni invitando: el destino tendria que estar en relationshipUids.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaceInvites/relman4_${THIRD}`), {
+        spaceId: 'relman4', spaceName: 'Pablo', fromUid: FOURTH,
+        toUid: THIRD, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+  });
+
+  it('el MANUAL de la segunda plaza no se puede retirar', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman5', 'pablo5');
+    // Retirarlo dejaria un contexto de una sola identidad.
+    await assertFails(deleteDoc(
+      doc(db(FOURTH), 'spaces/relman5/manualParticipants/pablo5')));
+  });
+
+  it('no se puede convertir en grupo ni falsear el propietario', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman6', 'pablo6');
+    await assertFails(updateDoc(doc(db(FOURTH), 'spaces/relman6'),
+      { kind: 'group', updatedAt: serverTimestamp() }));
+    // Declararse dueño de una relacion ajena.
+    await assertFails(crear(db(THIRD), FOURTH, 'relman7', 'pablo7'));
+  });
+
+  it('LEGACY: las relaciones de dos cuentas siguen igual', async () => {
+    // v2 con id canonico: intacto, y sin relationshipManualId.
+    const id = `relationship_${[FOURTH, THIRD].sort().join('~')}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${id}`), {
+      name: 'Dos cuentas', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD].sort(), status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${id}/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+    // Y una v2 no puede colar un manual de segunda plaza.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/${id}/manualParticipants/x`), {
+        manualId: 'x', displayName: 'X', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+  });
+});
+
 // Nota: assert está importado para fallos explícitos en helpers futuros.
 void assert;
