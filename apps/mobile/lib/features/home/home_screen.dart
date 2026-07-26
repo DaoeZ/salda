@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/ui/notice.dart';
 import '../../core/ui/states.dart';
 import '../../core/ui/surfaces.dart';
+import '../../core/ui/wordmark.dart';
 import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../auth/data/auth_repository.dart';
@@ -46,7 +47,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final c = context.salda;
     final fullAccount =
         ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
     // Un INVITADO con nombre PARTICIPA (ADR-034): ve sus grupos y sus
@@ -57,13 +57,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: TokenLayout.screenMargin,
-        title: Text(
-          Brand.appName,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: c.primary,
-            letterSpacing: -0.6,
-          ),
-        ),
+        title: const SaldaWordmark(),
         actions: [
           if (fullAccount) const _ManualLinkBadge(),
           // Unirse por enlace no exige cuenta: es la puerta de entrada del
@@ -129,23 +123,16 @@ class _AccountRequiredHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(TokenSpacing.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.lock_person_outlined, size: 64),
-            const SizedBox(height: TokenSpacing.md),
-            Text(l10n.contextAccountRequired, textAlign: TextAlign.center),
-            const SizedBox(height: TokenSpacing.md),
-            FilledButton(
-              onPressed: () => context.push('/register'),
-              child: Text(l10n.authProtectGuestAction),
-            ),
-          ],
+    return ScreenBody(
+      children: [
+        EmptyState(
+          icon: Icons.lock_person_outlined,
+          title: l10n.contextAccountRequiredTitle,
+          body: l10n.contextAccountRequired,
+          action: l10n.authProtectGuestAction,
+          onAction: () => context.push('/register'),
         ),
-      ),
+      ],
     );
   }
 }

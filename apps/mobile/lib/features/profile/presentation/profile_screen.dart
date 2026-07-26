@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/profile_repository.dart';
@@ -198,7 +200,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title: Text(_isNew ? l10n.profileCreateTitle : l10n.profileTitle),
       ),
       body: profile.isLoading && !_initialized
-          ? const Center(child: CircularProgressIndicator())
+          ? const ScreenBody(children: [SkeletonList(rows: 3)])
           : SingleChildScrollView(
               padding: const EdgeInsets.all(TokenSpacing.xl),
               child: Form(

@@ -29,17 +29,19 @@ void main() {
       expect(() => accountActor(''), throwsArgumentError);
     });
 
-    test('la audiencia solo contiene cuentas reales, ordenada y sin repetir',
-        () {
-      expect(
-        accountUidsOf(['uid-b', 'manual:mp-1', 'uid-a', 'uid-b']),
-        ['uid-a', 'uid-b'],
-      );
-      // Cuenta ↔ manual: un solo lector posible.
-      expect(accountUidsOf(['uid-a', 'manual:mp-1']), ['uid-a']);
-      // Manual ↔ manual: nadie puede leerla (vive en su sesión).
-      expect(accountUidsOf(['manual:mp-1', 'manual:mp-2']), isEmpty);
-    });
+    test(
+      'la audiencia solo contiene cuentas reales, ordenada y sin repetir',
+      () {
+        expect(accountUidsOf(['uid-b', 'manual:mp-1', 'uid-a', 'uid-b']), [
+          'uid-a',
+          'uid-b',
+        ]);
+        // Cuenta ↔ manual: un solo lector posible.
+        expect(accountUidsOf(['uid-a', 'manual:mp-1']), ['uid-a']);
+        // Manual ↔ manual: nadie puede leerla (vive en su sesión).
+        expect(accountUidsOf(['manual:mp-1', 'manual:mp-2']), isEmpty);
+      },
+    );
 
     test('renombrar no afecta a la identidad: el actor deriva del id', () {
       const id = 'mp-estable';

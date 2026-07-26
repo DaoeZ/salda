@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/wordmark.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/auth_repository.dart';
 
@@ -716,14 +717,11 @@ class _AuthShell extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // WORDMARK textual: el simbolo definitivo no esta
-                  // aprobado, asi que ninguna pantalla se apoya en el.
-                  Text(
-                    Brand.appName,
-                    style: theme.textTheme.displayLarge?.copyWith(
-                      color: c.primary,
-                      fontSize: 32,
-                    ),
+                  // El símbolo definitivo no está aprobado: la marca entra
+                  // por UN solo widget, que ya la sustituirá cuando llegue.
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: SaldaWordmark(size: 32),
                   ),
                   const SizedBox(height: TokenSpacing.xxl),
                   Text(title, style: theme.textTheme.headlineMedium),

@@ -43,8 +43,8 @@ abstract final class LineBuilder {
       if (e.box.top < top) top = e.box.top;
       if (e.box.bottom > bottom) bottom = e.box.bottom;
     }
-    final overlap = _min(bottom, candidate.box.bottom) -
-        _max(top, candidate.box.top);
+    final overlap =
+        _min(bottom, candidate.box.bottom) - _max(top, candidate.box.top);
     final minHeight = _min(bottom - top, candidate.box.height);
     return minHeight > 0 && overlap >= 0.5 * minHeight;
   }
@@ -70,7 +70,6 @@ String normalizeOcrText(String text) {
 
 /// Convierte texto plano (una fila por línea) en RawLines normalizadas.
 List<RawLine> rawLinesFromPlainText(String text) => [
-      for (final line in text.split('\n'))
-        if (normalizeOcrText(line).isNotEmpty)
-          RawLine(normalizeOcrText(line)),
-    ];
+  for (final line in text.split('\n'))
+    if (normalizeOcrText(line).isNotEmpty) RawLine(normalizeOcrText(line)),
+];

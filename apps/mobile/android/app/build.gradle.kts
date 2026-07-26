@@ -97,6 +97,15 @@ android {
             if (hasDevKeystore) signingConfig = signingConfigs.getByName("dev")
         }
         release {
+            // R8 aborta si una clase referenciada no existe. El plugin de ML
+            // Kit referencia los reconocedores de chino, devanagari, japones
+            // y coreano, que son `compileOnly` —opcionales por diseno— y que
+            // Salda no empaqueta porque solo escanea en latino. Las reglas
+            // declaran esa ausencia clase a clase; ver proguard-rules.pro.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // ESTADO ACTUAL: sin clave propia, `release` se firma con la de
             // DEPURACIÓN. Es deliberado —permite `flutter run --release` y
             // APK de prueba— pero produce un artefacto NO publicable: Play lo

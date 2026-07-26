@@ -2752,6 +2752,66 @@ abstract class AppLocalizations {
   /// **'Pendiente'**
   String get contextPendingShort;
 
+  /// No description provided for @contextAccountRequiredTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesitas una cuenta'**
+  String get contextAccountRequiredTitle;
+
+  /// No description provided for @economySettledBadge.
+  ///
+  /// In es, this message translates to:
+  /// **'Saldado'**
+  String get economySettledBadge;
+
+  /// No description provided for @economyNoPaymentsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuando marques o confirmes un pago, quedará aquí con su fecha.'**
+  String get economyNoPaymentsBody;
+
+  /// No description provided for @friendProfileRequiredBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu perfil público es lo que permite que otras personas te encuentren y te agreguen.'**
+  String get friendProfileRequiredBody;
+
+  /// No description provided for @aiProvidersSection.
+  ///
+  /// In es, this message translates to:
+  /// **'Proveedores'**
+  String get aiProvidersSection;
+
+  /// No description provided for @peopleSectionTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Quién participa'**
+  String get peopleSectionTitle;
+
+  /// No description provided for @splitSectionTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Cómo se reparte'**
+  String get splitSectionTitle;
+
+  /// No description provided for @splitEqualHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'El importe se divide a partes iguales entre todas las personas.'**
+  String get splitEqualHelp;
+
+  /// No description provided for @splitByItemHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Cada persona elige lo que consumió; lo no reclamado recae en quien pagó.'**
+  String get splitByItemHelp;
+
+  /// No description provided for @createDisabledHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesitas al menos dos personas para repartir un gasto.'**
+  String get createDisabledHelp;
+
   /// No description provided for @ticketPhotoTitle.
   ///
   /// In es, this message translates to:

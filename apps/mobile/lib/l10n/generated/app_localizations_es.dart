@@ -1509,6 +1509,41 @@ class AppLocalizationsEs extends AppLocalizations {
   String get contextPendingShort => 'Pendiente';
 
   @override
+  String get contextAccountRequiredTitle => 'Necesitas una cuenta';
+
+  @override
+  String get economySettledBadge => 'Saldado';
+
+  @override
+  String get economyNoPaymentsBody =>
+      'Cuando marques o confirmes un pago, quedará aquí con su fecha.';
+
+  @override
+  String get friendProfileRequiredBody =>
+      'Tu perfil público es lo que permite que otras personas te encuentren y te agreguen.';
+
+  @override
+  String get aiProvidersSection => 'Proveedores';
+
+  @override
+  String get peopleSectionTitle => 'Quién participa';
+
+  @override
+  String get splitSectionTitle => 'Cómo se reparte';
+
+  @override
+  String get splitEqualHelp =>
+      'El importe se divide a partes iguales entre todas las personas.';
+
+  @override
+  String get splitByItemHelp =>
+      'Cada persona elige lo que consumió; lo no reclamado recae en quien pagó.';
+
+  @override
+  String get createDisabledHelp =>
+      'Necesitas al menos dos personas para repartir un gasto.';
+
+  @override
   String get ticketPhotoTitle => 'Foto del ticket';
 
   @override

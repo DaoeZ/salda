@@ -256,7 +256,12 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
                 // Identidad conocida: solo progreso. No hay nada que decidir.
                 if (_busy) ...[
                   const SizedBox(height: TokenSpacing.lg),
-                  const Center(child: CircularProgressIndicator()),
+                  const Center(
+                    child: SizedBox.square(
+                      dimension: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
                 ],
 
                 if (_error case final message?) ...[

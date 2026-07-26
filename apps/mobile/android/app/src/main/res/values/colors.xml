@@ -4,4 +4,9 @@
      Fuente: packages/design_tokens/assets/design_tokens.json -->
 <resources>
     <color name="saldaBackground">#F7F6F2</color>
+    <!-- Capa de FONDO del Adaptive Icon: el verde principal de la marca.
+         Es un color y no un archivo, para que el icono no pueda separarse de
+         la paleta. El foreground llegará cuando el símbolo esté aprobado
+         (ver apps/mobile/assets/brand/README.md). -->
+    <color name="saldaLauncherBackground">#0B5E4E</color>
 </resources>

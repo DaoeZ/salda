@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../spaces/data/manual_link_repository.dart';
 import '../../spaces/data/spaces_repository.dart' show spaceProvider;
@@ -101,7 +103,7 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
     if (_loading) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const ScreenBody(children: [SkeletonList(rows: 3)]),
       );
     }
     if (link == null || ticket == null) {
@@ -134,11 +136,11 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(link.merchantName)),
-      body: ListView(
+      body: ScreenBody(
         padding: const EdgeInsets.all(TokenSpacing.lg),
         children: [
           if (_access?.identifiesAManual ?? false) ...[
-            Card(
+            SaldaCard(
               child: ListTile(
                 leading: const Icon(Icons.person_outline),
                 title: Text(l10n.ticketLinkViewingAs(_names[myPid] ?? '')),

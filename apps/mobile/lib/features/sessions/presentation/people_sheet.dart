@@ -7,6 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../spaces/data/spaces_repository.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/badges.dart';
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../spaces/domain/space_identities.dart';
 import '../../spaces/domain/space_models.dart';
 import '../application/create_session_controller.dart';
@@ -142,88 +146,193 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
         );
         if (payerIndex >= people.length) payerIndex = 0;
 
+        final c = context.salda;
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(TokenSpacing.lg),
+          padding: const EdgeInsets.fromLTRB(
+            TokenLayout.screenMargin,
+            0,
+            TokenLayout.screenMargin,
+            TokenSpacing.xxl,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(l10n.peopleSheetTitle, style: theme.textTheme.titleLarge),
-              const SizedBox(height: TokenSpacing.xs),
-              Text(target.name, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: TokenSpacing.md),
+              Text(
+                l10n.peopleSheetTitle,
+                style: theme.textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                target.name,
+                style: theme.textTheme.bodySmall?.copyWith(color: c.textMuted),
+              ),
+              const SizedBox(height: TokenSpacing.xxl),
+
               TextField(
                 controller: sessionName,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(labelText: l10n.sessionNameLabel),
               ),
-              const SizedBox(height: TokenSpacing.md),
-              Wrap(
-                spacing: TokenSpacing.sm,
-                runSpacing: TokenSpacing.xs,
+
+              // ── Quién participa ──────────────────────────────────────
+              // Una persona sin cuenta se enseña IGUAL que una con cuenta:
+              // mismo avatar, mismo tamaño, misma fila. Lo único que la
+              // distingue es una etiqueta que explica su situación, no un
+              // trato de participante de segunda (ADR-033).
+              const SizedBox(height: TokenSpacing.xxl),
+              SectionHeader(title: l10n.peopleSectionTitle),
+              SaldaCardList(
                 children: [
                   for (final person in people)
-                    Chip(
-                      avatar: const Icon(Icons.person, size: 18),
-                      label: Text(person.name),
+                    _PersonRow(
+                      name: person.name,
+                      seed: person.manualId.isEmpty
+                          ? person.uid
+                          : person.manualId,
+                      isManual: person.manualId.isNotEmpty,
                     ),
                 ],
               ),
               if (!complete) ...[
-                const SizedBox(height: TokenSpacing.sm),
-                Text(
-                  target.kind == SpaceKind.relationship
+                const SizedBox(height: TokenSpacing.md),
+                EmptyState(
+                  icon: Icons.person_add_alt,
+                  title: target.kind == SpaceKind.relationship
                       ? l10n.relationshipNeedsAcceptance
                       : l10n.groupNeedsMembers,
-                  style: TextStyle(color: theme.colorScheme.error),
+                  body: target.kind == SpaceKind.relationship
+                      ? l10n.relationshipNeedsAcceptanceBody
+                      : l10n.groupNeedsMembersBody,
                 ),
               ],
-              const SizedBox(height: TokenSpacing.lg),
+
+              // ── Cómo se reparte ──────────────────────────────────────
+              const SizedBox(height: TokenSpacing.xxl),
+              SectionHeader(title: l10n.splitSectionTitle),
               SegmentedButton<SplitMode>(
                 segments: [
                   ButtonSegment(
                     value: SplitMode.equal,
-                    icon: const Icon(Icons.balance),
+                    icon: const Icon(Icons.balance, size: 18),
                     label: Text(l10n.splitEqual),
                   ),
                   ButtonSegment(
                     value: SplitMode.byItem,
-                    icon: const Icon(Icons.checklist),
+                    icon: const Icon(Icons.checklist, size: 18),
                     label: Text(l10n.splitByItem),
                   ),
                 ],
                 selected: {mode},
+                showSelectedIcon: false,
                 onSelectionChanged: (selection) =>
                     setState(() => mode = selection.first),
               ),
-              const SizedBox(height: TokenSpacing.lg),
-              DropdownButtonFormField<int>(
-                initialValue: people.isEmpty ? null : payerIndex,
-                decoration: InputDecoration(labelText: l10n.payerQuestion),
-                items: [
+              const SizedBox(height: TokenSpacing.sm),
+              Text(
+                mode == SplitMode.equal
+                    ? l10n.splitEqualHelp
+                    : l10n.splitByItemHelp,
+                style: theme.textTheme.bodySmall?.copyWith(color: c.textMuted),
+              ),
+
+              // ── Quién paga ───────────────────────────────────────────
+              // Cualquiera de las identidades puede pagar, incluido un
+              // MANUAL: el modelo económico ya lo admite (BUG-6).
+              const SizedBox(height: TokenSpacing.xxl),
+              SectionHeader(title: l10n.payerQuestion),
+              SaldaCardList(
+                children: [
                   for (var index = 0; index < people.length; index++)
-                    DropdownMenuItem(
-                      value: index,
-                      child: Text(people[index].name),
+                    _PersonRow(
+                      name: people[index].name,
+                      seed: people[index].manualId.isEmpty
+                          ? people[index].uid
+                          : people[index].manualId,
+                      isManual: people[index].manualId.isNotEmpty,
+                      selected: payerIndex == index,
+                      onTap: () => setState(() => payerIndex = index),
                     ),
                 ],
-                onChanged: (value) => setState(() => payerIndex = value ?? 0),
               ),
-              const SizedBox(height: TokenSpacing.lg),
-              FilledButton.icon(
-                onPressed: !complete || creating ? null : () => create(people),
-                icon: creating
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.ios_share),
-                label: Text(l10n.createAndShare),
+
+              const SizedBox(height: TokenSpacing.xxl),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: !complete || creating
+                      ? null
+                      : () => create(people),
+                  icon: creating
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.ios_share, size: 18),
+                  label: Text(l10n.createAndShare),
+                ),
               ),
+              if (!complete) ...[
+                const SizedBox(height: TokenSpacing.sm),
+                Text(
+                  l10n.createDisabledHelp,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: c.textMuted,
+                  ),
+                ),
+              ],
             ],
           ),
         );
       },
+    );
+  }
+}
+
+/// Fila de una persona en la hoja de reparto.
+///
+/// Cuenta, INVITADO y MANUAL se pintan EXACTAMENTE igual: la diferencia es
+/// una etiqueta que explica la situación, no un tamaño menor ni un icono
+/// gris. Quien no tiene la app pesa lo mismo económicamente (ADR-033).
+class _PersonRow extends StatelessWidget {
+  const _PersonRow({
+    required this.name,
+    required this.seed,
+    required this.isManual,
+    this.selected,
+    this.onTap,
+  });
+
+  final String name;
+  final String seed;
+  final bool isManual;
+
+  /// Null = la fila solo informa; no-null = es seleccionable.
+  final bool? selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final c = context.salda;
+    final isSelected = selected ?? false;
+    return ListTile(
+      onTap: onTap,
+      selected: isSelected,
+      selectedTileColor: c.primaryMuted,
+      leading: SaldaAvatar(seed: seed, label: name, radius: 17),
+      title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: isManual ? Text(l10n.personKindManual) : null,
+      trailing: selected == null
+          ? null
+          : Icon(
+              isSelected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 20,
+              color: isSelected ? c.primary : c.borderStrong,
+            ),
     );
   }
 }

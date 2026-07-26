@@ -6,6 +6,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/config/app_environment.dart';
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_models.dart';
@@ -32,8 +34,10 @@ class SpaceLinkScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.spaceLinkTitle)),
       body: link.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => Center(child: Text(l10n.spaceLinkError)),
+        loading: () => const ScreenBody(children: [SkeletonList(rows: 2)]),
+        error: (_, _) => ScreenBody(
+          children: [ErrorStateView(message: l10n.spaceLinkError)],
+        ),
         data: (active) => Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(TokenSpacing.xl),
@@ -165,7 +169,7 @@ class _ActiveLink extends ConsumerWidget {
         Text(link.spaceName, style: theme.textTheme.titleLarge),
         const SizedBox(height: TokenSpacing.lg),
         LayoutBuilder(
-          builder: (_, constraints) => Card(
+          builder: (_, constraints) => SaldaCard(
             child: Padding(
               padding: const EdgeInsets.all(TokenSpacing.lg),
               child: QrImageView(

@@ -113,6 +113,10 @@ void main() {
   testWidgets('detalle explica ticket y permite pago parcial', (tester) async {
     await pump(tester, const EconomicRelationScreen(otherUid: 'alba'));
 
+    // La tarjeta de saldo es ahora una cabecera con el importe en grande,
+    // así que el botón puede quedar bajo el pliegue en pantallas cortas.
+    await tester.ensureVisible(find.text('Marcar como pagado'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Marcar como pagado'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '10,00');

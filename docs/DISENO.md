@@ -118,3 +118,38 @@ de tarjetas · esquinas redondeadas en todo · exceso de cápsulas · botones
 flotantes gigantes · colores chillones · familias de iconos mezcladas
 (solo Material Symbols outlined) · ilustraciones genéricas · emojis como
 iconografía · texto centrado por defecto · animaciones largas.
+
+## Compilación Android
+
+### R8 y ML Kit
+
+ML Kit reparte el reconocedor de texto en cinco artefactos. El plugin declara
+el **latino** como `implementation` y chino, devanagari, japonés y coreano
+como `compileOnly`: compila contra ellos pero no los distribuye, y cada app
+añade solo las escrituras que use. Salda usa `TextRecognitionScript.latin` y
+nada más, así que esas cuatro clases no están en el APK —son modelos de
+varios MB por escritura— y R8 abortaba al no encontrarlas.
+
+`android/app/proguard-rules.pro` declara esa ausencia **clase a clase**, no
+con un comodín sobre `com.google.mlkit.**`: silenciar el paquete entero
+ocultaría la falta de una clase del reconocedor latino, que sí sería un
+fallo. El latino se conserva con `-keep` porque llega por reflexión.
+Verificado sobre el APK resultante: los modelos `mlkit-google-ocr-models`
+siguen dentro, `vision/text/latin/TextRecognizerOptions` sobrevive al
+shrinker y no se empaqueta ninguna escritura sin usar.
+
+### Qué artefacto sirve para validar
+
+| Build | Entorno | Sirve para |
+|---|---|---|
+| `--debug` | desarrollo | Depurar; enorme (110 MB por ABI) |
+| `--profile` | desarrollo | **Validación manual contra `salda-dev`** |
+| `--release` | producción | Compila y está minificado, pero **no arranca** contra `salda-dev` |
+
+No es un fallo: `AppEnvironment.resolveHostingDomain` prohíbe expresamente
+que una release use los enlaces de desarrollo, para que una build de tienda
+no comparta enlaces de `salda-dev` mientras escribe en producción. Una
+release solo arranca con `salda-prod` configurado, que no se toca.
+
+Usar siempre `--split-per-abi`: el APK universal mete los tres ABI y triplica
+el tamaño (227 MB debug / 91 MB release) sin aportar nada en un móvil.

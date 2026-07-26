@@ -3,6 +3,7 @@ import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../application/ai_analysis_controller.dart'
     show aiAvailableProvider, aiRegistryProvider;
@@ -52,49 +53,50 @@ class _AiProvidersScreenState extends ConsumerState<AiProvidersScreen> {
     final registry = ref.watch(aiRegistryProvider);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.aiTitle)),
-      body: ListView(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
+      body: ScreenBody(
         children: [
           Text(l10n.aiHint, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: TokenSpacing.md),
-          for (final provider in registry.all)
-            Card(
-              margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
-              child: ListTile(
-                title: Text(provider.displayName),
-                subtitle: _configured[provider.id] == true
-                    ? Text(l10n.aiConfigured)
-                    : null,
-                leading: Icon(
-                  _configured[provider.id] == true
-                      ? Icons.check_circle
-                      : Icons.circle_outlined,
-                  color: _configured[provider.id] == true
-                      ? Theme.of(context).colorScheme.primary
+          const SectionGap(height: TokenSpacing.lg),
+          SectionHeader(title: l10n.aiProvidersSection),
+          SaldaCardList(
+            children: [
+              for (final provider in registry.all)
+                ListTile(
+                  title: Text(provider.displayName),
+                  subtitle: _configured[provider.id] == true
+                      ? Text(l10n.aiConfigured)
                       : null,
+                  leading: Icon(
+                    _configured[provider.id] == true
+                        ? Icons.check_circle
+                        : Icons.circle_outlined,
+                    color: _configured[provider.id] == true
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  trailing: _configured[provider.id] == true
+                      ? IconButton(
+                          tooltip: l10n.aiPreferred,
+                          icon: Icon(
+                            _preferred == provider.id
+                                ? Icons.star
+                                : Icons.star_border,
+                          ),
+                          onPressed: () async {
+                            await ref
+                                .read(aiConfigStoreProvider)
+                                .setPreferred(provider.id);
+                            await _refresh();
+                          },
+                        )
+                      : null,
+                  onTap: () async {
+                    await _configure(provider);
+                    await _refresh();
+                  },
                 ),
-                trailing: _configured[provider.id] == true
-                    ? IconButton(
-                        tooltip: l10n.aiPreferred,
-                        icon: Icon(
-                          _preferred == provider.id
-                              ? Icons.star
-                              : Icons.star_border,
-                        ),
-                        onPressed: () async {
-                          await ref
-                              .read(aiConfigStoreProvider)
-                              .setPreferred(provider.id);
-                          await _refresh();
-                        },
-                      )
-                    : null,
-                onTap: () async {
-                  await _configure(provider);
-                  await _refresh();
-                },
-              ),
-            ),
+            ],
+          ),
         ],
       ),
     );

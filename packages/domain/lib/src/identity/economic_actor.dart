@@ -41,13 +41,11 @@ bool isManualActor(String actor) => actor.startsWith(manualActorPrefix);
 /// Los actores de cuenta son los ÚNICOS que pueden leer y confirmar; de ahí
 /// que `memberUids` (usado por Rules y por las queries array-contains) se
 /// construya solo con ellos.
-bool isAccountActor(String actor) =>
-    actor.isNotEmpty && !isManualActor(actor);
+bool isAccountActor(String actor) => actor.isNotEmpty && !isManualActor(actor);
 
 /// Id del participante manual dentro de su actor, o null si es una cuenta.
-String? manualIdOf(String actor) => isManualActor(actor)
-    ? actor.substring(manualActorPrefix.length)
-    : null;
+String? manualIdOf(String actor) =>
+    isManualActor(actor) ? actor.substring(manualActorPrefix.length) : null;
 
 /// UIDs reales de una pareja de actores, en orden y sin duplicados: la
 /// audiencia que puede leer la obligación. Una obligación entre una cuenta y
