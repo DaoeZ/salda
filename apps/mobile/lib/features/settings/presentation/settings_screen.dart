@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/theme_controller.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/presentation/login_screen.dart';
@@ -34,26 +35,22 @@ class SettingsScreen extends ConsumerWidget {
         ? ref.watch(frequentPeopleProvider).value ?? const []
         : const <FrequentPerson>[];
 
-    Widget section(String title, List<Widget> children) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            TokenSpacing.xs,
-            TokenSpacing.xl,
-            0,
-            TokenSpacing.sm,
-          ),
-          child: Text(title, style: theme.textTheme.titleSmall),
-        ),
-        Card(child: Column(children: children)),
-      ],
+    // Grupos claramente separados: encabezado del sistema y UNA superficie
+    // por bloque, con las filas divididas por líneas de un pelo.
+    Widget section(String title, List<Widget> children) => Padding(
+      padding: const EdgeInsets.only(bottom: TokenSpacing.xxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: title),
+          SaldaCardList(children: children),
+        ],
+      ),
     );
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsTitle)),
-      body: ListView(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
+      body: ScreenBody(
         children: [
           section(l10n.settingsAppearance, [
             Padding(

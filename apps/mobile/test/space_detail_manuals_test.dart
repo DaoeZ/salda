@@ -50,8 +50,11 @@ void main() {
     // Relación v2 PENDIENTE: solo el creador, con invitación reservando la
     // segunda plaza.
     await firestore.doc('spaces/rel2').set({
-      'name': 'Ana y yo', 'ownerUid': 'owner', 'kind': 'relationship',
-      'relationshipUids': ['owner', 'uid-ana'], 'status': 'active',
+      'name': 'Ana y yo',
+      'ownerUid': 'owner',
+      'kind': 'relationship',
+      'relationshipUids': ['owner', 'uid-ana'],
+      'status': 'active',
       'schemaVersion': 2,
     });
     await firestore.doc('spaces/rel2/members/owner').set({'uid': 'owner'});
@@ -59,27 +62,35 @@ void main() {
 
     // Relación v3: su segunda identidad es un manual.
     await firestore.doc('spaces/rel3').set({
-      'name': 'Pablo', 'ownerUid': 'owner', 'kind': 'relationship',
-      'relationshipUids': ['owner'], 'relationshipManualId': 'm-pablo',
-      'status': 'active', 'schemaVersion': 3,
+      'name': 'Pablo',
+      'ownerUid': 'owner',
+      'kind': 'relationship',
+      'relationshipUids': ['owner'],
+      'relationshipManualId': 'm-pablo',
+      'status': 'active',
+      'schemaVersion': 3,
     });
     await firestore.doc('spaces/rel3/members/owner').set({'uid': 'owner'});
     await firestore.doc('spaces/rel3/manualParticipants/m-pablo').set({
-      'manualId': 'm-pablo', 'displayName': 'Pablo', 'linkedUid': null,
-      'createdByUid': 'owner', 'schemaVersion': 1,
+      'manualId': 'm-pablo',
+      'displayName': 'Pablo',
+      'linkedUid': null,
+      'createdByUid': 'owner',
+      'schemaVersion': 1,
     });
 
     // Grupo: conserva sus acciones.
     await firestore.doc('spaces/grupo').set({
-      'name': 'Piso', 'ownerUid': 'owner', 'kind': 'group',
-      'status': 'active', 'schemaVersion': 2,
+      'name': 'Piso',
+      'ownerUid': 'owner',
+      'kind': 'group',
+      'status': 'active',
+      'schemaVersion': 2,
     });
     await firestore.doc('spaces/grupo/members/owner').set({'uid': 'owner'});
   });
 
-  testWidgets('relación v2 pendiente: NO ofrece añadir manual', (
-    tester,
-  ) async {
+  testWidgets('relación v2 pendiente: NO ofrece añadir manual', (tester) async {
     await pump(tester, 'rel2');
     // El título es la otra persona, no el nombre persistido (BUG-5).
     expect(find.text('Ana'), findsWidgets);

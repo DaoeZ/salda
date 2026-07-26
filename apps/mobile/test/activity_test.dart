@@ -20,16 +20,15 @@ Future<void> _seedEvent(
   String? spaceId,
   Map<String, Object> summary = const {},
   required DateTime at,
-}) =>
-    firestore.doc('activityEvents/$id').set({
-      'type': type,
-      'actorUid': actorUid,
-      'memberUids': memberUids,
-      'spaceId': ?spaceId,
-      'summary': summary,
-      'at': Timestamp.fromDate(at),
-      'schemaVersion': 1,
-    });
+}) => firestore.doc('activityEvents/$id').set({
+  'type': type,
+  'actorUid': actorUid,
+  'memberUids': memberUids,
+  'spaceId': ?spaceId,
+  'summary': summary,
+  'at': Timestamp.fromDate(at),
+  'schemaVersion': 1,
+});
 
 void main() {
   group('ActivityRepository', () {
@@ -41,30 +40,53 @@ void main() {
       repo = ActivityRepository(firestore: firestore, uid: () => 'owner');
     });
 
-    test('la cronología solo incluye MI audiencia, en orden descendente',
-        () async {
-      await _seedEvent(firestore, 'e1',
-          type: 'space_created', memberUids: ['owner'],
-          at: DateTime(2026, 7, 1));
-      await _seedEvent(firestore, 'e2',
-          type: 'ticket_created', memberUids: ['owner', 'uid-otro'],
-          at: DateTime(2026, 7, 3));
-      await _seedEvent(firestore, 'ajeno',
-          type: 'ticket_created', memberUids: ['uid-otro'],
-          at: DateTime(2026, 7, 2));
+    test(
+      'la cronología solo incluye MI audiencia, en orden descendente',
+      () async {
+        await _seedEvent(
+          firestore,
+          'e1',
+          type: 'space_created',
+          memberUids: ['owner'],
+          at: DateTime(2026, 7, 1),
+        );
+        await _seedEvent(
+          firestore,
+          'e2',
+          type: 'ticket_created',
+          memberUids: ['owner', 'uid-otro'],
+          at: DateTime(2026, 7, 3),
+        );
+        await _seedEvent(
+          firestore,
+          'ajeno',
+          type: 'ticket_created',
+          memberUids: ['uid-otro'],
+          at: DateTime(2026, 7, 2),
+        );
 
-      final events = await repo.watchFirstPage().first;
-      expect(events.map((e) => e.id), ['e2', 'e1']);
-      expect(events.first.type, ActivityType.ticketCreated);
-    });
+        final events = await repo.watchFirstPage().first;
+        expect(events.map((e) => e.id), ['e2', 'e1']);
+        expect(events.first.type, ActivityType.ticketCreated);
+      },
+    );
 
     test('el filtro por espacio y el global conviven', () async {
-      await _seedEvent(firestore, 's1',
-          type: 'member_joined', memberUids: ['owner'], spaceId: 'sp1',
-          at: DateTime(2026, 7, 1));
-      await _seedEvent(firestore, 'g1',
-          type: 'payment_confirmed', memberUids: ['owner'],
-          at: DateTime(2026, 7, 2));
+      await _seedEvent(
+        firestore,
+        's1',
+        type: 'member_joined',
+        memberUids: ['owner'],
+        spaceId: 'sp1',
+        at: DateTime(2026, 7, 1),
+      );
+      await _seedEvent(
+        firestore,
+        'g1',
+        type: 'payment_confirmed',
+        memberUids: ['owner'],
+        at: DateTime(2026, 7, 2),
+      );
 
       final space = await repo.watchFirstPage(spaceId: 'sp1').first;
       expect(space.map((e) => e.id), ['s1']);
@@ -72,27 +94,37 @@ void main() {
       expect(global.map((e) => e.id), ['g1', 's1']);
     });
 
-    test('paginación por fecha: fetchOlder trae lo anterior sin repetir',
-        () async {
-      for (var i = 0; i < 40; i++) {
-        await _seedEvent(firestore, 'e$i',
-            type: 'ticket_created', memberUids: ['owner'],
-            at: DateTime(2026, 6, 1).add(Duration(hours: i)));
-      }
-      final first = await repo.watchFirstPage().first;
-      expect(first.length, ActivityRepository.pageSize);
+    test(
+      'paginación por fecha: fetchOlder trae lo anterior sin repetir',
+      () async {
+        for (var i = 0; i < 40; i++) {
+          await _seedEvent(
+            firestore,
+            'e$i',
+            type: 'ticket_created',
+            memberUids: ['owner'],
+            at: DateTime(2026, 6, 1).add(Duration(hours: i)),
+          );
+        }
+        final first = await repo.watchFirstPage().first;
+        expect(first.length, ActivityRepository.pageSize);
 
-      final older = await repo.fetchOlder(first.last.at!);
-      expect(older.length, 40 - ActivityRepository.pageSize);
-      final ids = {...first.map((e) => e.id), ...older.map((e) => e.id)};
-      expect(ids.length, 40); // sin duplicados entre páginas
-    });
+        final older = await repo.fetchOlder(first.last.at!);
+        expect(older.length, 40 - ActivityRepository.pageSize);
+        final ids = {...first.map((e) => e.id), ...older.map((e) => e.id)};
+        expect(ids.length, 40); // sin duplicados entre páginas
+      },
+    );
 
     test('el resumen congelado se mapea (rótulos e importes)', () async {
-      await _seedEvent(firestore, 'e1',
-          type: 'payment_confirmed', memberUids: ['owner'],
-          summary: {'amount': 1250, 'currency': 'EUR'},
-          at: DateTime(2026, 7, 1));
+      await _seedEvent(
+        firestore,
+        'e1',
+        type: 'payment_confirmed',
+        memberUids: ['owner'],
+        summary: {'amount': 1250, 'currency': 'EUR'},
+        at: DateTime(2026, 7, 1),
+      );
       final event = (await repo.watchFirstPage().first).single;
       expect(event.amountCents, 1250);
       expect(event.currency, 'EUR');
@@ -103,19 +135,26 @@ void main() {
   group('textos y tiempo relativo', () {
     testWidgets('cada tipo tiene un texto propio y legible', (tester) async {
       late AppLocalizations l10n;
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          l10n = AppLocalizations.of(context);
-          return const SizedBox();
-        }),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) {
+              l10n = AppLocalizations.of(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
 
       ActivityEvent event(ActivityType type) => ActivityEvent(
-            id: 'x', type: type, actorUid: 'a',
-            spaceName: 'Viaje', ticketName: 'Casa Paco',
-          );
+        id: 'x',
+        type: type,
+        actorUid: 'a',
+        spaceName: 'Viaje',
+        ticketName: 'Casa Paco',
+      );
       // Todos los tipos reales producen texto no vacío y distinto de
       // "Actividad" (el fallback de unknown).
       final seen = <String>{};
@@ -177,24 +216,38 @@ void main() {
 
     testWidgets('estado vacío', (tester) async {
       await pump(tester);
-      expect(find.textContaining('Aquí aparecerá'), findsOneWidget);
+      // El estado vacío del sistema explica qué es y qué esperar, en vez
+      // de una sola frase suelta centrada.
+      expect(find.text('Sin movimientos'), findsOneWidget);
+      expect(
+        find.textContaining('lo que ocurra en tus contextos'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('lista eventos con importe y actor por UID; nombres largos '
         'sin overflow', (tester) async {
       final fake = FakeFirebaseFirestore();
-      await _seedEvent(fake, 'e1',
-          type: 'payment_confirmed', memberUids: ['owner'],
-          summary: {'amount': 123456789, 'currency': 'EUR'},
-          at: DateTime(2026, 7, 19));
-      await _seedEvent(fake, 'e2',
-          type: 'space_created', memberUids: ['owner'],
-          summary: {
-            'spaceName':
-                'Un espacio con un nombre desproporcionadamente largo '
-                'para forzar elipsis y no overflow',
-          },
-          at: DateTime(2026, 7, 18));
+      await _seedEvent(
+        fake,
+        'e1',
+        type: 'payment_confirmed',
+        memberUids: ['owner'],
+        summary: {'amount': 123456789, 'currency': 'EUR'},
+        at: DateTime(2026, 7, 19),
+      );
+      await _seedEvent(
+        fake,
+        'e2',
+        type: 'space_created',
+        memberUids: ['owner'],
+        summary: {
+          'spaceName':
+              'Un espacio con un nombre desproporcionadamente largo '
+              'para forzar elipsis y no overflow',
+        },
+        at: DateTime(2026, 7, 18),
+      );
       await pump(tester, firestore: fake);
 
       expect(find.byType(ActivityTile), findsNWidgets(2));

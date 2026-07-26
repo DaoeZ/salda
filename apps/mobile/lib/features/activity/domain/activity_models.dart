@@ -29,8 +29,10 @@ enum ActivityType {
 
   final String wire;
 
-  static ActivityType fromWire(String? value) => ActivityType.values
-      .firstWhere((type) => type.wire == value, orElse: () => unknown);
+  static ActivityType fromWire(String? value) => ActivityType.values.firstWhere(
+    (type) => type.wire == value,
+    orElse: () => unknown,
+  );
 }
 
 class ActivityEvent {

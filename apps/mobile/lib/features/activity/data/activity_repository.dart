@@ -27,11 +27,9 @@ class ActivityRepository {
   }
 
   /// Primera página EN VIVO (los eventos recientes aparecen solos).
-  Stream<List<ActivityEvent>> watchFirstPage({String? spaceId}) =>
-      _base(spaceId: spaceId)
-          .limit(pageSize)
-          .snapshots()
-          .map((snap) => snap.docs.map(_fromDoc).toList());
+  Stream<List<ActivityEvent>> watchFirstPage({String? spaceId}) => _base(
+    spaceId: spaceId,
+  ).limit(pageSize).snapshots().map((snap) => snap.docs.map(_fromDoc).toList());
 
   /// Historial anterior a [before] (paginación por fecha, bajo demanda).
   Future<List<ActivityEvent>> fetchOlder(
@@ -82,13 +80,13 @@ final activityRepositoryProvider = Provider<ActivityRepository>((ref) {
 });
 
 /// Primera página global (o de un espacio con `family` abajo), en vivo.
-final globalActivityProvider =
-    StreamProvider.autoDispose<List<ActivityEvent>>(
+final globalActivityProvider = StreamProvider.autoDispose<List<ActivityEvent>>(
   (ref) => ref.watch(activityRepositoryProvider).watchFirstPage(),
 );
 
-final spaceActivityProvider =
-    StreamProvider.autoDispose.family<List<ActivityEvent>, String>(
-  (ref, spaceId) =>
-      ref.watch(activityRepositoryProvider).watchFirstPage(spaceId: spaceId),
-);
+final spaceActivityProvider = StreamProvider.autoDispose
+    .family<List<ActivityEvent>, String>(
+      (ref, spaceId) => ref
+          .watch(activityRepositoryProvider)
+          .watchFirstPage(spaceId: spaceId),
+    );

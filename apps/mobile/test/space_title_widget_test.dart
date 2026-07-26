@@ -126,6 +126,7 @@ void main() {
     // Y la v3 enseña a la persona sin cuenta, no el nombre guardado.
     expect(find.text('Pablo'), findsWidgets);
     expect(find.text('nombre viejo'), findsNothing);
+    await cerrar(tester);
   });
 
   testWidgets('la MISMA relación: Pedro ve «Edgar»', (tester) async {
@@ -133,6 +134,7 @@ void main() {
     expect(find.text(legado), findsNothing);
     expect(find.text('Edgar'), findsWidgets);
     expect(find.text('Pedro'), findsNothing);
+    await cerrar(tester);
   });
 
   testWidgets('detalle: la cabecera resuelve igual que la lista', (
@@ -176,6 +178,7 @@ void main() {
     final container = await pump(tester, const SpacesScreen());
     expect(find.text('Pablo'), findsWidgets);
     expect(container.read(spaceTitleProvider('rel3')).person, 'Pablo');
+    await cerrar(tester);
   });
 
   testWidgets('una cuenta sin username no pinta un @ huérfano', (tester) async {
@@ -186,6 +189,7 @@ void main() {
     await pump(tester, const SpacesScreen());
     expect(find.text('Pedro'), findsWidgets);
     expect(find.textContaining('@'), findsNothing);
+    await cerrar(tester);
   });
 
   testWidgets('perfil ausente: rótulo de producto, nunca el UID', (
@@ -196,6 +200,7 @@ void main() {
     expect(find.text('Persona sin nombre'), findsWidgets);
     expect(find.textContaining(pedro), findsNothing);
     expect(find.text(legado), findsNothing);
+    await cerrar(tester);
   });
 
   testWidgets('la invitación a una relación anuncia a quien invita', (
@@ -214,5 +219,6 @@ void main() {
     // Ni el nombre concatenado ni ninguna frase que lo cite.
     expect(find.textContaining(legado), findsNothing);
     expect(find.text('Edgar quiere compartir gastos contigo'), findsOneWidget);
+    await cerrar(tester);
   });
 }

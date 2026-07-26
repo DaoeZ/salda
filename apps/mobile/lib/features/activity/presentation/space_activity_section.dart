@@ -1,8 +1,9 @@
-import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/activity_repository.dart';
 import 'activity_tile.dart';
@@ -19,60 +20,32 @@ class SpaceActivitySection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     final activity = ref.watch(spaceActivityProvider(spaceId));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                l10n.activityTitle,
-                style: theme.textTheme.titleMedium,
-              ),
-            ),
-            TextButton(
-              onPressed: () =>
-                  context.push('/home/spaces/$spaceId/activity'),
-              child: Text(l10n.activitySeeAll),
-            ),
-          ],
+        SectionHeader(
+          title: l10n.activityTitle,
+          action: l10n.activitySeeAll,
+          onAction: () => context.push('/home/spaces/$spaceId/activity'),
         ),
         activity.when(
-          loading: () => const Card(
-            child: Padding(
-              padding: EdgeInsets.all(TokenSpacing.lg),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          ),
-          error: (error, _) => Card(
-            child: Padding(
-              padding: const EdgeInsets.all(TokenSpacing.lg),
-              child: Text(
-                l10n.activityLoadError,
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-          ),
+          // Esqueleto y no un aro girando: la estructura de la lista ya se
+          // conoce, así que nada salta de sitio cuando llegan los datos.
+          loading: () => const SkeletonList(rows: 3),
+          error: (error, _) => ErrorStateView(message: l10n.activityLoadError),
           data: (events) => events.isEmpty
-              ? Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(TokenSpacing.lg),
-                    child: Text(
-                      l10n.activityEmpty,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
+              ? EmptyState(
+                  icon: Icons.bolt_outlined,
+                  title: l10n.emptyActivityTitle,
+                  body: l10n.emptyActivityBody,
                 )
-              : Card(
-                  child: Column(
-                    children: [
-                      for (final event in events.take(previewCount))
-                        ActivityTile(event: event),
-                    ],
-                  ),
+              : SaldaCardList(
+                  children: [
+                    for (final event in events.take(previewCount))
+                      ActivityTile(event: event),
+                  ],
                 ),
         ),
       ],

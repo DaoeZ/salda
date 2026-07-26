@@ -8,6 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/config/app_environment.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/money_text.dart';
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../scan/data/receipt_storage.dart';
@@ -53,33 +57,75 @@ class TicketDetailScreen extends ConsumerWidget {
           _SpaceLinkAction(ticket: t),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
+      body: ScreenBody(
         children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: Text(l10n.ticketPaidBy(ticket.payerName)),
-              subtitle: t.date == null ? null : Text(t.date!),
-              trailing: Text(
-                formatMoney(t.grandTotal),
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+          SaldaCard(
+            padding: const EdgeInsets.all(TokenSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t.merchantName,
+                  style: theme.textTheme.titleMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
+                const SizedBox(height: TokenSpacing.sm),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: MoneyText(t.grandTotal, size: MoneySize.large),
+                ),
+                const SizedBox(height: TokenSpacing.lg),
+                _TicketFact(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: l10n.ticketPaidBy(ticket.payerName),
+                ),
+                if (t.date != null) ...[
+                  const SizedBox(height: TokenSpacing.sm),
+                  _TicketFact(icon: Icons.event_outlined, label: t.date!),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: TokenSpacing.lg),
           if (t.kind == 'scanned') ...[
+            const SectionGap(),
+            SectionHeader(title: l10n.ticketPhotoTitle),
             _TicketPhoto(ticketPath: t.path, uploaded: t.imagePath != null),
-            const SizedBox(height: TokenSpacing.lg),
           ],
-          Text(l10n.reviewLines, style: theme.textTheme.titleMedium),
-          const SizedBox(height: TokenSpacing.sm),
+          const SectionGap(),
+          SectionHeader(title: l10n.reviewLines),
           _TicketLines(ticketRef: ticket),
         ],
       ),
+    );
+  }
+}
+
+/// Dato secundario del ticket: icono tenue y texto, en fila. Evita una
+/// tabla densa sin esconder nada detras de mas toques.
+class _TicketFact extends StatelessWidget {
+  const _TicketFact({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.salda;
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: c.textMuted),
+        const SizedBox(width: TokenSpacing.sm),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: c.textSecondary),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -135,17 +181,16 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
           if (value == 'unlink') {
             await repo.unlinkTicket(widget.ticket.path);
             setState(() => _spaceId = null);
-            messenger.showSnackBar(
-              SnackBar(content: Text(l10n.spaceUnlinked)),
-            );
+            messenger.showSnackBar(SnackBar(content: Text(l10n.spaceUnlinked)));
           } else {
             await repo.linkTicket(widget.ticket.path, value);
             setState(() => _spaceId = value);
             messenger.showSnackBar(SnackBar(content: Text(l10n.spaceLinked)));
           }
         } on Object {
-          messenger
-              .showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+          messenger.showSnackBar(
+            SnackBar(content: Text(l10n.spaceActionError)),
+          );
         }
       },
       itemBuilder: (_) => [
@@ -160,10 +205,7 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
               ),
             ),
         if (linked)
-          PopupMenuItem(
-            value: 'unlink',
-            child: Text(l10n.spaceUnlink),
-          ),
+          PopupMenuItem(value: 'unlink', child: Text(l10n.spaceUnlink)),
       ],
     );
   }
@@ -191,12 +233,12 @@ class _TicketLines extends ConsumerWidget {
         const <SessionParticipant>[];
 
     final lines = linesAsync.value ?? const <TicketLine>[];
-    if (linesAsync.hasValue && lines.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(TokenSpacing.lg),
-          child: Text(l10n.ticketNoLines, style: theme.textTheme.bodySmall),
-        ),
+    if (!linesAsync.hasValue) return const SkeletonList(rows: 3);
+    if (lines.isEmpty) {
+      return EmptyState(
+        icon: Icons.list_alt_outlined,
+        title: l10n.ticketNoLines,
+        body: l10n.ticketNoLinesBody,
       );
     }
 
@@ -219,19 +261,17 @@ class _TicketLines extends ConsumerWidget {
           Text(l10n.ticketPickHint, style: theme.textTheme.bodySmall),
           const SizedBox(height: TokenSpacing.sm),
         ],
-        Card(
-          child: Column(
-            children: [
-              for (final line in lines)
-                _LineTile(
-                  line: line,
-                  ownerPid: ownerPid,
-                  canPick: canPick,
-                  names: names,
-                  payerName: ticketRef.payerName,
-                ),
-            ],
-          ),
+        SaldaCardList(
+          children: [
+            for (final line in lines)
+              _LineTile(
+                line: line,
+                ownerPid: ownerPid,
+                canPick: canPick,
+                names: names,
+                payerName: ticketRef.payerName,
+              ),
+          ],
         ),
       ],
     );
@@ -595,7 +635,8 @@ class _TicketLinkAction extends ConsumerWidget {
           SnackBar(content: Text(l10n.ticketLinkPreparing)),
         );
       }
-      final link = existing ??
+      final link =
+          existing ??
           await repo.createLink(
             sessionId: ticketRef.sessionId,
             accountId: accountId,
@@ -614,9 +655,7 @@ class _TicketLinkAction extends ConsumerWidget {
       );
     } on TicketLinkNotReady {
       // Recuperable: recompute no ha terminado. Se reintenta a mano.
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.ticketLinkNotReady)),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketLinkNotReady)));
     } on Object {
       messenger.showSnackBar(SnackBar(content: Text(l10n.ticketLinkError)));
     }

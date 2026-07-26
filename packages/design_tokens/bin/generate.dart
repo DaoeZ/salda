@@ -58,6 +58,12 @@ Map<String, dynamic> _readJson(String path) =>
 /// `#RRGGBB` → literal Dart `0xFFRRGGBB`.
 String _argb(String hex) => '0xFF${hex.substring(1).toUpperCase()}';
 
+/// Literal Dart para la familia tipográfica: vacío = `null` (pila del
+/// sistema), y no una cadena vacía que Flutter trataría como fuente sin
+/// resolver.
+String _fontFamilyLiteral(String family) =>
+    family.isEmpty ? 'null' : "'" + family + "'";
+
 /// `settlementPending` → `settlement-pending`.
 String _kebab(String s) =>
     s.replaceAllMapped(RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}');
@@ -66,6 +72,7 @@ String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
   final hosting = brand['hostingDomains'] as Map<String, dynamic>;
   final color = t['color'] as Map<String, dynamic>;
   final semantic = color['semantic'] as Map<String, dynamic>;
+  final roles = color['roles'] as Map<String, dynamic>;
   final avatars = (color['avatarPalette'] as List).cast<String>();
   final typo = t['typography'] as Map<String, dynamic>;
   final scale = typo['scale'] as Map<String, dynamic>;
@@ -96,6 +103,19 @@ String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
     ..writeln('/// Colores como int ARGB; la app los envuelve en `Color(...)`.')
     ..writeln('abstract final class TokenColors {')
     ..writeln("  static const int seed = ${_argb(color['seed'] as String)};");
+  // Roles del sistema visual: el unico sitio donde vive un color.
+  for (final entry in roles.entries) {
+    final v = entry.value as Map<String, dynamic>;
+    b
+      ..writeln(
+        '  static const int ${entry.key}Light = '
+        '${_argb(v['light'] as String)};',
+      )
+      ..writeln(
+        '  static const int ${entry.key}Dark = '
+        '${_argb(v['dark'] as String)};',
+      );
+  }
   for (final entry in semantic.entries) {
     final v = entry.value as Map<String, dynamic>;
     b
@@ -116,12 +136,24 @@ String _generateDart(Map<String, dynamic> brand, Map<String, dynamic> t) {
     ..writeln('}')
     ..writeln()
     ..writeln('abstract final class TokenTypography {')
-    ..writeln("  static const String fontFamily = '${typo['fontFamily']}';");
+    ..writeln('  /// Vacío = pila tipográfica del sistema. Ver docs/DISENO.md.')
+    ..writeln(
+      '  static const String? fontFamily = '
+      '${_fontFamilyLiteral(typo['fontFamily'] as String)};',
+    );
   for (final entry in scale.entries) {
     final v = entry.value as Map<String, dynamic>;
     b
       ..writeln('  static const double ${entry.key}Size = ${v['size']};')
-      ..writeln('  static const int ${entry.key}Weight = ${v['weight']};');
+      ..writeln('  static const int ${entry.key}Weight = ${v['weight']};')
+      ..writeln(
+        '  static const double ${entry.key}Tracking = '
+        '${(v['tracking'] as num).toDouble()};',
+      )
+      ..writeln(
+        '  static const double ${entry.key}Height = '
+        '${(v['height'] as num).toDouble()};',
+      );
   }
   b
     ..writeln('}')
@@ -194,8 +226,14 @@ String _generateCss(Map<String, dynamic> brand, Map<String, dynamic> t) {
   final durations = motion['durations'] as Map<String, dynamic>;
   final easing = (motion['easingEmphasized'] as List).cast<num>();
 
+  final roles = color['roles'] as Map<String, dynamic>;
+
   String block(String mode) {
     final b = StringBuffer();
+    for (final entry in roles.entries) {
+      final v = entry.value as Map<String, dynamic>;
+      b.writeln('  --color-${_kebab(entry.key)}: ${v[mode]};');
+    }
     for (final entry in semantic.entries) {
       final v = entry.value as Map<String, dynamic>;
       b.writeln('  --color-${_kebab(entry.key)}: ${v[mode]};');

@@ -35,38 +35,54 @@ void main() {
   setUp(() async {
     firestore = FakeFirebaseFirestore();
     // Sesión con dos cuentas, un invitado y DOS manuales.
-    await firestore.doc('sessions/s1/participants/p1').set(
-      {'name': 'Edgar', 'isOwner': true, 'claimedByDevice': 'owner'},
-    );
-    await firestore.doc('sessions/s1/participants/p2').set(
-      {'name': 'Alba', 'isOwner': false, 'claimedByDevice': 'guest-1'},
-    );
+    await firestore.doc('sessions/s1/participants/p1').set({
+      'name': 'Edgar',
+      'isOwner': true,
+      'claimedByDevice': 'owner',
+    });
+    await firestore.doc('sessions/s1/participants/p2').set({
+      'name': 'Alba',
+      'isOwner': false,
+      'claimedByDevice': 'guest-1',
+    });
     await firestore.doc('sessions/s1/participants/p5').set({
-      'name': 'Marta', 'isOwner': false, 'claimedByDevice': '',
-      'manualId': 'm1', 'active': true,
+      'name': 'Marta',
+      'isOwner': false,
+      'claimedByDevice': '',
+      'manualId': 'm1',
+      'active': true,
     });
     await firestore.doc('sessions/s1/participants/p6').set({
-      'name': 'Luis', 'isOwner': false, 'claimedByDevice': '',
-      'manualId': 'm2', 'active': true,
+      'name': 'Luis',
+      'isOwner': false,
+      'claimedByDevice': '',
+      'manualId': 'm2',
+      'active': true,
     });
     // Proyección AUTORITATIVA que escribe recompute (aquí sembrada a mano):
     // es la fuente que Rules consulta y la que la app usa para reconocer a
     // quien ya participa, en vez del array del enlace.
     for (final entry in [
-      ('t1_p1', 'p1', 'owner'), ('t1_p2', 'p2', 'guest-1'),
-      ('t1_p5', 'p5', ''), ('t1_p6', 'p6', ''),
+      ('t1_p1', 'p1', 'owner'),
+      ('t1_p2', 'p2', 'guest-1'),
+      ('t1_p5', 'p5', ''),
+      ('t1_p6', 'p6', ''),
     ]) {
       await firestore.doc('sessions/s1/ticketParticipants/${entry.$1}').set({
-        'ticketId': 't1', 'pid': entry.$2, 'schemaVersion': 1,
+        'ticketId': 't1',
+        'pid': entry.$2,
+        'schemaVersion': 1,
         if (entry.$3.isNotEmpty) 'claimedByDevice': entry.$3,
       });
     }
     // Señal de proyección PREPARADA (recompute la escribe en el mismo batch
     // que las entradas). Sin ella no se puede crear el enlace.
-    await firestore.doc('sessions/s1/ticketParticipantProjections/t1').set(
-      {'ticketId': 't1', 'ready': true, 'fingerprint': 'p1,p2,p5,p6',
-       'schemaVersion': 1},
-    );
+    await firestore.doc('sessions/s1/ticketParticipantProjections/t1').set({
+      'ticketId': 't1',
+      'ready': true,
+      'fingerprint': 'p1,p2,p5,p6',
+      'schemaVersion': 1,
+    });
   });
 
   group('creación y alcance', () {
@@ -117,7 +133,10 @@ void main() {
 
     test('acepta la URL completa pegada', () async {
       final link = await seedLink();
-      final url = TicketLinksRepository.linkUrlFor('salda-dev.web.app', link.token);
+      final url = TicketLinksRepository.linkUrlFor(
+        'salda-dev.web.app',
+        link.token,
+      );
       expect(url, endsWith('/t/${link.token}'));
       expect((await repoFor('ana').preview(url))!.ticketId, 't1');
     });
@@ -128,8 +147,11 @@ void main() {
       // Ticket recién creado: recompute todavía no ha proyectado nada.
       await expectLater(
         repoFor('owner').createLink(
-          sessionId: 's1', accountId: 'a1', ticketId: 't9',
-          merchantName: 'Recien', manuals: const [marta],
+          sessionId: 's1',
+          accountId: 'a1',
+          ticketId: 't9',
+          merchantName: 'Recien',
+          manuals: const [marta],
           // Sin espera: el timeout corto solo acota, no garantiza nada.
         ),
         throwsA(isA<TicketLinkNotReady>()),
@@ -144,15 +166,19 @@ void main() {
       expect(link.ticketId, 't1');
     });
 
-    test('la espera es por EVENTO: se resuelve al escribirse la señal',
-        () async {
-      final pending = repoFor('owner').awaitProjectionReady('s1', 't9');
-      // Nadie duerme: la escritura es la que desbloquea.
-      await firestore.doc('sessions/s1/ticketParticipantProjections/t9').set(
-        {'ticketId': 't9', 'ready': true, 'schemaVersion': 1},
-      );
-      expect(await pending, isTrue);
-    });
+    test(
+      'la espera es por EVENTO: se resuelve al escribirse la señal',
+      () async {
+        final pending = repoFor('owner').awaitProjectionReady('s1', 't9');
+        // Nadie duerme: la escritura es la que desbloquea.
+        await firestore.doc('sessions/s1/ticketParticipantProjections/t9').set({
+          'ticketId': 't9',
+          'ready': true,
+          'schemaVersion': 1,
+        });
+        expect(await pending, isTrue);
+      },
+    );
   });
 
   group('identificación temporal', () {
@@ -197,8 +223,8 @@ void main() {
       expect(access['token'], link.token);
       expect(access['ticketId'], 't1');
 
-      final claim = (await firestore.doc('sessions/s1/ticketClaims/t1_m1').get())
-          .data()!;
+      final claim =
+          (await firestore.doc('sessions/s1/ticketClaims/t1_m1').get()).data()!;
       expect(claim['uid'], 'ana');
     });
 
@@ -224,29 +250,29 @@ void main() {
       expect(await ana.identifyAsManual(link, marta), TicketLinkOutcome.opened);
     });
 
-    test('soltar la identificación borra prueba y cerrojo, y NADA más',
-        () async {
-      final link = await seedLink();
-      final ana = repoFor('ana');
-      await ana.identifyAsManual(link, marta);
-      await ana.release(link, (await ana.myAccess('s1', 't1'))!);
+    test(
+      'soltar la identificación borra prueba y cerrojo, y NADA más',
+      () async {
+        final link = await seedLink();
+        final ana = repoFor('ana');
+        await ana.identifyAsManual(link, marta);
+        await ana.release(link, (await ana.myAccess('s1', 't1'))!);
 
-      expect(
-        (await firestore.doc('sessions/s1/ticketAccess/t1_ana').get()).exists,
-        isFalse,
-      );
-      expect(
-        (await firestore.doc('sessions/s1/ticketClaims/t1_m1').get()).exists,
-        isFalse,
-      );
-      // El participante MANUAL sigue exactamente igual.
-      final p5 = (await firestore.doc('sessions/s1/participants/p5').get())
-          .data()!;
-      expect(p5['manualId'], 'm1');
-      expect(p5['claimedByDevice'], '');
-    });
-
-
+        expect(
+          (await firestore.doc('sessions/s1/ticketAccess/t1_ana').get()).exists,
+          isFalse,
+        );
+        expect(
+          (await firestore.doc('sessions/s1/ticketClaims/t1_m1').get()).exists,
+          isFalse,
+        );
+        // El participante MANUAL sigue exactamente igual.
+        final p5 = (await firestore.doc('sessions/s1/participants/p5').get())
+            .data()!;
+        expect(p5['manualId'], 'm1');
+        expect(p5['claimedByDevice'], '');
+      },
+    );
   });
 
   group('el modelo económico NO se toca (P5 intacto)', () {
@@ -266,16 +292,24 @@ void main() {
       expect(p5['manualId'], 'm1');
     });
 
-    test('el flujo no escribe en economicEntries ni economicPayments',
-        () async {
-      final link = await seedLink();
-      await repoFor('ana').identifyAsManual(link, marta);
+    test(
+      'el flujo no escribe en economicEntries ni economicPayments',
+      () async {
+        final link = await seedLink();
+        await repoFor('ana').identifyAsManual(link, marta);
 
-      expect((await firestore.collection('economicEntries').get()).docs, isEmpty);
-      expect((await firestore.collection('economicPayments').get()).docs, isEmpty);
-      // Ni en los agregados de la sesión.
-      final session = (await firestore.doc('sessions/s1').get()).data();
-      expect(session?['balances'], isNull);
-    });
+        expect(
+          (await firestore.collection('economicEntries').get()).docs,
+          isEmpty,
+        );
+        expect(
+          (await firestore.collection('economicPayments').get()).docs,
+          isEmpty,
+        );
+        // Ni en los agregados de la sesión.
+        final session = (await firestore.doc('sessions/s1').get()).data();
+        expect(session?['balances'], isNull);
+      },
+    );
   });
 }

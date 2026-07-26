@@ -2,6 +2,7 @@ import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 
 /// Entrada contextual al chat desde una Relación o Grupo.
@@ -18,7 +19,8 @@ class SpaceChatSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Card(
+    return SaldaCard(
+      padding: EdgeInsets.zero,
       child: ListTile(
         minVerticalPadding: TokenSpacing.md,
         leading: const Icon(Icons.forum_outlined),

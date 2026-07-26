@@ -47,8 +47,14 @@ class AppUser {
       other.providerIds.containsAll(providerIds);
 
   @override
-  int get hashCode =>
-      Object.hash(uid, email, displayName, photoUrl, isAnonymous, emailVerified);
+  int get hashCode => Object.hash(
+    uid,
+    email,
+    displayName,
+    photoUrl,
+    isAnonymous,
+    emailVerified,
+  );
 }
 
 enum AuthFailureCode {

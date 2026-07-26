@@ -36,7 +36,11 @@ enum SpaceTitleSource {
 }
 
 class SpaceTitleResolution {
-  const SpaceTitleResolution._(this.source, {this.person = '', this.diagnostic});
+  const SpaceTitleResolution._(
+    this.source, {
+    this.person = '',
+    this.diagnostic,
+  });
 
   const SpaceTitleResolution.person(String name)
     : this._(SpaceTitleSource.person, person: name);

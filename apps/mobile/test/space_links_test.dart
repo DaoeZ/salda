@@ -151,8 +151,7 @@ void main() {
       );
     });
 
-    test('el enlace caducado desaparece de la vista del propietario',
-        () async {
+    test('el enlace caducado desaparece de la vista del propietario', () async {
       final spaceId = await newGroup();
       final owner = accountRepo('owner');
       final link = await owner.createJoinLink(spaceId, 'Cena viernes');
@@ -168,19 +167,33 @@ void main() {
     test('usableAt distingue caducado de revocado', () {
       final now = DateTime.utc(2026, 7, 25, 12);
       final vigente = SpaceJoinLink(
-        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
-        revoked: false, expiresAt: now.add(const Duration(hours: 1)),
+        token: 't',
+        spaceId: 's',
+        spaceName: 'G',
+        createdByUid: 'o',
+        revoked: false,
+        expiresAt: now.add(const Duration(hours: 1)),
       );
       final caducado = SpaceJoinLink(
-        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
-        revoked: false, expiresAt: now.subtract(const Duration(hours: 1)),
+        token: 't',
+        spaceId: 's',
+        spaceName: 'G',
+        createdByUid: 'o',
+        revoked: false,
+        expiresAt: now.subtract(const Duration(hours: 1)),
       );
       final revocado = SpaceJoinLink(
-        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
+        token: 't',
+        spaceId: 's',
+        spaceName: 'G',
+        createdByUid: 'o',
         revoked: true,
       );
       final eterno = SpaceJoinLink(
-        token: 't', spaceId: 's', spaceName: 'G', createdByUid: 'o',
+        token: 't',
+        spaceId: 's',
+        spaceName: 'G',
+        createdByUid: 'o',
         revoked: false,
       );
 
@@ -203,19 +216,15 @@ void main() {
       final outcome = await accountRepo('ana').joinWithLink(link.token);
       expect(outcome, JoinLinkOutcome.joined);
 
-      final member = (await firestore
-              .doc('spaces/$spaceId/members/ana')
-              .get())
+      final member = (await firestore.doc('spaces/$spaceId/members/ana').get())
           .data()!;
       expect(member['uid'], 'ana');
       // Una cuenta NO congela nombre: se lee en vivo de su perfil público.
       expect(member.containsKey('displayName'), isFalse);
       expect(member.containsKey('kind'), isFalse);
 
-      final grant = (await firestore
-              .doc('spaces/$spaceId/joinGrants/ana')
-              .get())
-          .data()!;
+      final grant =
+          (await firestore.doc('spaces/$spaceId/joinGrants/ana').get()).data()!;
       expect(grant['token'], link.token);
       expect(grant['uid'], 'ana');
     });
@@ -232,10 +241,9 @@ void main() {
       ).joinWithLink(link.token);
       expect(outcome, JoinLinkOutcome.joined);
 
-      final member = (await firestore
-              .doc('spaces/$spaceId/members/guest-1')
-              .get())
-          .data()!;
+      final member =
+          (await firestore.doc('spaces/$spaceId/members/guest-1').get())
+              .data()!;
       expect(member['kind'], 'guest');
       expect(member['displayName'], 'Alba');
     });

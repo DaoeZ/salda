@@ -271,10 +271,11 @@ void main() {
       expect(manual.actor, 'manual:${manual.id}');
       expect(manual.linkedUid, isNull); // vinculación: fase futura
 
-      final raw = (await firestore
-              .doc('spaces/$id/manualParticipants/${manual.id}')
-              .get())
-          .data()!;
+      final raw =
+          (await firestore
+                  .doc('spaces/$id/manualParticipants/${manual.id}')
+                  .get())
+              .data()!;
       expect(raw['manualId'], manual.id);
       expect(raw['linkedUid'], isNull);
       expect(raw['schemaVersion'], 1);
@@ -406,8 +407,9 @@ void main() {
 
     test('crear en AMBOS sentidos produce el MISMO id canonico', () async {
       await seedProfiles();
-      final ida = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      final ida = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
       expect(ida.outcome, RelationshipOutcome.created);
 
       // La otra persona intenta crearla: mismo espacio canonico.
@@ -423,11 +425,13 @@ void main() {
 
       // uid-a intenta crearla: antes -> alreadyMember -> error generico.
       expect(
-        () => repoFor('uid-a')
-            .createRelationship(toUid: 'uid-b', name: 'A y B'),
+        () =>
+            repoFor('uid-a').createRelationship(toUid: 'uid-b', name: 'A y B'),
         throwsA(
           isA<SpaceFailure>().having(
-            (f) => f.code, 'code', SpaceFailureCode.invitedByOther,
+            (f) => f.code,
+            'code',
+            SpaceFailureCode.invitedByOther,
           ),
         ),
       );
@@ -435,46 +439,50 @@ void main() {
 
     test('tras un RECHAZO se puede volver a invitar', () async {
       await seedProfiles();
-      final creada = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      final creada = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
       await repoFor('uid-b').rejectInvite('${creada.id}_uid-b');
 
       // Antes esto era imposible para siempre con esa persona.
-      final reintento = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      final reintento = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
       expect(reintento.outcome, RelationshipOutcome.reinvited);
       expect(reintento.id, creada.id);
-      final invite = (await firestore
-              .doc('spaceInvites/${creada.id}_uid-b')
-              .get())
-          .data()!;
+      final invite =
+          (await firestore.doc('spaceInvites/${creada.id}_uid-b').get())
+              .data()!;
       expect(invite['status'], 'pending');
     });
 
     test('repetir la creacion no duplica nada (idempotente)', () async {
       await seedProfiles();
-      final primera = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
-      final segunda = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      final primera = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+      final segunda = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
 
       expect(segunda.id, primera.id);
       expect(segunda.outcome, RelationshipOutcome.alreadyInvited);
-      final invites =
-          await firestore.collection('spaceInvites').get();
+      final invites = await firestore.collection('spaceInvites').get();
       expect(invites.docs, hasLength(1));
     });
 
     test('con la relacion ya ACTIVA lo dice y no reescribe', () async {
       await seedProfiles();
-      final creada = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      final creada = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
       // uid-b acepta.
       final invite = (await repoFor('uid-b').watchMyInvites().first).single;
       await repoFor('uid-b').acceptInvite(invite);
 
-      final otra = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      final otra = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
       expect(otra.outcome, RelationshipOutcome.alreadyActive);
       expect(otra.id, creada.id);
     });
@@ -482,8 +490,9 @@ void main() {
     test('el owner NO depende del orden lexicografico', () async {
       await seedProfiles();
       // 'uid-b' > 'uid-a': el creador es el mayor.
-      final creada = await repoFor('uid-b')
-          .createRelationship(toUid: 'uid-a', name: 'B y A');
+      final creada = await repoFor(
+        'uid-b',
+      ).createRelationship(toUid: 'uid-a', name: 'B y A');
       final space = (await firestore.doc('spaces/${creada.id}').get()).data()!;
       expect(space['ownerUid'], 'uid-b');
       expect(space['relationshipUids'], ['uid-a', 'uid-b']);
@@ -491,11 +500,12 @@ void main() {
 
     test('crear una relacion consigo mismo se rechaza', () async {
       expect(
-        () => repoFor('uid-a')
-            .createRelationship(toUid: 'uid-a', name: 'Yo'),
+        () => repoFor('uid-a').createRelationship(toUid: 'uid-a', name: 'Yo'),
         throwsA(
           isA<SpaceFailure>().having(
-            (f) => f.code, 'code', SpaceFailureCode.notAllowed,
+            (f) => f.code,
+            'code',
+            SpaceFailureCode.notAllowed,
           ),
         ),
       );
@@ -504,9 +514,9 @@ void main() {
 
   group('BUG-2: relacion ACCOUNT + MANUAL (el caso de Pablo)', () {
     test('crea una relacion de DOS identidades sin cuenta ajena', () async {
-      final rel = await repoFor('uid-a').createRelationshipWithManual(
-        name: 'Pablo', manualName: 'Pablo',
-      );
+      final rel = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
       expect(rel.outcome, RelationshipOutcome.created);
 
       final space = (await firestore.doc('spaces/${rel.id}').get()).data()!;
@@ -519,20 +529,23 @@ void main() {
       // El id ya NO deriva de dos UID: por eso el caso es posible.
       expect(rel.id, isNot(contains('~')));
 
-      final manual = (await firestore
-              .doc('spaces/${rel.id}/manualParticipants/'
-                  '${space['relationshipManualId']}')
-              .get())
-          .data()!;
+      final manual =
+          (await firestore
+                  .doc(
+                    'spaces/${rel.id}/manualParticipants/'
+                    '${space['relationshipManualId']}',
+                  )
+                  .get())
+              .data()!;
       expect(manual['displayName'], 'Pablo');
       // Preparado para la vinculacion del Sprint 6.
       expect(manual['linkedUid'], isNull);
     });
 
     test('aparece en Inicio como relacion, con su nombre', () async {
-      final rel = await repoFor('uid-a').createRelationshipWithManual(
-        name: 'Pablo', manualName: 'Pablo',
-      );
+      final rel = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
       final mias = await repoFor('uid-a').watchMySpaces().first;
       final relacion = mias.singleWhere((s) => s.id == rel.id);
       expect(relacion.isRelationship, isTrue);
@@ -541,11 +554,12 @@ void main() {
     });
 
     test('el actor economico del manual es manual:{id}', () async {
-      final rel = await repoFor('uid-a').createRelationshipWithManual(
-        name: 'Pablo', manualName: 'Pablo',
-      );
-      final manuales =
-          await repoFor('uid-a').watchManualParticipants(rel.id).first;
+      final rel = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
+      final manuales = await repoFor(
+        'uid-a',
+      ).watchManualParticipants(rel.id).first;
       expect(manuales, hasLength(1));
       // Es la clave con la que se escribiran sus obligaciones.
       expect(manuales.single.actor, 'manual:${manuales.single.id}');
@@ -554,33 +568,36 @@ void main() {
     test('un nombre vacio o demasiado largo se rechaza', () async {
       for (final malo in ['', '   ', 'x' * 41]) {
         expect(
-          () => repoFor('uid-a').createRelationshipWithManual(
-            name: 'R', manualName: malo,
-          ),
+          () => repoFor(
+            'uid-a',
+          ).createRelationshipWithManual(name: 'R', manualName: malo),
           throwsA(isA<SpaceFailure>()),
         );
       }
     });
 
-    test('ACCOUNT + ACCOUNT sigue usando el id canonico, sin duplicados',
-        () async {
-      await firestore.doc('profiles/uid-b').set({'displayName': 'B'});
-      final rel = await repoFor('uid-a')
-          .createRelationship(toUid: 'uid-b', name: 'A y B');
-      // El esquema anterior no cambia: id canonico y dos UID.
-      expect(rel.id, relationshipSpaceId('uid-a', 'uid-b'));
-      final space = (await firestore.doc('spaces/${rel.id}').get()).data()!;
-      expect(space['schemaVersion'], 2);
-      expect(space.containsKey('relationshipManualId'), isFalse);
-    });
+    test(
+      'ACCOUNT + ACCOUNT sigue usando el id canonico, sin duplicados',
+      () async {
+        await firestore.doc('profiles/uid-b').set({'displayName': 'B'});
+        final rel = await repoFor(
+          'uid-a',
+        ).createRelationship(toUid: 'uid-b', name: 'A y B');
+        // El esquema anterior no cambia: id canonico y dos UID.
+        expect(rel.id, relationshipSpaceId('uid-a', 'uid-b'));
+        final space = (await firestore.doc('spaces/${rel.id}').get()).data()!;
+        expect(space['schemaVersion'], 2);
+        expect(space.containsKey('relationshipManualId'), isFalse);
+      },
+    );
 
     test('varias relaciones MANUAL conviven: no comparten id', () async {
-      final pablo = await repoFor('uid-a').createRelationshipWithManual(
-        name: 'Pablo', manualName: 'Pablo',
-      );
-      final marta = await repoFor('uid-a').createRelationshipWithManual(
-        name: 'Marta', manualName: 'Marta',
-      );
+      final pablo = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
+      final marta = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Marta', manualName: 'Marta');
       // Con el id canonico esto era imposible: no hay UID que las distinga.
       expect(pablo.id, isNot(marta.id));
     });

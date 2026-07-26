@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fondo del arranque en oscuro: carbon con matiz verde, nunca negro puro.
+     Fuente: packages/design_tokens/assets/design_tokens.json -->
+<resources>
+    <color name="saldaBackground">#101413</color>
+</resources>

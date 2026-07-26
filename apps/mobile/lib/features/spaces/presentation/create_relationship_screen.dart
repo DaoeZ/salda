@@ -117,7 +117,9 @@ class _CreateRelationshipScreenState
         RelationshipOutcome.alreadyActive => l10n.relationshipAlreadyActive,
       };
       if (aviso != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(aviso)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(aviso)));
       }
       context.go('/home/spaces/${result.id}');
     } on SpaceFailure catch (failure) {
@@ -131,9 +133,9 @@ class _CreateRelationshipScreenState
         SpaceFailureCode.notAllowed => l10n.relationshipNotAllowed,
         _ => l10n.spaceActionError,
       };
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensaje)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
     } on Object catch (error) {
       if (!mounted) return;
       // Diagnóstico útil sin datos sensibles: código y operación, nunca
@@ -192,9 +194,9 @@ class _CreateRelationshipScreenState
       if (mounted) context.go('/home/spaces/${result.id}');
     } on Object {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.spaceActionError)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
       }
     } finally {
       if (mounted) setState(() => creatingUid = null);
@@ -225,9 +227,7 @@ class _CreateRelationshipScreenState
           // real cuando la otra persona no tiene cuenta, en vez de ser solo
           // una caja de búsqueda sin salida.
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: TokenSpacing.lg,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.lg),
             child: Card(
               child: ListTile(
                 leading: const Icon(Icons.person_add_alt),

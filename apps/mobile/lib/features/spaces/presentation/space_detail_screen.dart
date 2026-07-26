@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/utils/money_format.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/badges.dart';
+import '../../../core/ui/money_text.dart';
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../activity/presentation/space_activity_section.dart';
 import '../../chat/presentation/space_chat_section.dart';
@@ -18,7 +22,6 @@ import '../data/manual_link_repository.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_identities.dart';
 import '../domain/space_models.dart';
-import 'space_avatar.dart';
 import 'space_title_text.dart';
 
 /// Detalle de un espacio (P4): miembros, invitaciones, tickets vinculados y
@@ -53,6 +56,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final c = context.salda;
     final spaceAsync = ref.watch(spaceProvider(widget.spaceId));
     final space = spaceAsync.value;
     final members =
@@ -81,10 +85,11 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
     // Lo que hace a un contexto operativo son las IDENTIDADES ECONÓMICAS, no
     // las cuentas (BUG-6): un MANUAL pesa igual que quien tiene app, y un
     // manual ya vinculado no cuenta dos veces junto a su cuenta.
-    final contextReady = contextReadyForExpenses(
-      space.kind,
-      spaceEconomicIdentities(members: members, manuals: manuals).length,
-    );
+    final peopleCount = spaceEconomicIdentities(
+      members: members,
+      manuals: manuals,
+    ).length;
+    final contextReady = contextReadyForExpenses(space.kind, peopleCount);
     // Mientras faltan datos no se afirma que falte gente: con las listas
     // todavía vacías el resultado sería "no operativo" y la pantalla
     // parpadearía entre un aviso falso y el estado real.
@@ -147,13 +152,19 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
+      body: ScreenBody(
         children: [
+          // Cabecera: quien es esto, cuanta gente hay y en que estado.
           Row(
             children: [
-              SpaceAvatar(space: space, radius: 28),
-              const SizedBox(width: TokenSpacing.md),
+              SaldaAvatar(
+                seed: space.id,
+                label: space.name,
+                emoji: space.avatarEmoji,
+                square: !space.isRelationship,
+                radius: 24,
+              ),
+              const SizedBox(width: TokenSpacing.lg),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,115 +172,136 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
                     SpaceTitleText(
                       spaceId: space.id,
                       storedName: space.name,
-                      style: theme.textTheme.titleLarge,
+                      style: theme.textTheme.headlineMedium,
                     ),
-                    Text(
-                      l10n.spaceMembersCount(members.length),
-                      style: theme.textTheme.bodySmall,
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Text(
+                          space.isRelationship
+                              ? l10n.spaceKindRelationship
+                              : l10n.spaceKindGroup,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: c.textMuted,
+                          ),
+                        ),
+                        Text(
+                          '  \u00b7  ',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: c.textMuted,
+                          ),
+                        ),
+                        // PERSONAS, no miembros: decir «1 miembro» en un
+                        // grupo con un manual contradecia que estuviera
+                        // operativo (BUG-6).
+                        if (countingPeople)
+                          const Skeleton.line(width: 58, height: 11)
+                        else
+                          Text(
+                            l10n.peopleCount(peopleCount),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: c.textMuted,
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
               if (!space.isActive)
-                Chip(
-                  label: Text(l10n.statusArchived),
-                  avatar: const Icon(Icons.archive_outlined, size: 16),
-                ),
+                StatusBadge(l10n.statusArchived, icon: Icons.archive_outlined),
             ],
           ),
-          const SizedBox(height: TokenSpacing.xl),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.spaceMembersTitle,
-                  style: theme.textTheme.titleMedium,
-                ),
-              ),
-              if (amOwner && space.isActive)
-                TextButton.icon(
-                  onPressed: () => _showInviteSheet(space),
-                  icon: const Icon(Icons.person_add_outlined, size: 18),
-                  label: Text(l10n.spaceInviteAction),
-                ),
-            ],
-          ),
-          Card(
-            child: Column(
-              children: [
-                for (final member in members)
-                  _MemberTile(
-                    spaceId: space.id,
-                    spaceActive: space.isActive,
-                    member: member,
-                    isOwnerMember: member.uid == space.ownerUid,
-                    amOwner: amOwner,
-                    isMe: member.uid == myUid,
-                    onTransfer: () => _guarded(
-                      () => repo.transferOwnership(space.id, member.uid),
-                    ),
-                    onRemove: () =>
-                        _guarded(() => repo.removeMember(space.id, member.uid)),
-                  ),
-              ],
+          if (!contextReady && !countingPeople) ...[
+            const SectionGap(height: TokenSpacing.lg),
+            EmptyState(
+              icon: Icons.person_add_alt,
+              title: space.isRelationship
+                  ? l10n.relationshipNeedsAcceptance
+                  : l10n.groupNeedsMembers,
+              body: space.isRelationship
+                  ? l10n.relationshipNeedsAcceptanceBody
+                  : l10n.groupNeedsMembersBody,
             ),
+          ],
+          const SectionGap(),
+          SpaceEconomicSummary(spaceId: space.id),
+          const SectionGap(),
+          SectionHeader(title: l10n.spaceTicketsTitle),
+          _SpaceTickets(spaceId: space.id),
+          const SectionGap(),
+
+          // Personas
+          SectionHeader(
+            title: l10n.spaceMembersTitle,
+            action: amOwner && space.isActive ? l10n.spaceInviteAction : null,
+            onAction: amOwner && space.isActive
+                ? () => _showInviteSheet(space)
+                : null,
+          ),
+          SaldaCardList(
+            children: [
+              for (final member in members)
+                _MemberTile(
+                  spaceId: space.id,
+                  spaceActive: space.isActive,
+                  member: member,
+                  isOwnerMember: member.uid == space.ownerUid,
+                  amOwner: amOwner,
+                  isMe: member.uid == myUid,
+                  onTransfer: () => _guarded(
+                    () => repo.transferOwnership(space.id, member.uid),
+                  ),
+                  onRemove: () =>
+                      _guarded(() => repo.removeMember(space.id, member.uid)),
+                ),
+            ],
           ),
           if (amOwner) _PendingManualLinks(spaceId: space.id),
           if (amOwner) _PendingInvites(spaceId: space.id),
           _ManualParticipants(
             spaceId: space.id,
-            // BUG-4: añadir personas a mano es de GRUPOS. Una relación tiene
-            // exactamente dos identidades y ya están decididas: en v2 la
-            // segunda plaza la reserva la invitación, y en v3 la ocupa su
-            // manual. Ofrecerlo aquí invitaba a crear un estado incoherente
-            // que Rules rechaza — un botón que solo podía terminar en error.
+            // BUG-4: anadir personas a mano es de GRUPOS. Una relacion tiene
+            // exactamente dos identidades y ya estan decididas: en v2 la
+            // segunda plaza la reserva la invitacion, y en v3 la ocupa su
+            // manual. Ofrecerlo aqui invitaba a crear un estado incoherente
+            // que Rules rechaza - un boton que solo podia terminar en error.
             canAdd: amOwner && space.isActive && !space.isRelationship,
-            // El manual de la segunda plaza de una relación NO es un
-            // participante retirable: quitarlo dejaría una sola identidad.
+            // El manual de la segunda plaza de una relacion NO es un
+            // participante retirable: quitarlo dejaria una sola identidad.
             canRemove: amOwner && space.isActive && !space.isRelationship,
             canRename: amOwner && space.isActive,
           ),
-          if (amOwner)
-            Card(
+          if (amOwner) ...[
+            const SectionGap(height: TokenSpacing.lg),
+            SaldaCard(
+              padding: const EdgeInsets.symmetric(
+                horizontal: TokenSpacing.lg,
+                vertical: TokenSpacing.xs,
+              ),
               child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 value: space.guestsCanCreateExpenses,
                 onChanged: space.isActive
                     ? (allowed) => _guarded(
-                        () => repo.setGuestsCanCreateExpenses(
-                          space.id,
-                          allowed,
-                        ),
+                        () =>
+                            repo.setGuestsCanCreateExpenses(space.id, allowed),
                       )
                     : null,
-                title: Text(l10n.guestPolicyTitle),
+                title: Text(
+                  l10n.guestPolicyTitle,
+                  style: theme.textTheme.titleSmall,
+                ),
                 subtitle: Text(
                   l10n.guestPolicyBody,
                   style: theme.textTheme.bodySmall,
                 ),
               ),
             ),
-          if (!contextReady && !countingPeople) ...[
-            const SizedBox(height: TokenSpacing.md),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(TokenSpacing.lg),
-                child: Text(
-                  space.isRelationship
-                      ? l10n.relationshipNeedsAcceptance
-                      : l10n.groupNeedsMembers,
-                ),
-              ),
-            ),
           ],
-          const SizedBox(height: TokenSpacing.xl),
-          SpaceEconomicSummary(spaceId: space.id),
-          const SizedBox(height: TokenSpacing.xl),
-          Text(l10n.spaceTicketsTitle, style: theme.textTheme.titleMedium),
-          const SizedBox(height: TokenSpacing.sm),
-          _SpaceTickets(spaceId: space.id),
-          const SizedBox(height: TokenSpacing.xl),
+          const SectionGap(),
           SpaceChatSection(spaceId: space.id, isActive: space.isActive),
-          const SizedBox(height: TokenSpacing.xl),
+          const SectionGap(),
           SpaceActivitySection(spaceId: space.id),
           const SizedBox(height: 88),
         ],
@@ -424,11 +456,7 @@ class _MemberTile extends ConsumerWidget {
       leading: name == null
           ? const CircleAvatar(radius: 16, child: Icon(Icons.person, size: 16))
           : ProfileAvatar(seed: member.uid, displayName: name, radius: 16),
-      title: Text(
-        name ?? '…',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(name ?? '…', maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         isOwnerMember
             ? l10n.spaceOwnerBadge
@@ -565,7 +593,8 @@ class _ManualParticipants extends ConsumerWidget {
                     dense: true,
                     leading: CircleAvatar(
                       radius: 16,
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
                       child: Text(
                         avatarInitials(manual.displayName),
                         style: theme.textTheme.labelMedium,
@@ -871,53 +900,36 @@ class _SpaceTickets extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     final tickets = ref.watch(spaceTicketsProvider(spaceId));
     return tickets.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.all(TokenSpacing.lg),
-        child: Center(child: CircularProgressIndicator()),
-      ),
-      error: (error, _) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(TokenSpacing.lg),
-          child: Text(l10n.spacesLoadError, style: theme.textTheme.bodySmall),
-        ),
-      ),
+      loading: () => const SkeletonList(rows: 2, leading: false),
+      error: (error, _) => ErrorStateView(message: l10n.spacesLoadError),
       data: (list) => list.isEmpty
-          ? Card(
-              child: Padding(
-                padding: const EdgeInsets.all(TokenSpacing.lg),
-                child: Text(
-                  l10n.spaceTicketsEmpty,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
+          ? EmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: l10n.emptyTicketsTitle,
+              body: l10n.emptyTicketsBody,
             )
-          : Card(
-              child: Column(
-                children: [
-                  for (final ticket in list)
-                    ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.receipt_long_outlined),
-                      title: Text(
-                        ticket.merchantName.isEmpty
-                            ? l10n.spaceTicketUntitled
-                            : ticket.merchantName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: ticket.date == null ? null : Text(ticket.date!),
-                      trailing: Text(
-                        formatMoney(Money(ticket.grandTotalCents)),
-                        style: const TextStyle(
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
+          : SaldaCardList(
+              children: [
+                for (final ticket in list)
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.receipt_long_outlined),
+                    title: Text(
+                      ticket.merchantName.isEmpty
+                          ? l10n.spaceTicketUntitled
+                          : ticket.merchantName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                ],
-              ),
+                    subtitle: ticket.date == null ? null : Text(ticket.date!),
+                    trailing: MoneyText(
+                      Money(ticket.grandTotalCents),
+                      size: MoneySize.small,
+                    ),
+                  ),
+              ],
             ),
     );
   }
@@ -949,10 +961,12 @@ class _PendingManualLinks extends ConsumerWidget {
     final manuals =
         ref.watch(spaceManualParticipantsProvider(spaceId)).value ??
         const <ManualParticipant>[];
-    String manualName(String manualId) => manuals
-        .where((m) => m.id == manualId)
-        .map((m) => m.displayName)
-        .firstOrNull ?? manualId;
+    String manualName(String manualId) =>
+        manuals
+            .where((m) => m.id == manualId)
+            .map((m) => m.displayName)
+            .firstOrNull ??
+        manualId;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -116,4 +116,10 @@ class TicketAccess {
 /// Por qué no se puede abrir un enlace de ticket. Revocado, caducado e
 /// inexistente colapsan en [invalid] a propósito: distinguirlos convertiría
 /// la pantalla en un oráculo de qué tickets existen.
-enum TicketLinkOutcome { opened, needsIdentity, needsManualChoice, invalid, manualTaken }
+enum TicketLinkOutcome {
+  opened,
+  needsIdentity,
+  needsManualChoice,
+  invalid,
+  manualTaken,
+}

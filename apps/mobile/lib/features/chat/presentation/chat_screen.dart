@@ -2,9 +2,10 @@ import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/badges.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
-import '../../profile/presentation/profile_avatar.dart';
 import '../../spaces/data/spaces_repository.dart';
 import '../../spaces/presentation/space_title_text.dart';
 import '../data/chat_repository.dart';
@@ -249,8 +250,15 @@ class _ChatComposer extends StatelessWidget {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(TokenSpacing.lg),
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          child: Text(l10n.chatReadOnly, textAlign: TextAlign.center),
+          decoration: BoxDecoration(
+            color: context.salda.surfaceMuted,
+            border: Border(top: BorderSide(color: context.salda.border)),
+          ),
+          child: Text(
+            l10n.chatReadOnly,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
       );
     }
@@ -258,7 +266,8 @@ class _ChatComposer extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Material(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        color: Theme.of(context).scaffoldBackgroundColor,
+        shape: Border(top: BorderSide(color: context.salda.border)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             TokenSpacing.md,
@@ -287,12 +296,21 @@ class _ChatComposer extends StatelessWidget {
               IconButton.filled(
                 onPressed: canSend ? onSend : null,
                 tooltip: l10n.chatSend,
+                style: IconButton.styleFrom(
+                  backgroundColor: canSend
+                      ? context.salda.primary
+                      : context.salda.surfaceMuted,
+                  foregroundColor: canSend
+                      ? context.salda.onPrimary
+                      : context.salda.textMuted,
+                  minimumSize: const Size(44, 44),
+                ),
                 icon: sending
                     ? const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.send_rounded),
+                    : const Icon(Icons.arrow_upward_rounded, size: 20),
               ),
             ],
           ),
@@ -320,6 +338,7 @@ class ChatMessageBubble extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final c = context.salda;
     final profile = ref.watch(publicProfileProvider(message.authorUid)).value;
     final authorName = isOwn
         ? l10n.chatYou
@@ -339,11 +358,7 @@ class ChatMessageBubble extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isOwn) ...[
-            ProfileAvatar(
-              seed: message.authorUid,
-              displayName: authorName,
-              radius: 14,
-            ),
+            SaldaAvatar(seed: message.authorUid, label: authorName, radius: 14),
             const SizedBox(width: TokenSpacing.sm),
           ],
           Flexible(
@@ -351,10 +366,18 @@ class ChatMessageBubble extends ConsumerWidget {
               constraints: const BoxConstraints(maxWidth: 480),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: isOwn
-                      ? theme.colorScheme.primaryContainer
-                      : theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(TokenRadius.card),
+                  color: isOwn ? c.primaryMuted : c.surface,
+                  border: Border.all(
+                    color: isOwn ? Colors.transparent : c.border,
+                  ),
+                  // La esquina recta marca el lado del autor: el color no es
+                  // lo unico que distingue tus mensajes de los ajenos.
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(TokenRadius.card),
+                    topRight: const Radius.circular(TokenRadius.card),
+                    bottomLeft: Radius.circular(isOwn ? TokenRadius.card : 4),
+                    bottomRight: Radius.circular(isOwn ? 4 : TokenRadius.card),
+                  ),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -392,12 +415,12 @@ class ChatMessageBubble extends ConsumerWidget {
                             ),
                         ],
                       ),
-                      Text(message.text),
-                      const SizedBox(height: TokenSpacing.xs),
+                      Text(message.text, style: theme.textTheme.bodyMedium),
+                      const SizedBox(height: 2),
                       Text(
                         time,
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          color: c.textMuted,
                         ),
                       ),
                     ],

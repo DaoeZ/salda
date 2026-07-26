@@ -1463,6 +1463,134 @@ class AppLocalizationsEs extends AppLocalizations {
   String get commonRetry => 'Reintentar';
 
   @override
+  String get balanceHeroTitle => 'Tu saldo';
+
+  @override
+  String get balanceSettled => 'Estás en paz';
+
+  @override
+  String get balanceSettledBody => 'Nadie te debe y no debes nada.';
+
+  @override
+  String get balanceTheyOweYou => 'Te deben';
+
+  @override
+  String get balanceYouOwe => 'Debes';
+
+  @override
+  String get balanceNetPositive => 'A tu favor';
+
+  @override
+  String get balanceNetNegative => 'En tu contra';
+
+  @override
+  String get homeQuickScan => 'Escanear ticket';
+
+  @override
+  String get homeQuickMore => 'Más';
+
+  @override
+  String get homeSpacesTitle => 'Tus contextos';
+
+  @override
+  String get homeNoSpacesTitle => 'Todavía no compartes gastos con nadie';
+
+  @override
+  String get homeNoSpacesBody =>
+      'Crea una relación para las cuentas de dos, o un grupo para un piso, un viaje o una cena.';
+
+  @override
+  String get homeActivityRecent => 'Reciente';
+
+  @override
+  String get homeMenuTitle => 'Menú';
+
+  @override
+  String get contextPendingShort => 'Pendiente';
+
+  @override
+  String get ticketPhotoTitle => 'Foto del ticket';
+
+  @override
+  String get ticketFallbackName => 'Gasto';
+
+  @override
+  String get ticketNoLinesBody =>
+      'Este gasto se reparte por su importe total, sin detalle de productos.';
+
+  @override
+  String get reviewTicketData => 'Datos del ticket';
+
+  @override
+  String get reviewTotalsTitle => 'Desglose';
+
+  @override
+  String get reviewNoLinesTitle => 'El ticket no tiene lineas';
+
+  @override
+  String get reviewNoLinesBody =>
+      'Anade al menos un producto para poder repartir el gasto entre varias personas.';
+
+  @override
+  String get relationshipNeedsAcceptanceBody =>
+      'En cuanto acepte podreis registrar gastos y ver el saldo entre los dos.';
+
+  @override
+  String get groupNeedsMembersBody =>
+      'Invita a alguien con cuenta, comparte el enlace del grupo o anade a una persona sin cuenta.';
+
+  @override
+  String get activityLoadingSubject => '…';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personas',
+      one: '1 persona',
+      zero: 'Sin personas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get spaceKindRelationship => 'Relación';
+
+  @override
+  String get spaceKindGroup => 'Grupo';
+
+  @override
+  String get personKindManual => 'Sin cuenta';
+
+  @override
+  String get personKindGuest => 'Invitado';
+
+  @override
+  String get personKindOwner => 'Propietario';
+
+  @override
+  String get emptyTicketsTitle => 'Sin gastos todavía';
+
+  @override
+  String get emptyTicketsBody =>
+      'Escanea un ticket o apunta un gasto a mano y aparecerá aquí.';
+
+  @override
+  String get emptyActivityTitle => 'Sin movimientos';
+
+  @override
+  String get emptyActivityBody =>
+      'Aquí se irá anotando lo que ocurra en tus contextos.';
+
+  @override
+  String get emptyChatTitle => 'Sin mensajes';
+
+  @override
+  String get emptyChatBody =>
+      'Escribe el primero: la conversación es privada de este contexto.';
+
+  @override
   String get historyTitle => 'Histórico sin organizar';
 
   @override

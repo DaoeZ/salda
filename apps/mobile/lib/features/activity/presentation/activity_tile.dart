@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/badges.dart';
+import '../../../core/ui/money_text.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../spaces/presentation/space_title_text.dart';
-import '../../profile/presentation/profile_avatar.dart';
 import '../domain/activity_models.dart';
 
 /// Texto de la acción por tipo. El objeto va en el propio texto (rótulo
@@ -24,8 +25,9 @@ String activityText(
   String? spaceName,
 }) {
   final space = spaceName ?? event.spaceName;
-  final ticket =
-      event.ticketName.isEmpty ? event.sessionName : event.ticketName;
+  final ticket = event.ticketName.isEmpty
+      ? event.sessionName
+      : event.ticketName;
   return switch (event.type) {
     ActivityType.spaceCreated => l10n.activitySpaceCreated(space),
     ActivityType.spaceRenamed => l10n.activitySpaceRenamed(space),
@@ -74,40 +76,63 @@ class ActivityTile extends ConsumerWidget {
     // El nombre congelado sirve de relleno: para un grupo ya es el bueno, y
     // para un espacio al que se perdió el acceso es lo único que queda.
     final spaceId = event.spaceId;
-    final spaceName = spaceId == null
+    final resolved = spaceId == null
         ? event.spaceName
         : spaceTitleLabel(
             ref.watch(spaceTitleProvider(spaceId)),
             l10n,
             event.spaceName,
           );
+    // El resolver devuelve vacío mientras no sabe el nombre. Una frase con
+    // un hueco («Has creado ») se lee peor que un sujeto neutro, así que
+    // aquí se sustituye por un marcador y NUNCA por el nombre persistido,
+    // que en una relación es justo el que no vale.
+    final spaceName = resolved.isEmpty ? l10n.activityLoadingSubject : resolved;
 
-    return ListTile(
+    // Actor, acción, importe y fecha separados visualmente: la frase se
+    // escanea en dos líneas fijas en vez de leerse entera.
+    return InkWell(
       onTap: () => _open(context),
-      leading: ProfileAvatar(
-        seed: event.actorUid,
-        displayName: actorName,
-        radius: 18,
-      ),
-      title: Text(
-        activityText(l10n, event, spaceName: spaceName),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        '$actorName · ${relativeTime(l10n, event.at, DateTime.now())}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
-      ),
-      trailing: event.hasAmount
-          ? Text(
-              formatMoney(Money(event.amountCents!)),
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: TokenSpacing.lg,
+          vertical: TokenSpacing.md,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SaldaAvatar(seed: event.actorUid, label: actorName, radius: 16),
+            const SizedBox(width: TokenSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activityText(l10n, event, spaceName: spaceName),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$actorName · '
+                    '${relativeTime(l10n, event.at, DateTime.now())}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: context.salda.textMuted,
+                    ),
+                  ),
+                ],
               ),
-            )
-          : null,
+            ),
+            if (event.hasAmount) ...[
+              const SizedBox(width: TokenSpacing.md),
+              MoneyText(Money(event.amountCents!), size: MoneySize.small),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

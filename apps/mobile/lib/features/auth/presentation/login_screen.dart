@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/auth_repository.dart';
 
@@ -700,47 +701,40 @@ class _AuthShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.salda;
     return Scaffold(
       appBar: showBack ? AppBar() : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(TokenSpacing.xl),
+            padding: const EdgeInsets.symmetric(
+              horizontal: TokenLayout.screenMargin,
+              vertical: TokenSpacing.xxxl,
+            ),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 52,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(height: TokenSpacing.md),
+                  // WORDMARK textual: el simbolo definitivo no esta
+                  // aprobado, asi que ninguna pantalla se apoya en el.
                   Text(
                     Brand.appName,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.primary,
+                    style: theme.textTheme.displayLarge?.copyWith(
+                      color: c.primary,
+                      fontSize: 32,
                     ),
                   ),
+                  const SizedBox(height: TokenSpacing.xxl),
+                  Text(title, style: theme.textTheme.headlineMedium),
                   const SizedBox(height: TokenSpacing.xs),
                   Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: TokenSpacing.sm),
-                  Text(
                     subtitle,
-                    textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: c.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: TokenSpacing.xl),
+                  const SizedBox(height: TokenSpacing.xxl),
                   child,
                 ],
               ),

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fondo del arranque. Debe coincidir con el token `background` claro para
+     que no haya un destello blanco antes del primer fotograma de Flutter.
+     Fuente: packages/design_tokens/assets/design_tokens.json -->
+<resources>
+    <color name="saldaBackground">#F7F6F2</color>
+</resources>

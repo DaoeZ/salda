@@ -14,10 +14,12 @@ enum SpaceFailureCode {
   alreadyMember,
   ownerCannotLeave,
   targetUnavailable,
+
   /// La otra persona ya creó la relación y te invitó: hay que ACEPTAR, no
   /// crear. Antes esto caía en `alreadyMember` y se mostraba como un error
   /// genérico, con la relación esperando en Inicio (BUG-3).
   invitedByOther,
+
   /// Documento canónico presente pero en un estado que no encaja con el
   /// modelo (datos antiguos o parciales). Recuperable avisando, nunca
   /// escribiendo encima a ciegas.
@@ -29,10 +31,13 @@ enum SpaceFailureCode {
 enum RelationshipOutcome {
   /// Relación y primera invitación creadas.
   created,
+
   /// Ya existía con una invitación pendiente tuya: no se duplica nada.
   alreadyInvited,
+
   /// Había una invitación rechazada o cancelada y se ha vuelto a enviar.
   reinvited,
+
   /// Las dos personas ya son miembros: la relación está activa.
   alreadyActive,
 }
@@ -221,14 +226,13 @@ class SpacesRepository {
 
   ManualParticipant _manualFrom(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) =>
-      ManualParticipant(
-        id: doc.id,
-        displayName: (doc.data()['displayName'] as String?) ?? '',
-        linkedUid: doc.data()['linkedUid'] as String?,
-        createdByUid: (doc.data()['createdByUid'] as String?) ?? '',
-        createdAt: (doc.data()['createdAt'] as Timestamp?)?.toDate(),
-      );
+  ) => ManualParticipant(
+    id: doc.id,
+    displayName: (doc.data()['displayName'] as String?) ?? '',
+    linkedUid: doc.data()['linkedUid'] as String?,
+    createdByUid: (doc.data()['createdByUid'] as String?) ?? '',
+    createdAt: (doc.data()['createdAt'] as Timestamp?)?.toDate(),
+  );
 
   /// Invitaciones que YO he recibido y siguen pendientes. Recibirlas y
   /// responderlas es PARTICIPAR: también las ve un invitado (ADR-034).
@@ -323,44 +327,46 @@ class SpacesRepository {
       return _resumeRelationship(space, invite, existing, fromUid, toUid);
     }
 
-    await firestore.runTransaction((transaction) async {
-      // Se relee DENTRO de la transacción: entre la comprobación anterior y
-      // este punto la otra persona puede haber creado la misma relación
-      // canónica. Si ocurre, converge en el camino de reanudación.
-      if ((await transaction.get(space)).exists) {
-        throw const SpaceFailure(SpaceFailureCode.alreadyMember);
-      }
-      transaction.set(space, {
-        'name': name.trim(),
-        'ownerUid': fromUid,
-        'kind': SpaceKind.relationship.name,
-        'relationshipUids': pair,
-        'status': 'active',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'schemaVersion': 2,
-      });
-      transaction.set(space.collection('members').doc(fromUid), {
-        'uid': fromUid,
-        'joinedAt': FieldValue.serverTimestamp(),
-      });
-      transaction.set(invite, {
-        'spaceId': space.id,
-        'spaceName': name.trim(),
-        'fromUid': fromUid,
-        'toUid': toUid,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }).catchError((Object error) async {
-      // Carrera: la creó la otra persona mientras tanto. No es un fallo.
-      if (error is SpaceFailure &&
-          error.code == SpaceFailureCode.alreadyMember) {
-        return;
-      }
-      throw error;
-    });
+    await firestore
+        .runTransaction((transaction) async {
+          // Se relee DENTRO de la transacción: entre la comprobación anterior y
+          // este punto la otra persona puede haber creado la misma relación
+          // canónica. Si ocurre, converge en el camino de reanudación.
+          if ((await transaction.get(space)).exists) {
+            throw const SpaceFailure(SpaceFailureCode.alreadyMember);
+          }
+          transaction.set(space, {
+            'name': name.trim(),
+            'ownerUid': fromUid,
+            'kind': SpaceKind.relationship.name,
+            'relationshipUids': pair,
+            'status': 'active',
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'schemaVersion': 2,
+          });
+          transaction.set(space.collection('members').doc(fromUid), {
+            'uid': fromUid,
+            'joinedAt': FieldValue.serverTimestamp(),
+          });
+          transaction.set(invite, {
+            'spaceId': space.id,
+            'spaceName': name.trim(),
+            'fromUid': fromUid,
+            'toUid': toUid,
+            'status': 'pending',
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        })
+        .catchError((Object error) async {
+          // Carrera: la creó la otra persona mientras tanto. No es un fallo.
+          if (error is SpaceFailure &&
+              error.code == SpaceFailureCode.alreadyMember) {
+            return;
+          }
+          throw error;
+        });
 
     final after = await space.get();
     if (!after.exists) throw const SpaceFailure(SpaceFailureCode.notAllowed);
@@ -756,10 +762,7 @@ class SpacesRepository {
       'uid': uid(),
       'joinedAt': FieldValue.serverTimestamp(),
       // Un invitado congela su nombre aquí porque no tiene perfil público.
-      if (guestName != null) ...{
-        'kind': 'guest',
-        'displayName': guestName,
-      },
+      if (guestName != null) ...{'kind': 'guest', 'displayName': guestName},
     });
     await batch.commit();
   }
@@ -825,8 +828,7 @@ class SpacesRepository {
       ],
       guestsCanCreateExpenses:
           (data['guestsCanCreateExpenses'] as bool?) ?? false,
-      relationshipManualId:
-          (data['relationshipManualId'] as String?) ?? '',
+      relationshipManualId: (data['relationshipManualId'] as String?) ?? '',
       avatarEmoji: data['avatarEmoji'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
@@ -902,9 +904,8 @@ final spaceMembersProvider = StreamProvider.autoDispose
 /// Participantes manuales del espacio (ADR-033), en vivo.
 final spaceManualParticipantsProvider = StreamProvider.autoDispose
     .family<List<ManualParticipant>, String>(
-      (ref, spaceId) => ref
-          .watch(spacesRepositoryProvider)
-          .watchManualParticipants(spaceId),
+      (ref, spaceId) =>
+          ref.watch(spacesRepositoryProvider).watchManualParticipants(spaceId),
     );
 
 final spaceInvitesProvider = StreamProvider.autoDispose

@@ -48,7 +48,9 @@ final spaceTitleProvider = Provider.autoDispose
         manuals: manuals,
         manualsLoading: manualsAsync.isLoading && !manualsAsync.hasValue,
         profileLoading:
-            otherUid != null && profileAsync.isLoading && !profileAsync.hasValue,
+            otherUid != null &&
+            profileAsync.isLoading &&
+            !profileAsync.hasValue,
         otherDisplayName: profile?.displayName,
         otherUsername: profile?.username,
       );

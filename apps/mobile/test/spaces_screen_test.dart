@@ -18,9 +18,7 @@ Future<(FakeFirebaseFirestore, ProviderContainer)> _pump(
   addTearDown(tester.view.reset);
   final fake = firestore ?? FakeFirebaseFirestore();
   final container = ProviderContainer(
-    overrides: [
-      ...loggedInOverrides(firestore: fake),
-    ],
+    overrides: [...loggedInOverrides(firestore: fake)],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -37,11 +35,21 @@ Future<(FakeFirebaseFirestore, ProviderContainer)> _pump(
   return (fake, container);
 }
 
+/// La lista lee saldos en vivo: hay que desmontar DENTRO de la prueba, antes
+/// de que el binding compruebe los temporizadores pendientes.
+Future<void> _cerrar(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump(const Duration(seconds: 2));
+}
+
 void main() {
   testWidgets('estado vacío con invitación a crear', (tester) async {
     await _pump(tester);
     expect(find.text('Todavía no tienes espacios'), findsOneWidget);
+    // La acción de crear vive SOLO en el botón principal: repetirla dentro
+    // del estado vacío era la misma acción dos veces en la misma pantalla.
     expect(find.text('Crear espacio'), findsOneWidget);
+    await _cerrar(tester);
   });
 
   testWidgets('lista activos, archivados aparte y badge de propietario', (
@@ -60,13 +68,15 @@ void main() {
     await _pump(tester, firestore: fake);
 
     expect(find.text('Viaje a Lisboa'), findsOneWidget);
-    expect(find.text('Propietario'), findsOneWidget);
-    expect(find.text('Archivados (1)'), findsOneWidget);
-    // El archivado está plegado hasta abrir la sección.
-    expect(find.text('Piso antiguo'), findsNothing);
-    await tester.tap(find.text('Archivados (1)'));
-    await tester.pumpAndSettle();
+    // El rótulo «Propietario» ya no se repite en cada fila: lo eres en casi
+    // todas, así que no distinguía nada y competía con el saldo. La
+    // propiedad se gestiona donde importa, en el detalle.
+    expect(find.text('Propietario'), findsNothing);
+    // Los archivados van en su propia sección, siempre visible: plegarlos
+    // escondía espacios que el usuario sí busca.
+    expect(find.text('ARCHIVADOS (1)'), findsOneWidget);
     expect(find.text('Piso antiguo'), findsOneWidget);
+    await _cerrar(tester);
   });
 
   testWidgets('una invitación recibida se acepta desde la lista', (
@@ -87,15 +97,13 @@ void main() {
     await tester.tap(find.text('Unirme'));
     await tester.pumpAndSettle();
 
-    expect(
-      (await f.doc('spaces/$spaceId/members/owner').get()).exists,
-      true,
-    );
+    expect((await f.doc('spaces/$spaceId/members/owner').get()).exists, true);
     // fake_cloud_firestore no re-emite collectionGroup para subcolecciones
     // nuevas (Firestore real sí): forzamos la re-suscripción del provider.
     container.invalidate(mySpacesProvider);
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
     expect(find.text('Peña del bar'), findsOneWidget); // ya como espacio
+    await _cerrar(tester);
   });
 }

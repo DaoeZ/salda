@@ -68,10 +68,14 @@ void main() {
 
     test('Pedro ve a Edgar en el MISMO espacio', () {
       // Mismo documento, distinto lector: por eso no puede persistirse.
-      expect(spaceTitleProfileUid(space: v2(), currentUid: pedro, manuals: []),
-          edgar);
-      expect(spaceTitleProfileUid(space: v2(), currentUid: edgar, manuals: []),
-          pedro);
+      expect(
+        spaceTitleProfileUid(space: v2(), currentUid: pedro, manuals: []),
+        edgar,
+      );
+      expect(
+        spaceTitleProfileUid(space: v2(), currentUid: edgar, manuals: []),
+        pedro,
+      );
       final r = resolve(v2(), pedro, displayName: 'Edgar');
       expect(r.person, 'Edgar');
     });
@@ -129,26 +133,25 @@ void main() {
       expect(r.source, SpaceTitleSource.storedName);
       expect(r.diagnostic, isNotNull);
       expect(
-        spaceTitleProfileUid(
-          space: v2(),
-          currentUid: 'uid-ajeno',
-          manuals: [],
-        ),
+        spaceTitleProfileUid(space: v2(), currentUid: 'uid-ajeno', manuals: []),
         isNull,
         reason: 'no debe leer el perfil de nadie',
       );
     });
 
-    test('espacio corrupto (una o tres identidades) cae al nombre guardado', () {
-      for (final uids in [
-        <String>[edgar],
-        [edgar, pedro, 'uid-tercero'],
-      ]) {
-        final r = resolve(v2(uids: uids), edgar, displayName: 'Pedro');
-        expect(r.source, SpaceTitleSource.storedName, reason: '$uids');
-        expect(r.diagnostic, isNotNull);
-      }
-    });
+    test(
+      'espacio corrupto (una o tres identidades) cae al nombre guardado',
+      () {
+        for (final uids in [
+          <String>[edgar],
+          [edgar, pedro, 'uid-tercero'],
+        ]) {
+          final r = resolve(v2(uids: uids), edgar, displayName: 'Pedro');
+          expect(r.source, SpaceTitleSource.storedName, reason: '$uids');
+          expect(r.diagnostic, isNotNull);
+        }
+      },
+    );
 
     test('pareja con el UID repetido no enseña el propio nombre', () {
       final r = resolve(v2(uids: const [edgar, edgar]), edgar);
@@ -178,7 +181,9 @@ void main() {
       final r = resolve(
         v3(manualId: 'm-secreto'),
         edgar,
-        manuals: const [ManualParticipant(id: 'm-secreto', displayName: 'Pablo')],
+        manuals: const [
+          ManualParticipant(id: 'm-secreto', displayName: 'Pablo'),
+        ],
       );
       expect(r.person, 'Pablo');
       expect(r.person, isNot(contains('m-secreto')));

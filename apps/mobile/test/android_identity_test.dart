@@ -19,9 +19,7 @@ void main() {
   // Los tests de Flutter se ejecutan con cwd = apps/mobile.
   final gradle = File('android/app/build.gradle.kts');
   final manifest = File('android/app/src/main/AndroidManifest.xml');
-  final assetlinks = File(
-    '../guest_web/public/.well-known/assetlinks.json',
-  );
+  final assetlinks = File('../guest_web/public/.well-known/assetlinks.json');
   final brand = File('../../packages/design_tokens/assets/brand.json');
 
   String applicationId() {
@@ -59,8 +57,8 @@ void main() {
       );
       final target = statement['target'] as Map<String, dynamic>;
       expect(target['namespace'], 'android_app');
-      final fingerprints =
-          (target['sha256_cert_fingerprints'] as List).cast<String>();
+      final fingerprints = (target['sha256_cert_fingerprints'] as List)
+          .cast<String>();
       expect(fingerprints, isNotEmpty);
       for (final fingerprint in fingerprints) {
         // 32 bytes en hex separados por ':' — un SHA-1 (20) colado aquí no
@@ -77,13 +75,11 @@ void main() {
   test('el intent-filter de App Links apunta a los dominios de la marca', () {
     final xml = manifest.readAsStringSync();
     final hosts = {
-      for (final match
-          in RegExp(r'android:host="([^"]+)"').allMatches(xml))
+      for (final match in RegExp(r'android:host="([^"]+)"').allMatches(xml))
         match.group(1)!,
     };
     final brandDomains =
-        ((jsonDecode(brand.readAsStringSync()) as Map)['hostingDomains']
-                as Map)
+        ((jsonDecode(brand.readAsStringSync()) as Map)['hostingDomains'] as Map)
             .values
             .cast<String>()
             .toSet();

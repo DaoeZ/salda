@@ -2662,6 +2662,228 @@ abstract class AppLocalizations {
   /// **'Reintentar'**
   String get commonRetry;
 
+  /// No description provided for @balanceHeroTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu saldo'**
+  String get balanceHeroTitle;
+
+  /// No description provided for @balanceSettled.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás en paz'**
+  String get balanceSettled;
+
+  /// No description provided for @balanceSettledBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Nadie te debe y no debes nada.'**
+  String get balanceSettledBody;
+
+  /// No description provided for @balanceTheyOweYou.
+  ///
+  /// In es, this message translates to:
+  /// **'Te deben'**
+  String get balanceTheyOweYou;
+
+  /// No description provided for @balanceYouOwe.
+  ///
+  /// In es, this message translates to:
+  /// **'Debes'**
+  String get balanceYouOwe;
+
+  /// No description provided for @balanceNetPositive.
+  ///
+  /// In es, this message translates to:
+  /// **'A tu favor'**
+  String get balanceNetPositive;
+
+  /// No description provided for @balanceNetNegative.
+  ///
+  /// In es, this message translates to:
+  /// **'En tu contra'**
+  String get balanceNetNegative;
+
+  /// No description provided for @homeQuickScan.
+  ///
+  /// In es, this message translates to:
+  /// **'Escanear ticket'**
+  String get homeQuickScan;
+
+  /// No description provided for @homeQuickMore.
+  ///
+  /// In es, this message translates to:
+  /// **'Más'**
+  String get homeQuickMore;
+
+  /// No description provided for @homeSpacesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tus contextos'**
+  String get homeSpacesTitle;
+
+  /// No description provided for @homeNoSpacesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no compartes gastos con nadie'**
+  String get homeNoSpacesTitle;
+
+  /// No description provided for @homeNoSpacesBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea una relación para las cuentas de dos, o un grupo para un piso, un viaje o una cena.'**
+  String get homeNoSpacesBody;
+
+  /// No description provided for @homeActivityRecent.
+  ///
+  /// In es, this message translates to:
+  /// **'Reciente'**
+  String get homeActivityRecent;
+
+  /// No description provided for @homeMenuTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Menú'**
+  String get homeMenuTitle;
+
+  /// No description provided for @contextPendingShort.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente'**
+  String get contextPendingShort;
+
+  /// No description provided for @ticketPhotoTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Foto del ticket'**
+  String get ticketPhotoTitle;
+
+  /// No description provided for @ticketFallbackName.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto'**
+  String get ticketFallbackName;
+
+  /// No description provided for @ticketNoLinesBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto se reparte por su importe total, sin detalle de productos.'**
+  String get ticketNoLinesBody;
+
+  /// No description provided for @reviewTicketData.
+  ///
+  /// In es, this message translates to:
+  /// **'Datos del ticket'**
+  String get reviewTicketData;
+
+  /// No description provided for @reviewTotalsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Desglose'**
+  String get reviewTotalsTitle;
+
+  /// No description provided for @reviewNoLinesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'El ticket no tiene lineas'**
+  String get reviewNoLinesTitle;
+
+  /// No description provided for @reviewNoLinesBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Anade al menos un producto para poder repartir el gasto entre varias personas.'**
+  String get reviewNoLinesBody;
+
+  /// No description provided for @relationshipNeedsAcceptanceBody.
+  ///
+  /// In es, this message translates to:
+  /// **'En cuanto acepte podreis registrar gastos y ver el saldo entre los dos.'**
+  String get relationshipNeedsAcceptanceBody;
+
+  /// No description provided for @groupNeedsMembersBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Invita a alguien con cuenta, comparte el enlace del grupo o anade a una persona sin cuenta.'**
+  String get groupNeedsMembersBody;
+
+  /// No description provided for @activityLoadingSubject.
+  ///
+  /// In es, this message translates to:
+  /// **'…'**
+  String get activityLoadingSubject;
+
+  /// No description provided for @peopleCount.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =0{Sin personas} =1{1 persona} other{{count} personas}}'**
+  String peopleCount(int count);
+
+  /// No description provided for @spaceKindRelationship.
+  ///
+  /// In es, this message translates to:
+  /// **'Relación'**
+  String get spaceKindRelationship;
+
+  /// No description provided for @spaceKindGroup.
+  ///
+  /// In es, this message translates to:
+  /// **'Grupo'**
+  String get spaceKindGroup;
+
+  /// No description provided for @personKindManual.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin cuenta'**
+  String get personKindManual;
+
+  /// No description provided for @personKindGuest.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitado'**
+  String get personKindGuest;
+
+  /// No description provided for @personKindOwner.
+  ///
+  /// In es, this message translates to:
+  /// **'Propietario'**
+  String get personKindOwner;
+
+  /// No description provided for @emptyTicketsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin gastos todavía'**
+  String get emptyTicketsTitle;
+
+  /// No description provided for @emptyTicketsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Escanea un ticket o apunta un gasto a mano y aparecerá aquí.'**
+  String get emptyTicketsBody;
+
+  /// No description provided for @emptyActivityTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin movimientos'**
+  String get emptyActivityTitle;
+
+  /// No description provided for @emptyActivityBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Aquí se irá anotando lo que ocurra en tus contextos.'**
+  String get emptyActivityBody;
+
+  /// No description provided for @emptyChatTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin mensajes'**
+  String get emptyChatTitle;
+
+  /// No description provided for @emptyChatBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe el primero: la conversación es privada de este contexto.'**
+  String get emptyChatBody;
+
   /// No description provided for @historyTitle.
   ///
   /// In es, this message translates to:

@@ -2,6 +2,8 @@ import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/activity_repository.dart';
 import '../domain/activity_models.dart';
@@ -63,48 +65,51 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.activityTitle)),
       body: live.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(TokenSpacing.xl),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(l10n.activityLoadError, textAlign: TextAlign.center),
-                const SizedBox(height: TokenSpacing.md),
-                FilledButton.tonal(
-                  onPressed: () => widget.spaceId == null
-                      ? ref.invalidate(globalActivityProvider)
-                      : ref.invalidate(
-                          spaceActivityProvider(widget.spaceId!)),
-                  child: Text(l10n.activityRetry),
-                ),
-              ],
+        loading: () => const ScreenBody(children: [SkeletonList(rows: 6)]),
+        error: (error, _) => ScreenBody(
+          children: [
+            ErrorStateView(
+              message: l10n.activityLoadError,
+              onRetry: () => widget.spaceId == null
+                  ? ref.invalidate(globalActivityProvider)
+                  : ref.invalidate(spaceActivityProvider(widget.spaceId!)),
             ),
-          ),
+          ],
         ),
         data: (events) {
           if (events.isEmpty && _older.isEmpty) {
-            return const ActivityEmptyState();
+            return ScreenBody(
+              children: [
+                EmptyState(
+                  icon: Icons.bolt_outlined,
+                  title: l10n.emptyActivityTitle,
+                  body: l10n.emptyActivityBody,
+                ),
+              ],
+            );
           }
-          final canLoadMore = !_exhausted &&
+          final canLoadMore =
+              !_exhausted &&
               (events.length >= ActivityRepository.pageSize ||
                   _older.isNotEmpty);
-          return ListView(
-            padding: const EdgeInsets.symmetric(vertical: TokenSpacing.sm),
+          return ScreenBody(
             children: [
-              for (final event in events) ActivityTile(event: event),
-              for (final event in _older) ActivityTile(event: event),
+              SaldaCardList(
+                children: [
+                  for (final event in events) ActivityTile(event: event),
+                  for (final event in _older) ActivityTile(event: event),
+                ],
+              ),
               if (canLoadMore)
                 Padding(
-                  padding: const EdgeInsets.all(TokenSpacing.md),
+                  padding: const EdgeInsets.only(top: TokenSpacing.lg),
                   child: Center(
                     child: _loadingMore
                         ? const SizedBox.square(
-                            dimension: 24,
+                            dimension: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : TextButton(
+                        : OutlinedButton(
                             onPressed: () => _loadMore(events),
                             child: Text(l10n.activityLoadMore),
                           ),

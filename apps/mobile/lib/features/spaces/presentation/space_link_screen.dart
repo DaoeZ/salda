@@ -243,9 +243,7 @@ class _ActiveLink extends ConsumerWidget {
           onPressed: () => _revoke(context, ref),
           icon: const Icon(Icons.link_off, size: 18),
           label: Text(l10n.spaceLinkRevoke),
-          style: TextButton.styleFrom(
-            foregroundColor: theme.colorScheme.error,
-          ),
+          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
         ),
       ],
     );

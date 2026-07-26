@@ -178,7 +178,9 @@ void main() {
       expect(base, isNot(const AppUser(uid: 'uid-a', email: 'b@salda.test')));
       expect(
         base,
-        isNot(const AppUser(uid: 'uid-a', email: 'a@salda.test', isAnonymous: true)),
+        isNot(
+          const AppUser(uid: 'uid-a', email: 'a@salda.test', isAnonymous: true),
+        ),
       );
       expect(
         base,

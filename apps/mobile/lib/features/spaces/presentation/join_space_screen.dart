@@ -43,6 +43,7 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
   SpaceJoinLink? _link;
   var _busy = false;
   var _resolved = false;
+
   /// Evita que el auto-canje se dispare dos veces si el árbol se reconstruye
   /// mientras la escritura está en vuelo.
   var _joining = false;
@@ -105,8 +106,7 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
     final user = ref.read(currentAppUserProvider);
     if (user == null) return false;
     if (user.isFullAccount) return true;
-    return user.isAnonymous &&
-        ref.read(myGuestIdentityProvider).value != null;
+    return user.isAnonymous && ref.read(myGuestIdentityProvider).value != null;
   }
 
   Future<void> _join({String? guestName}) async {
@@ -120,7 +120,9 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
     });
     try {
       if (guestName != null) {
-        await ref.read(guestIdentityRepositoryProvider).setDisplayName(guestName);
+        await ref
+            .read(guestIdentityRepositoryProvider)
+            .setDisplayName(guestName);
       }
       final outcome = await ref
           .read(spacesRepositoryProvider)

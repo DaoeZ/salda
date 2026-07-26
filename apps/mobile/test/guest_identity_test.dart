@@ -31,22 +31,24 @@ void main() {
       expect((await firestore.doc('profiles/guest-uid').get()).exists, isFalse);
     });
 
-    test('renombrarse conserva la identidad (y con ella el historial)',
-        () async {
-      final repo = guestRepo('guest-uid');
-      await repo.setDisplayName('Alba');
-      final createdAt =
-          (await firestore.doc('guestIdentities/guest-uid').get())
-              .data()!['createdAt'];
+    test(
+      'renombrarse conserva la identidad (y con ella el historial)',
+      () async {
+        final repo = guestRepo('guest-uid');
+        await repo.setDisplayName('Alba');
+        final createdAt =
+            (await firestore.doc('guestIdentities/guest-uid').get())
+                .data()!['createdAt'];
 
-      await repo.setDisplayName('Alba G.');
+        await repo.setDisplayName('Alba G.');
 
-      final raw = (await firestore.doc('guestIdentities/guest-uid').get())
-          .data()!;
-      expect(raw['uid'], 'guest-uid'); // MISMA identidad
-      expect(raw['displayName'], 'Alba G.');
-      expect(raw['createdAt'], createdAt); // el alta no se reescribe
-    });
+        final raw = (await firestore.doc('guestIdentities/guest-uid').get())
+            .data()!;
+        expect(raw['uid'], 'guest-uid'); // MISMA identidad
+        expect(raw['displayName'], 'Alba G.');
+        expect(raw['createdAt'], createdAt); // el alta no se reescribe
+      },
+    );
 
     test('la identidad persiste: el mismo UID recupera su nombre', () async {
       await guestRepo('guest-uid').setDisplayName('Alba');
@@ -132,8 +134,7 @@ void main() {
       );
     });
 
-    test('la política de gastos del anfitrión se lee en el contexto',
-        () async {
+    test('la política de gastos del anfitrión se lee en el contexto', () async {
       final host = SpacesRepository(
         firestore: firestore,
         uid: () => 'host-uid',

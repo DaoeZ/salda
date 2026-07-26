@@ -16,8 +16,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(Brand.appName), findsOneWidget);
-    expect(find.text('Relaciones'), findsOneWidget);
-    expect(find.text('Grupos'), findsOneWidget);
+    // Sin contextos no se pintan secciones vacías: un solo estado vacío que
+    // dice qué hacer, y la acción de crear en el FAB.
+    expect(find.text('Todavía no compartes gastos con nadie'), findsOneWidget);
+    expect(find.text('Relaciones'), findsNothing);
     expect(find.text('Escanear'), findsNothing);
     expect(find.text('Crear'), findsOneWidget);
   });

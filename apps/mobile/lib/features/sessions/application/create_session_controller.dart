@@ -29,6 +29,7 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
     required int payerIndex,
     required SplitMode splitMode,
     required String sessionName,
+
     /// Identidad manual por posición (ADR-033); '' para quien tiene cuenta.
     List<String> participantManualIds = const [],
   }) async {

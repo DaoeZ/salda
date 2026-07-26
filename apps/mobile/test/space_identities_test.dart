@@ -57,10 +57,13 @@ void main() {
         manuals: [manual('m-pablo', linked: 'uid-pablo')],
       );
       expect(ids.length, 2);
-      expect(listoGrupo(
-        [cuenta('edgar'), cuenta('uid-pablo')],
-        [manual('m-pablo', linked: 'uid-pablo')],
-      ), isTrue);
+      expect(
+        listoGrupo(
+          [cuenta('edgar'), cuenta('uid-pablo')],
+          [manual('m-pablo', linked: 'uid-pablo')],
+        ),
+        isTrue,
+      );
     });
 
     test('quitar el MANUAL vuelve a dejarlo no operativo', () {
@@ -81,8 +84,10 @@ void main() {
     });
 
     test('v2 activa con las dos cuentas sí opera', () {
-      expect(listoRelacion([cuenta('edgar'), cuenta('pedro')], const []),
-          isTrue);
+      expect(
+        listoRelacion([cuenta('edgar'), cuenta('pedro')], const []),
+        isTrue,
+      );
     });
 
     test('v3 ACCOUNT + MANUAL opera (BUG-2 sigue en pie)', () {
@@ -96,7 +101,10 @@ void main() {
       );
       expect(ids.length, 2);
       expect(
-        listoRelacion([cuenta('edgar')], [manual('m-pablo', linked: 'uid-pablo')]),
+        listoRelacion(
+          [cuenta('edgar')],
+          [manual('m-pablo', linked: 'uid-pablo')],
+        ),
         isTrue,
       );
     });

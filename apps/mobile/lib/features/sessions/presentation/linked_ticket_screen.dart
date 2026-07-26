@@ -24,8 +24,7 @@ class LinkedTicketScreen extends ConsumerStatefulWidget {
   final String token;
 
   @override
-  ConsumerState<LinkedTicketScreen> createState() =>
-      _LinkedTicketScreenState();
+  ConsumerState<LinkedTicketScreen> createState() => _LinkedTicketScreenState();
 }
 
 class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
@@ -142,9 +141,7 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.person_outline),
-                title: Text(
-                  l10n.ticketLinkViewingAs(_names[myPid] ?? ''),
-                ),
+                title: Text(l10n.ticketLinkViewingAs(_names[myPid] ?? '')),
                 subtitle: Text(l10n.ticketLinkTemporary),
                 trailing: TextButton(
                   onPressed: _release,
@@ -171,18 +168,11 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
           Text(l10n.ticketLinkLines, style: theme.textTheme.titleMedium),
           const SizedBox(height: TokenSpacing.sm),
           for (final line in _lines)
-            _LineTile(
-              data: line.data(),
-              names: _names,
-              highlightPid: myPid,
-            ),
+            _LineTile(data: line.data(), names: _names, highlightPid: myPid),
           const Divider(height: TokenSpacing.xl),
           ListTile(
             title: Text(l10n.ticketLinkTotal),
-            trailing: Text(
-              _euros(total),
-              style: theme.textTheme.titleMedium,
-            ),
+            trailing: Text(_euros(total), style: theme.textTheme.titleMedium),
           ),
         ],
       ),
@@ -281,10 +271,12 @@ class _ManualLinkRequestCardState
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final mine = ref
-        .watch(myManualLinkProvider((
-          spaceId: widget.spaceId,
-          manualId: widget.manualId,
-        )))
+        .watch(
+          myManualLinkProvider((
+            spaceId: widget.spaceId,
+            manualId: widget.manualId,
+          )),
+        )
         .value;
 
     if (mine?.status == ManualLinkStatus.accepted) {

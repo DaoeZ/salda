@@ -18,14 +18,14 @@ class DraftLine {
   });
 
   factory DraftLine.fromExtracted(ExtractedLine line) => DraftLine(
-        name: line.name,
-        quantityMilli: line.quantityMilli,
-        unitPrice: line.unitPrice,
-        totalPrice: line.totalPrice,
-        confidence: line.confidence,
-        sourceText: line.sourceText,
-        alternatives: line.alternatives,
-      );
+    name: line.name,
+    quantityMilli: line.quantityMilli,
+    unitPrice: line.unitPrice,
+    totalPrice: line.totalPrice,
+    confidence: line.confidence,
+    sourceText: line.sourceText,
+    alternatives: line.alternatives,
+  );
 
   final String name;
   final int quantityMilli;
@@ -43,16 +43,15 @@ class DraftLine {
     Money? unitPrice,
     bool clearUnitPrice = false,
     Money? totalPrice,
-  }) =>
-      DraftLine(
-        name: name ?? this.name,
-        quantityMilli: quantityMilli ?? this.quantityMilli,
-        unitPrice: clearUnitPrice ? null : (unitPrice ?? this.unitPrice),
-        totalPrice: totalPrice ?? this.totalPrice,
-        confidence: 1.0, // editado por el usuario = verdad
-        sourceText: sourceText,
-        alternatives: const [], // ya no aplican
-      );
+  }) => DraftLine(
+    name: name ?? this.name,
+    quantityMilli: quantityMilli ?? this.quantityMilli,
+    unitPrice: clearUnitPrice ? null : (unitPrice ?? this.unitPrice),
+    totalPrice: totalPrice ?? this.totalPrice,
+    confidence: 1.0, // editado por el usuario = verdad
+    sourceText: sourceText,
+    alternatives: const [], // ya no aplican
+  );
 }
 
 /// Estado de la revisión de un ticket antes de guardarlo (M3 lo persiste).
@@ -134,38 +133,34 @@ class ReviewDraftState {
   /// Serialización para el draft persistente: el estado editable vuelve al
   /// contrato canónico (lo editado lleva confianza 1.0 = verdad del usuario).
   ReceiptExtraction toExtraction() => ReceiptExtraction(
-        engine: engine,
-        merchantName: merchantName == null
-            ? const Extracted.missing()
-            : Extracted(merchantName, 1.0),
-        brandKey: brandKey,
-        category: category,
-        date: date == null
-            ? const Extracted.missing()
-            : Extracted(date, 1.0),
-        time: time == null
-            ? const Extracted.missing()
-            : Extracted(time, 1.0),
-        lines: [
-          for (final l in lines)
-            ExtractedLine(
-              name: l.name,
-              quantityMilli: l.quantityMilli,
-              unitPrice: l.unitPrice,
-              totalPrice: l.totalPrice,
-              confidence: l.confidence,
-              sourceText: l.sourceText,
-              alternatives: l.alternatives,
-            ),
-        ],
-        taxes: taxes,
-        discounts: discounts,
-        tip: tip == null ? const Extracted.missing() : Extracted(tip, 1.0),
-        grandTotal: grandTotal == null
-            ? const Extracted.missing()
-            : Extracted(grandTotal, 1.0),
-        issues: issues,
-      );
+    engine: engine,
+    merchantName: merchantName == null
+        ? const Extracted.missing()
+        : Extracted(merchantName, 1.0),
+    brandKey: brandKey,
+    category: category,
+    date: date == null ? const Extracted.missing() : Extracted(date, 1.0),
+    time: time == null ? const Extracted.missing() : Extracted(time, 1.0),
+    lines: [
+      for (final l in lines)
+        ExtractedLine(
+          name: l.name,
+          quantityMilli: l.quantityMilli,
+          unitPrice: l.unitPrice,
+          totalPrice: l.totalPrice,
+          confidence: l.confidence,
+          sourceText: l.sourceText,
+          alternatives: l.alternatives,
+        ),
+    ],
+    taxes: taxes,
+    discounts: discounts,
+    tip: tip == null ? const Extracted.missing() : Extracted(tip, 1.0),
+    grandTotal: grandTotal == null
+        ? const Extracted.missing()
+        : Extracted(grandTotal, 1.0),
+    issues: issues,
+  );
 
   ReviewDraftState copyWith({
     String? merchantName,
@@ -174,22 +169,21 @@ class ReviewDraftState {
     List<DraftLine>? lines,
     Money? grandTotal,
     List<ReceiptIssue>? issues,
-  }) =>
-      ReviewDraftState(
-        engine: engine,
-        merchantName: merchantName ?? this.merchantName,
-        brandKey: brandKey,
-        category: category,
-        date: date ?? this.date,
-        time: time ?? this.time,
-        lines: lines ?? this.lines,
-        discounts: discounts,
-        taxes: taxes,
-        tip: tip,
-        grandTotal: grandTotal ?? this.grandTotal,
-        issues: issues ?? this.issues,
-        sourceConfidence: sourceConfidence,
-      );
+  }) => ReviewDraftState(
+    engine: engine,
+    merchantName: merchantName ?? this.merchantName,
+    brandKey: brandKey,
+    category: category,
+    date: date ?? this.date,
+    time: time ?? this.time,
+    lines: lines ?? this.lines,
+    discounts: discounts,
+    taxes: taxes,
+    tip: tip,
+    grandTotal: grandTotal ?? this.grandTotal,
+    issues: issues ?? this.issues,
+    sourceConfidence: sourceConfidence,
+  );
 }
 
 class ReviewDraft extends Notifier<ReviewDraftState?> {
@@ -245,8 +239,7 @@ class ReviewDraft extends Notifier<ReviewDraftState?> {
   void removeLine(int index) {
     final s = state;
     if (s == null) return;
-    state = s.copyWith(
-        lines: [...s.lines]..removeAt(index), issues: const []);
+    state = s.copyWith(lines: [...s.lines]..removeAt(index), issues: const []);
     _persist();
   }
 
@@ -258,5 +251,6 @@ class ReviewDraft extends Notifier<ReviewDraftState?> {
   }
 }
 
-final reviewDraftProvider =
-    NotifierProvider<ReviewDraft, ReviewDraftState?>(ReviewDraft.new);
+final reviewDraftProvider = NotifierProvider<ReviewDraft, ReviewDraftState?>(
+  ReviewDraft.new,
+);

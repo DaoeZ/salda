@@ -9,6 +9,7 @@ import 'package:salda_mobile/features/people/data/frequent_people_repository.dar
 import 'package:salda_mobile/features/profile/data/profile_repository.dart';
 import 'package:salda_mobile/features/sessions/data/firestore_session_repository.dart';
 import 'package:salda_mobile/features/sessions/data/session_repository.dart';
+import 'package:salda_mobile/features/economy/data/economic_repository.dart';
 import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
 
 class FakeAuthRepository implements AuthRepository {
@@ -130,5 +131,29 @@ List<Override> loggedInOverrides({
         isFullAccount: () => true,
       ),
     ),
+    // Sin esto el repositorio economico apuntaba a la instancia REAL de
+    // Firestore, asi que en pruebas el balance nunca cargaba y las
+    // pantallas que lo pintan quedaban sin comprobar.
+    economicRepositoryProvider.overrideWithValue(
+      EconomicRepository(
+        firestore: fake,
+        functions: _NoopEconomicGateway(),
+        uid: () => uid,
+        isFullAccount: () => true,
+      ),
+    ),
   ];
+}
+
+/// Las Functions no se ejercitan desde un widget test: las escrituras
+/// autoritativas tienen sus propias pruebas contra el emulador.
+class _NoopEconomicGateway implements EconomicFunctionsGateway {
+  @override
+  Future<void> rebuildMyRelations() async {}
+
+  @override
+  Future<void> createPayment(Map<String, Object> data) async {}
+
+  @override
+  Future<void> resolvePayment(Map<String, Object> data) async {}
 }

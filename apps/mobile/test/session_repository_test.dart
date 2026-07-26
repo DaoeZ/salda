@@ -54,10 +54,10 @@ void main() {
 
       expect(session['contextModelVersion'], 1);
       expect(session['spaceId'], 'space-1');
-    expect(ticket['contextModelVersion'], 1);
-    expect(ticket['spaceId'], 'space-1');
-    final mapped = await repo.watchTickets(created.sessionId, 'a0').first;
-    expect(mapped.single.isContextual, true);
+      expect(ticket['contextModelVersion'], 1);
+      expect(ticket['spaceId'], 'space-1');
+      final mapped = await repo.watchTickets(created.sessionId, 'a0').first;
+      expect(mapped.single.isContextual, true);
     },
   );
 

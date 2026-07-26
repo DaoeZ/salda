@@ -135,8 +135,10 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
         ];
         final complete = contextReadyForExpenses(
           target.kind,
-          spaceEconomicIdentities(members: spaceMembers, manuals: manuals)
-              .length,
+          spaceEconomicIdentities(
+            members: spaceMembers,
+            manuals: manuals,
+          ).length,
         );
         if (payerIndex >= people.length) payerIndex = 0;
 

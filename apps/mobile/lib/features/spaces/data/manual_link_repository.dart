@@ -179,16 +179,18 @@ final myPendingManualLinksProvider =
           .where('spaceOwnerUid', isEqualTo: uid)
           .where('status', isEqualTo: 'pending')
           .snapshots()
-          .map((snap) => [
-            for (final d in snap.docs)
-              ManualLinkRequest(
-                id: d.id,
-                manualId: (d.data()['manualId'] as String?) ?? '',
-                uid: (d.data()['uid'] as String?) ?? '',
-                displayName: (d.data()['displayName'] as String?) ?? '',
-                status: ManualLinkStatus.pending,
-                // Ruta del espacio, para poder navegar hasta él.
-                spaceId: d.reference.parent.parent?.id ?? '',
-              ),
-          ]);
+          .map(
+            (snap) => [
+              for (final d in snap.docs)
+                ManualLinkRequest(
+                  id: d.id,
+                  manualId: (d.data()['manualId'] as String?) ?? '',
+                  uid: (d.data()['uid'] as String?) ?? '',
+                  displayName: (d.data()['displayName'] as String?) ?? '',
+                  status: ManualLinkStatus.pending,
+                  // Ruta del espacio, para poder navegar hasta él.
+                  spaceId: d.reference.parent.parent?.id ?? '',
+                ),
+            ],
+          );
     });

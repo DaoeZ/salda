@@ -208,7 +208,10 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
     final link = _link;
 
     // Entrada automática: identidad conocida y enlace válido ⇒ adelante.
-    if (link != null && !_busy && !_working && _choices == null &&
+    if (link != null &&
+        !_busy &&
+        !_working &&
+        _choices == null &&
         _hasIdentity()) {
       Future.microtask(() {
         if (mounted) _enter();
@@ -298,19 +301,14 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
                   ),
                   const SizedBox(height: TokenSpacing.md),
                   if (choices.isEmpty)
-                    Text(
-                      l10n.ticketLinkNoManuals,
-                      textAlign: TextAlign.center,
-                    )
+                    Text(l10n.ticketLinkNoManuals, textAlign: TextAlign.center)
                   else
                     // Incluso con UNO solo se confirma: autoseleccionar
                     // convertiría un enlace reenviado por error en una
                     // suplantación silenciosa, y confirmar cuesta un toque.
                     for (final manual in choices)
                       Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: TokenSpacing.sm,
-                        ),
+                        padding: const EdgeInsets.only(bottom: TokenSpacing.sm),
                         child: FilledButton.tonal(
                           onPressed: _busy ? null : () => _pick(manual),
                           child: Text(manual.displayName),
