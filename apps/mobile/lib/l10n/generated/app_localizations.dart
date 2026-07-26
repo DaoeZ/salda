@@ -1978,6 +1978,12 @@ abstract class AppLocalizations {
   /// **'No se pudo completar la acción. Inténtalo de nuevo.'**
   String get spaceActionError;
 
+  /// No description provided for @spaceSessionNotReady.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu sesión aún no está lista para compartir gastos. Comprueba que has verificado el correo y completado tu perfil, y vuelve a entrar.'**
+  String get spaceSessionNotReady;
+
   /// No description provided for @spaceLinkTooltip.
   ///
   /// In es, this message translates to:

@@ -134,6 +134,12 @@ class DefaultAuthRepository implements AuthRepository {
     final wasAnonymous = _gateway.currentUser?.isAnonymous ?? false;
     if (wasAnonymous) {
       await _gateway.linkEmailAccount(email, password);
+      // CONVERSIÓN: `User.isAnonymous` pasa a false al instante, pero el ID
+      // TOKEN conserva `sign_in_provider: 'anonymous'` hasta que caduca. Las
+      // Rules leen el token, no el objeto local, así que sin este refresco
+      // la app se cree con cuenta completa mientras el servidor la sigue
+      // tratando como invitada y deniega TODA escritura social.
+      await _gateway.reloadUser(refreshToken: true);
     } else {
       await _gateway.createEmailAccount(email, password);
     }
@@ -145,6 +151,9 @@ class DefaultAuthRepository implements AuthRepository {
   Future<void> signInWithGoogle() async {
     if (_gateway.currentUser?.isAnonymous ?? false) {
       await _gateway.linkGoogleAccount();
+      // Mismo motivo que en `register`: sin refrescar el token, las Rules
+      // siguen viendo una sesión anónima.
+      await _gateway.reloadUser(refreshToken: true);
     } else {
       await _gateway.signInWithGoogle();
     }

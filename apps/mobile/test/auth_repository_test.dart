@@ -87,6 +87,8 @@ void main() {
       await repository.register('nuevo@salda.test', 'correcta123', 'Edgar');
 
       expect(gateway.calls.first, 'linkEmail:nuevo@salda.test');
+      // Igual que en Google: el token se refresca justo tras vincular.
+      expect(gateway.calls[1], 'reload:true');
       expect(repository.currentUser?.uid, 'guest-stable-uid');
       expect(repository.currentUser?.isAnonymous, isFalse);
       expect(repository.currentUser?.needsEmailVerification, isTrue);
@@ -104,7 +106,10 @@ void main() {
 
       await repository.signInWithGoogle();
 
-      expect(gateway.calls, ['googleLink']);
+      // El refresco del token es OBLIGATORIO tras convertir: sin él, el ID
+      // token conserva `sign_in_provider: 'anonymous'` y las Rules deniegan
+      // toda escritura social aunque la app se crea con cuenta completa.
+      expect(gateway.calls, ['googleLink', 'reload:true']);
       expect(repository.currentUser?.uid, 'guest-stable-uid');
       expect(repository.currentUser?.isFullAccount, isTrue);
     });

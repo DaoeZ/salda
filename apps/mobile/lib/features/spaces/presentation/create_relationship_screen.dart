@@ -31,6 +31,21 @@ import '../data/spaces_repository.dart';
 /// Para compartir gastos con alguien sin cuenta existe el GRUPO, que sí
 /// admite participantes MANUAL y enlaces de incorporación. La pantalla lo
 /// ofrece en vez de dejar al usuario en un callejón sin salida.
+/// Mensaje de producto para cada fallo. Un solo sitio para que los dos
+/// caminos —buscar una cuenta y añadir a alguien sin cuenta— digan lo mismo.
+/// Nunca muestra códigos, UID, rutas ni trazas.
+String spaceFailureText(AppLocalizations l10n, SpaceFailureCode code) =>
+    switch (code) {
+      SpaceFailureCode.invitedByOther => l10n.relationshipInvitedByOther,
+      SpaceFailureCode.incompatibleData => l10n.relationshipIncompatible,
+      SpaceFailureCode.accountRequired => l10n.contextAccountRequired,
+      SpaceFailureCode.notAllowed => l10n.relationshipNotAllowed,
+      // Lo que de verdad ocurría en el dispositivo: la sesión no cumplía lo
+      // que exigen las Rules para escribir en el ámbito social.
+      SpaceFailureCode.permissionDenied => l10n.spaceSessionNotReady,
+      _ => l10n.spaceActionError,
+    };
+
 class CreateRelationshipScreen extends ConsumerStatefulWidget {
   const CreateRelationshipScreen({super.key});
 
@@ -126,16 +141,9 @@ class _CreateRelationshipScreenState
       // BUG-3: antes TODO caía en un único «no se pudo completar la acción»,
       // justo en los casos que dependen de tu historia con esa cuenta.
       if (!mounted) return;
-      final mensaje = switch (failure.code) {
-        SpaceFailureCode.invitedByOther => l10n.relationshipInvitedByOther,
-        SpaceFailureCode.incompatibleData => l10n.relationshipIncompatible,
-        SpaceFailureCode.accountRequired => l10n.contextAccountRequired,
-        SpaceFailureCode.notAllowed => l10n.relationshipNotAllowed,
-        _ => l10n.spaceActionError,
-      };
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(mensaje)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(spaceFailureText(l10n, failure.code))),
+      );
     } on Object catch (error) {
       if (!mounted) return;
       // Diagnóstico útil sin datos sensibles: código y operación, nunca
@@ -157,6 +165,9 @@ class _CreateRelationshipScreenState
   /// gastos, balances y liquidaciones. Si más adelante se registra, se
   /// vincula por el Sprint 6 sin tocar el histórico.
   Future<void> _createWithManual() async {
+    // Guarda de reentrada: sin ella, dos toques rápidos lanzaban dos batches
+    // y creaban DOS relaciones con el mismo nombre.
+    if (creatingUid != null) return;
     final l10n = AppLocalizations.of(context);
     final name = await showDialog<String>(
       context: context,
@@ -192,12 +203,19 @@ class _CreateRelationshipScreenState
           .read(spacesRepositoryProvider)
           .createRelationshipWithManual(name: name, manualName: name);
       if (mounted) context.go('/home/spaces/${result.id}');
-    } on Object {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
-      }
+    } on SpaceFailure catch (failure) {
+      // Antes TODO caía en «No se pudo completar la acción», que no dice ni
+      // qué pasó ni qué hacer. Cada causa real tiene ahora su salida.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(spaceFailureText(l10n, failure.code))),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      debugPrint('crear relación con manual falló: ${error.runtimeType}');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
     } finally {
       if (mounted) setState(() => creatingUid = null);
     }

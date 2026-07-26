@@ -390,6 +390,7 @@
   "spaceTicketUntitled": "Ticket",
   "spaceAddTicket": "Añadir ticket",
   "spaceActionError": "No se pudo completar la acción. Inténtalo de nuevo.",
+  "spaceSessionNotReady": "Tu sesión aún no está lista para compartir gastos. Comprueba que has verificado el correo y completado tu perfil, y vuelve a entrar.",
   "spaceLinkTooltip": "Espacio compartido",
   "spaceLinkTo": "Vincular a {name}",
   "@spaceLinkTo": { "placeholders": { "name": { "type": "String" } } },

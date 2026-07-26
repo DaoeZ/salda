@@ -90,6 +90,10 @@ class FakeAuthRepository implements AuthRepository {
 List<Override> loggedInOverrides({
   FakeFirebaseFirestore? firestore,
   SessionRepository? sessionRepository,
+
+  /// Sustituye el repositorio de espacios: sirve para forzar un fallo del
+  /// servidor sin necesitar Rules.
+  SpacesRepository? spacesRepository,
   // Quien mira. Casi todo se prueba desde 'owner', pero hay pantallas cuyo
   // resultado DEPENDE del lector —el titulo de una relacion (BUG-5)— y hay
   // que poder sentarse en la otra silla.
@@ -125,11 +129,12 @@ List<Override> loggedInOverrides({
       ),
     ),
     spacesRepositoryProvider.overrideWithValue(
-      SpacesRepository(
-        firestore: fake,
-        uid: () => uid,
-        isFullAccount: () => true,
-      ),
+      spacesRepository ??
+          SpacesRepository(
+            firestore: fake,
+            uid: () => uid,
+            isFullAccount: () => true,
+          ),
     ),
     // Sin esto el repositorio economico apuntaba a la instancia REAL de
     // Firestore, asi que en pruebas el balance nunca cargaba y las

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:domain/domain.dart' show ShareCode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,6 +25,33 @@ enum SpaceFailureCode {
   /// modelo (datos antiguos o parciales). Recuperable avisando, nunca
   /// escribiendo encima a ciegas.
   incompatibleData,
+
+  /// El servidor rechazó la escritura. En la práctica significa que la
+  /// sesión NO cumple lo que exigen las Rules para escribir en el ámbito
+  /// social: token todavía anónimo (conversión reciente sin refrescar),
+  /// correo sin verificar, o perfil público sin crear. Se distingue del
+  /// resto porque tiene arreglo por parte del usuario y merece decírselo.
+  permissionDenied,
+}
+
+/// Traduce un fallo de Firestore a un [SpaceFailure] tipado y deja rastro
+/// en consola para diagnóstico.
+///
+/// El rastro lleva la OPERACIÓN y el CÓDIGO, nunca el UID, el manualId ni la
+/// ruta del documento: eso identificaría a personas en un log que puede
+/// acabar en un informe de errores.
+Never _rethrowAsSpaceFailure(String operation, Object error) {
+  if (error is SpaceFailure) throw error;
+  if (error is FirebaseException) {
+    debugPrint('spaces.$operation falló: ${error.code}');
+    throw SpaceFailure(
+      error.code == 'permission-denied'
+          ? SpaceFailureCode.permissionDenied
+          : SpaceFailureCode.notAllowed,
+    );
+  }
+  debugPrint('spaces.$operation falló: ${error.runtimeType}');
+  throw const SpaceFailure(SpaceFailureCode.notAllowed);
 }
 
 /// Cómo terminó `createRelationship`. Distinguirlo es lo que permite a la UI
@@ -429,7 +457,15 @@ class SpacesRepository {
       'updatedAt': FieldValue.serverTimestamp(),
       'schemaVersion': 1,
     });
-    await batch.commit();
+    // Un batch es todo-o-nada: si Rules deniega cualquiera de los tres
+    // documentos no se escribe ninguno, así que no puede quedar un manual
+    // huérfano ni un espacio sin membresía. Lo que faltaba era TRADUCIR el
+    // fallo: `permission-denied` llegaba a la UI como un error genérico.
+    try {
+      await batch.commit();
+    } on Object catch (error) {
+      _rethrowAsSpaceFailure('createRelationshipWithManual', error);
+    }
     return (id: space.id, outcome: RelationshipOutcome.created);
   }
 

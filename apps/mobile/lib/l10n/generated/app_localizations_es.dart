@@ -1085,6 +1085,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo completar la acción. Inténtalo de nuevo.';
 
   @override
+  String get spaceSessionNotReady =>
+      'Tu sesión aún no está lista para compartir gastos. Comprueba que has verificado el correo y completado tu perfil, y vuelve a entrar.';
+
+  @override
   String get spaceLinkTooltip => 'Espacio compartido';
 
   @override
