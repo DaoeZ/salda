@@ -85,6 +85,13 @@ String relationshipSpaceId(String leftUid, String rightUid) {
   return 'relationship_${pair.first}~${pair.last}';
 }
 
+/// ¿Ese id es el de una relación entre dos cuentas? Se deduce del propio
+/// identificador porque hay superficies —una invitación recibida— que
+/// hablan del espacio ANTES de poder leerlo. Solo las v2 tienen id canónico;
+/// las v3 (con MANUAL) usan un id generado y nunca invitan a nadie.
+bool isRelationshipSpaceId(String spaceId) =>
+    spaceId.startsWith('relationship_') && spaceId.contains('~');
+
 /// Membresía = acceso al espacio. El ROL no se persiste: propietario es
 /// quien coincide con `space.ownerUid` (fuente única de verdad, lo que hace
 /// atómica la transferencia); miembro, el resto.

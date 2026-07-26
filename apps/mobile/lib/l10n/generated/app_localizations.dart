@@ -1804,6 +1804,12 @@ abstract class AppLocalizations {
   /// **'Propietario'**
   String get spaceOwnerBadge;
 
+  /// Relleno cuando una identidad existe pero no tiene nombre legible. Nunca se muestra un UID ni un identificador tecnico.
+  ///
+  /// In es, this message translates to:
+  /// **'Persona sin nombre'**
+  String get personUnnamed;
+
   /// No description provided for @spaceGone.
   ///
   /// In es, this message translates to:
@@ -1899,6 +1905,12 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'{name} te invita al espacio \"{space}\"'**
   String spaceInviteText(String name, String space);
+
+  /// Invitacion a una RELACION. No nombra el espacio: una relacion no tiene nombre propio, la otra persona es el contexto.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} quiere compartir gastos contigo'**
+  String relationshipInviteText(String name);
 
   /// No description provided for @spaceInviteAccept.
   ///

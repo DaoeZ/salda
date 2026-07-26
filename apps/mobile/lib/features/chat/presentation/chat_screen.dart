@@ -6,6 +6,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/profile_avatar.dart';
 import '../../spaces/data/spaces_repository.dart';
+import '../../spaces/presentation/space_title_text.dart';
 import '../data/chat_repository.dart';
 import '../domain/chat_message.dart';
 
@@ -147,10 +148,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(l10n.chatTitle),
-            Text(
-              space.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            SpaceTitleText(
+              spaceId: space.id,
+              storedName: space.name,
               style: Theme.of(context).textTheme.labelMedium,
             ),
           ],

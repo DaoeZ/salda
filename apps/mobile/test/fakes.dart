@@ -89,39 +89,44 @@ class FakeAuthRepository implements AuthRepository {
 List<Override> loggedInOverrides({
   FakeFirebaseFirestore? firestore,
   SessionRepository? sessionRepository,
+  // Quien mira. Casi todo se prueba desde 'owner', pero hay pantallas cuyo
+  // resultado DEPENDE del lector —el titulo de una relacion (BUG-5)— y hay
+  // que poder sentarse en la otra silla.
+  String uid = 'owner',
+  String displayName = 'Edgar',
 }) {
   final fake = firestore ?? FakeFirebaseFirestore();
   return [
     authRepositoryProvider.overrideWithValue(
       FakeAuthRepository(
-        user: const AppUser(uid: 'owner', displayName: 'Edgar'),
+        user: AppUser(uid: uid, displayName: displayName),
       ),
     ),
     sessionRepositoryProvider.overrideWithValue(
       sessionRepository ??
           FirestoreSessionRepository(
             firestore: fake,
-            uid: () => 'owner',
+            uid: () => uid,
             shareCodeFactory: () => 'TEST-CODE-1234567890',
           ),
     ),
     frequentPeopleRepositoryProvider.overrideWithValue(
-      FrequentPeopleRepository(firestore: fake, uid: () => 'owner'),
+      FrequentPeopleRepository(firestore: fake, uid: () => uid),
     ),
     profileRepositoryProvider.overrideWithValue(
-      ProfileRepository(firestore: fake, uid: () => 'owner'),
+      ProfileRepository(firestore: fake, uid: () => uid),
     ),
     friendshipRepositoryProvider.overrideWithValue(
       FriendshipRepository(
         firestore: fake,
-        uid: () => 'owner',
+        uid: () => uid,
         isFullAccount: () => true,
       ),
     ),
     spacesRepositoryProvider.overrideWithValue(
       SpacesRepository(
         firestore: fake,
-        uid: () => 'owner',
+        uid: () => uid,
         isFullAccount: () => true,
       ),
     ),

@@ -978,6 +978,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get spaceOwnerBadge => 'Propietario';
 
   @override
+  String get personUnnamed => 'Persona sin nombre';
+
+  @override
   String get spaceGone => 'Ya no tienes acceso a este espacio.';
 
   @override
@@ -1035,6 +1038,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String spaceInviteText(String name, String space) {
     return '$name te invita al espacio \"$space\"';
+  }
+
+  @override
+  String relationshipInviteText(String name) {
+    return '$name quiere compartir gastos contigo';
   }
 
   @override

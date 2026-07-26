@@ -9,6 +9,7 @@ import '../../profile/presentation/profile_avatar.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_models.dart';
 import 'space_avatar.dart';
+import 'space_title_text.dart';
 
 /// Lista de espacios (P4): invitaciones recibidas, activos y archivados.
 class SpacesScreen extends ConsumerWidget {
@@ -111,7 +112,7 @@ class _SpaceTile extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
       child: ListTile(
         leading: SpaceAvatar(space: space),
-        title: Text(space.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: SpaceTitleText(spaceId: space.id, storedName: space.name),
         subtitle: isOwner ? Text(l10n.spaceOwnerBadge) : null,
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push('/home/spaces/${space.id}'),
@@ -174,11 +175,16 @@ class _InviteCardState extends ConsumerState<_InviteCard> {
                   const SizedBox(width: TokenSpacing.sm),
                 ],
                 Expanded(
+                  // Una RELACIÓN no tiene nombre propio que anunciar: el
+                  // contexto ES la otra persona. Nombrar aquí el espacio
+                  // enseñaba la concatenación «Edgar · Pedro» (BUG-5).
                   child: Text(
-                    l10n.spaceInviteText(
-                      from?.displayName ?? '…',
-                      widget.invite.spaceName,
-                    ),
+                    isRelationshipSpaceId(widget.invite.spaceId)
+                        ? l10n.relationshipInviteText(from?.displayName ?? '…')
+                        : l10n.spaceInviteText(
+                            from?.displayName ?? '…',
+                            widget.invite.spaceName,
+                          ),
                   ),
                 ),
               ],

@@ -94,10 +94,16 @@ class _CreateRelationshipScreenState
     final l10n = AppLocalizations.of(context);
     setState(() => creatingUid = other.uid);
     try {
-      final own = ref.read(myProfileProvider).value;
-      final name = own == null
-          ? other.displayName
-          : '${own.displayName} · ${other.displayName}';
+      // BUG-5: aquí se guardaba «Edgar · Pedro», un nombre que no era
+      // correcto para NINGUNO de los dos — el título de una relación es la
+      // otra persona y eso depende de quién mire, así que se resuelve al
+      // leer. El campo persistido sobrevive solo como relleno para quien no
+      // puede resolver (alguien ajeno, un evento de un espacio ya perdido),
+      // y Rules lo exige de 2 a 40 caracteres, así que se guarda el nombre
+      // de la otra persona: sin concatenar y sin inventar nada.
+      final name = other.displayName.trim().isEmpty
+          ? other.username.trim()
+          : other.displayName.trim();
       final result = await ref
           .read(spacesRepositoryProvider)
           .createRelationship(toUid: other.uid, name: name);

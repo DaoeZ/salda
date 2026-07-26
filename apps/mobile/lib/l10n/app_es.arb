@@ -350,6 +350,10 @@
   "spaceNameHint": "Viaje a Lisboa, Piso, Peña…",
   "spaceEmojiLabel": "Emoji (opcional)",
   "spaceOwnerBadge": "Propietario",
+  "personUnnamed": "Persona sin nombre",
+  "@personUnnamed": {
+    "description": "Relleno cuando una identidad existe pero no tiene nombre legible. Nunca se muestra un UID ni un identificador tecnico."
+  },
   "spaceGone": "Ya no tienes acceso a este espacio.",
   "spaceMembersTitle": "Miembros",
   "spaceMembersCount": "{count, plural, =1{1 miembro} other{{count} miembros}}",
@@ -368,6 +372,11 @@
   "spaceInviteCancel": "Cancelar invitación",
   "spaceInviteText": "{name} te invita al espacio \"{space}\"",
   "@spaceInviteText": { "placeholders": { "name": { "type": "String" }, "space": { "type": "String" } } },
+  "relationshipInviteText": "{name} quiere compartir gastos contigo",
+  "@relationshipInviteText": {
+    "description": "Invitacion a una RELACION. No nombra el espacio: una relacion no tiene nombre propio, la otra persona es el contexto.",
+    "placeholders": { "name": { "type": "String" } }
+  },
   "spaceInviteAccept": "Unirme",
   "spaceInviteReject": "Rechazar",
   "spaceTransferTitle": "Transferir propiedad",

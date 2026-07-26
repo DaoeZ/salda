@@ -97,6 +97,47 @@ cuentas.** Una relación v3 tiene un solo miembro y aun así está completa: el
 manual ocupa la segunda plaza. El detalle cuenta `miembros + manuales`, igual
 que ya hacía la hoja de reparto de un ticket.
 
+### El título de una relación se resuelve al leer, no se guarda
+
+Un grupo tiene nombre propio y elegido: «Piso», «Viaje a Madrid». Una
+relación **no tiene nombre**. Lo que cada persona espera ver es *la otra*:
+Edgar ve «Pedro» y Pedro ve «Edgar», sobre el MISMO documento. Eso no es un
+dato que pueda persistirse, así que se resuelve en tiempo de lectura.
+
+La regla, en `features/spaces/domain/space_title.dart` (Dart puro):
+
+1. obtener las dos identidades económicas efectivas;
+2. excluir la de quien mira;
+3. enseñar el mejor nombre de la otra — `displayName`, si no `@username`
+   (con `@` solo cuando existe de verdad), si no «Persona sin nombre».
+
+En una **v2** las identidades son `relationshipUids`; el orden lexicográfico
+fija el id canónico pero **no** decide el título. En una **v3** el propietario
+ve el nombre del MANUAL, y quien se vincula a ese manual (ADR-037) ES esa
+identidad, así que para él la otra parte es el propietario: contarlos por
+separado le enseñaría su propio nombre. La vinculación no cambia el histórico
+ni el actor `manual:{id}`, solo quién puede leer.
+
+Nunca se muestran `relationshipManualId`, un UID ni `manual:{id}`. Cuando la
+relación no se puede resolver —alguien ajeno, una pareja con UID repetido, un
+espacio con más o menos identidades de las esperadas— se cae al nombre
+persistido y se registra el MOTIVO por consola, sin identificadores.
+
+**Persistencia:** el campo `name` de una relación queda como **dato legado y
+relleno**, nunca como fuente de lo que se pinta. No hay migración: los
+nombres históricos se conservan tal cual. Rules sigue exigiendo 2..40
+caracteres, así que al crear una v2 se guarda el nombre de la otra persona
+—sin concatenar— en vez de «Edgar · Pedro», que no era correcto para ninguno
+de los dos. Como el título es derivado, el menú «Editar nombre» solo aparece
+en grupos; en una v3 se renombra al MANUAL desde su propia ficha.
+
+Todas las superficies leen del mismo sitio (`spaceTitleProvider`): Inicio,
+lista de espacios, cabecera del detalle, chat, selector de contexto, menú de
+vinculación de un ticket, iniciales del avatar y frases de actividad. Una
+invitación es el único caso que no puede resolver contra el espacio —quien la
+recibe aún no puede leerlo—, así que usa el `fromUid`: en una relación, quien
+invita es por definición la otra persona.
+
 **Añadir personas a mano es una acción de GRUPOS.** En una relación las dos
 identidades ya están decididas: en v2 la segunda plaza la reserva la
 invitación, y en v3 la ocupa su manual. Por eso el detalle de una relación no

@@ -19,6 +19,7 @@ import '../sessions/presentation/settlement_progress_bar.dart';
 import '../spaces/data/spaces_repository.dart';
 import '../spaces/domain/space_models.dart';
 import '../spaces/presentation/space_avatar.dart';
+import '../spaces/presentation/space_title_text.dart';
 import '../spaces/presentation/spaces_screen.dart';
 
 /// Historial de sesiones (RF-80/82) + FAB de escaneo.
@@ -250,10 +251,9 @@ class _ContextSection extends StatelessWidget {
           Card(
             child: ListTile(
               leading: SpaceAvatar(space: space),
-              title: Text(
-                space.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              title: SpaceTitleText(
+                spaceId: space.id,
+                storedName: space.name,
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/home/spaces/${space.id}'),
@@ -289,11 +289,7 @@ class _HomeInviteCardState extends ConsumerState<_HomeInviteCard> {
     final repo = ref.read(spacesRepositoryProvider);
     return Card(
       child: ListTile(
-        title: Text(
-          widget.invite.spaceName,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: SpaceInviteTitle(invite: widget.invite),
         subtitle: Text(l10n.contextInvitationPending),
         trailing: Wrap(
           children: [
@@ -450,7 +446,10 @@ class _DraftBanner extends ConsumerWidget {
                         SimpleDialogOption(
                           onPressed: () =>
                               Navigator.pop(dialogContext, space),
-                          child: Text(space.name),
+                          child: SpaceTitleText(
+                            spaceId: space.id,
+                            storedName: space.name,
+                          ),
                         ),
                     ],
                   ),

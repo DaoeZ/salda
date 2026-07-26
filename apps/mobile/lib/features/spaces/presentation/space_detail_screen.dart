@@ -18,6 +18,7 @@ import '../data/manual_link_repository.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_models.dart';
 import 'space_avatar.dart';
+import 'space_title_text.dart';
 
 /// Detalle de un espacio (P4): miembros, invitaciones, tickets vinculados y
 /// acciones según rol. La membresía es social: nada de lo que se haga aquí
@@ -86,7 +87,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(space.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: SpaceTitleText(spaceId: space.id, storedName: space.name),
         bottom: _scanning
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -109,7 +110,12 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
             },
             itemBuilder: (_) => [
               if (amOwner) ...[
-                PopupMenuItem(value: 'edit', child: Text(l10n.spaceEditName)),
+                // Solo GRUPOS: el título de una relación es la otra persona,
+                // resuelto al leer (BUG-5). Editar el nombre persistido no
+                // cambiaría nada de lo que se ve — sería un menú que miente.
+                // El nombre de un MANUAL sí se edita, en su propia ficha.
+                if (!space.isRelationship)
+                  PopupMenuItem(value: 'edit', child: Text(l10n.spaceEditName)),
                 // Solo GRUPOS: una relación reserva una pareja canónica de
                 // UID y no admite un tercero (ADR-030), así que un enlace no
                 // tendría a quién admitir.
@@ -145,7 +151,11 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(space.name, style: theme.textTheme.titleLarge),
+                    SpaceTitleText(
+                      spaceId: space.id,
+                      storedName: space.name,
+                      style: theme.textTheme.titleLarge,
+                    ),
                     Text(
                       l10n.spaceMembersCount(members.length),
                       style: theme.textTheme.bodySmall,

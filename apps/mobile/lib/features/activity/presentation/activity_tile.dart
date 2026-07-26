@@ -7,13 +7,23 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../spaces/presentation/space_title_text.dart';
 import '../../profile/presentation/profile_avatar.dart';
 import '../domain/activity_models.dart';
 
 /// Texto de la acción por tipo. El objeto va en el propio texto (rótulo
 /// congelado) y el actor se resuelve en vivo por UID.
-String activityText(AppLocalizations l10n, ActivityEvent event) {
-  final space = event.spaceName;
+///
+/// [spaceName] permite sustituir el nombre CONGELADO del espacio por el que
+/// corresponde a quien lee (BUG-5): en una relación, el evento guarda
+/// «Edgar · Pedro» y cada uno debe leer a la otra persona. El evento no se
+/// reescribe — sigue siendo el rastro de auditoría de P6.
+String activityText(
+  AppLocalizations l10n,
+  ActivityEvent event, {
+  String? spaceName,
+}) {
+  final space = spaceName ?? event.spaceName;
   final ticket =
       event.ticketName.isEmpty ? event.sessionName : event.ticketName;
   return switch (event.type) {
@@ -61,6 +71,16 @@ class ActivityTile extends ConsumerWidget {
     final theme = Theme.of(context);
     final actor = ref.watch(publicProfileProvider(event.actorUid)).value;
     final actorName = actor?.displayName ?? l10n.activityActorFallback;
+    // El nombre congelado sirve de relleno: para un grupo ya es el bueno, y
+    // para un espacio al que se perdió el acceso es lo único que queda.
+    final spaceId = event.spaceId;
+    final spaceName = spaceId == null
+        ? event.spaceName
+        : spaceTitleLabel(
+            ref.watch(spaceTitleProvider(spaceId)),
+            l10n,
+            event.spaceName,
+          );
 
     return ListTile(
       onTap: () => _open(context),
@@ -70,7 +90,7 @@ class ActivityTile extends ConsumerWidget {
         radius: 18,
       ),
       title: Text(
-        activityText(l10n, event),
+        activityText(l10n, event, spaceName: spaceName),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),

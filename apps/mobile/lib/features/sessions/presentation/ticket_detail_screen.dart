@@ -12,6 +12,7 @@ import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../spaces/data/spaces_repository.dart';
+import '../../spaces/presentation/space_title_text.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../data/ticket_links_repository.dart';
@@ -152,7 +153,11 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
           if (space.isActive && space.id != _spaceId)
             PopupMenuItem(
               value: space.id,
-              child: Text(l10n.spaceLinkTo(space.name)),
+              child: SpaceTitleText(
+                spaceId: space.id,
+                storedName: space.name,
+                format: l10n.spaceLinkTo,
+              ),
             ),
         if (linked)
           PopupMenuItem(

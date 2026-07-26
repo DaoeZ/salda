@@ -55,6 +55,7 @@ void main() {
       'schemaVersion': 2,
     });
     await firestore.doc('spaces/rel2/members/owner').set({'uid': 'owner'});
+    await firestore.doc('profiles/uid-ana').set({'displayName': 'Ana'});
 
     // Relación v3: su segunda identidad es un manual.
     await firestore.doc('spaces/rel3').set({
@@ -80,7 +81,8 @@ void main() {
     tester,
   ) async {
     await pump(tester, 'rel2');
-    expect(find.text('Ana y yo'), findsWidgets);
+    // El título es la otra persona, no el nombre persistido (BUG-5).
+    expect(find.text('Ana'), findsWidgets);
     // La sección entera desaparece: no hay manuales ni forma de añadirlos.
     expect(find.text('Añadir'), findsNothing);
     expect(find.text('Personas sin cuenta'), findsNothing);
