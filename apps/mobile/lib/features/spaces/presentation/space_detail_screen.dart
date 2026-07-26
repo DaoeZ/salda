@@ -201,7 +201,16 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
           if (amOwner) _PendingInvites(spaceId: space.id),
           _ManualParticipants(
             spaceId: space.id,
-            canEdit: amOwner && space.isActive,
+            // BUG-4: añadir personas a mano es de GRUPOS. Una relación tiene
+            // exactamente dos identidades y ya están decididas: en v2 la
+            // segunda plaza la reserva la invitación, y en v3 la ocupa su
+            // manual. Ofrecerlo aquí invitaba a crear un estado incoherente
+            // que Rules rechaza — un botón que solo podía terminar en error.
+            canAdd: amOwner && space.isActive && !space.isRelationship,
+            // El manual de la segunda plaza de una relación NO es un
+            // participante retirable: quitarlo dejaría una sola identidad.
+            canRemove: amOwner && space.isActive && !space.isRelationship,
+            canRename: amOwner && space.isActive,
           ),
           if (amOwner)
             Card(
@@ -479,10 +488,17 @@ class _MemberTile extends ConsumerWidget {
 /// participan en gastos y balances como cualquier miembro registrado, pero
 /// no reciben invitación ni acceso porque no tienen dispositivo.
 class _ManualParticipants extends ConsumerWidget {
-  const _ManualParticipants({required this.spaceId, required this.canEdit});
+  const _ManualParticipants({
+    required this.spaceId,
+    required this.canAdd,
+    required this.canRemove,
+    required this.canRename,
+  });
 
   final String spaceId;
-  final bool canEdit;
+  final bool canAdd;
+  final bool canRemove;
+  final bool canRename;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -491,7 +507,9 @@ class _ManualParticipants extends ConsumerWidget {
     final manuals =
         ref.watch(spaceManualParticipantsProvider(spaceId)).value ??
         const <ManualParticipant>[];
-    if (manuals.isEmpty && !canEdit) return const SizedBox.shrink();
+    // Sin manuales y sin poder añadirlos —una relación v2— la sección no
+    // pinta nada: no hay ningún control de grupo que enseñar.
+    if (manuals.isEmpty && !canAdd) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,7 +523,7 @@ class _ManualParticipants extends ConsumerWidget {
                 style: theme.textTheme.titleSmall,
               ),
             ),
-            if (canEdit)
+            if (canAdd)
               TextButton.icon(
                 onPressed: () => _editName(context, ref),
                 icon: const Icon(Icons.person_add_alt, size: 18),
@@ -542,20 +560,25 @@ class _ManualParticipants extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(l10n.manualParticipantHint),
-                    trailing: canEdit
+                    trailing: canRename || canRemove
                         ? PopupMenuButton<String>(
                             onSelected: (action) => action == 'rename'
                                 ? _editName(context, ref, manual: manual)
                                 : _confirmRemove(context, ref, manual),
                             itemBuilder: (_) => [
-                              PopupMenuItem(
-                                value: 'rename',
-                                child: Text(l10n.manualParticipantRename),
-                              ),
-                              PopupMenuItem(
-                                value: 'remove',
-                                child: Text(l10n.manualParticipantRemove),
-                              ),
+                              if (canRename)
+                                PopupMenuItem(
+                                  value: 'rename',
+                                  child: Text(l10n.manualParticipantRename),
+                                ),
+                              // En una relación el manual ocupa la segunda
+                              // plaza: retirarlo dejaría una sola identidad,
+                              // así que la opción no existe.
+                              if (canRemove)
+                                PopupMenuItem(
+                                  value: 'remove',
+                                  child: Text(l10n.manualParticipantRemove),
+                                ),
                             ],
                           )
                         : null,

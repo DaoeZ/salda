@@ -778,6 +778,12 @@ service cloud.firestore {
           == resource.data.get('kind', 'group')
         && request.resource.data.get('relationshipUids', [])
           == resource.data.get('relationshipUids', [])
+        // BUG-4: la segunda identidad de una relación v3 es INMUTABLE.
+        // Reapuntarla a otro manual sustituiría a la persona con la que se
+        // comparten los gastos dejando intacto todo el histórico, que
+        // seguiría escrito con el actor del manual anterior.
+        && request.resource.data.get('relationshipManualId', '')
+          == resource.data.get('relationshipManualId', '')
         && (
           // Editar nombre/avatar o archivar/reactivar: el owner no cambia.
           (request.resource.data.ownerUid == resource.data.ownerUid)

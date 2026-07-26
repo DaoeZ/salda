@@ -3114,6 +3114,68 @@ describe('relacion con participante MANUAL', () => {
     await assertFails(crear(db(THIRD), FOURTH, 'relman7', 'pablo7'));
   });
 
+  it('BUG-4: una relacion v2 PENDIENTE no admite manuales', async () => {
+    // Segunda plaza reservada por la invitacion: un manual seria un tercero.
+    const id = `relationship_${[FOURTH, THIRD].sort().join('~')}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${id}`), {
+      name: 'Pendiente', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD].sort(), status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${id}/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() });
+    batch.set(doc(f, `spaceInvites/${id}_${THIRD}`), {
+      spaceId: id, spaceName: 'Pendiente', fromUid: FOURTH, toUid: THIRD,
+      status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await batch.commit();
+
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/${id}/manualParticipants/colado`), {
+        manualId: 'colado', displayName: 'Colado', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    // Y la segunda plaza sigue sin poder ocuparla otro UID.
+    await assertFails(setDoc(
+      doc(db(OWNER), `spaces/${id}/members/${OWNER}`),
+      { uid: OWNER, joinedAt: serverTimestamp() }));
+  });
+
+  it('BUG-4: en v3 no se sustituye el manual por otro', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman8', 'pablo8');
+    // Ni añadiendo uno nuevo...
+    await assertFails(setDoc(
+      doc(db(FOURTH), 'spaces/relman8/manualParticipants/sustituto'), {
+        manualId: 'sustituto', displayName: 'Otro', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    // ...ni reapuntando el espacio a otro manual.
+    await assertFails(updateDoc(doc(db(FOURTH), 'spaces/relman8'),
+      { relationshipManualId: 'sustituto', updatedAt: serverTimestamp() }));
+  });
+
+  it('BUG-4: los GRUPOS conservan sus acciones', async () => {
+    // Regresion: añadir manual e invitar cuentas siguen funcionando.
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/nuevo'), {
+        manualId: 'nuevo', displayName: 'Invitada', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${FOURTH}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: FOURTH, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+  });
+
   it('LEGACY: las relaciones de dos cuentas siguen igual', async () => {
     // v2 con id canonico: intacto, y sin relationshipManualId.
     const id = `relationship_${[FOURTH, THIRD].sort().join('~')}`;

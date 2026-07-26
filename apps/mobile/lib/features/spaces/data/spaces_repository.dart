@@ -163,6 +163,15 @@ class SpacesRepository {
     if (name.isEmpty || name.length > 40) {
       throw const SpaceFailure(SpaceFailureCode.notAllowed);
     }
+    // BUG-4: solo los GRUPOS admiten personas añadidas a mano. Una relación
+    // tiene sus dos identidades decididas —la invitación reserva la segunda
+    // en v2, y el manual la ocupa en v3—, así que añadir otra la rompería.
+    // Rules ya lo deniega; aquí se corta antes para dar un error con sentido
+    // y para que un cliente modificado no dependa solo del servidor.
+    final space = await _spaces.doc(spaceId).get();
+    if (space.data()?['kind'] == SpaceKind.relationship.name) {
+      throw const SpaceFailure(SpaceFailureCode.notAllowed);
+    }
     final doc = _spaces.doc(spaceId).collection('manualParticipants').doc();
     await doc.set({
       'manualId': doc.id,

@@ -81,7 +81,9 @@ Sigue habiendo **exactamente dos identidades económicas**: el UID del
 propietario y el actor `manual:{manualId}`, que participa en repartos,
 balances, pagos y liquidaciones igual que una cuenta (ADR-033). Rules impide
 un segundo manual, una tercera cuenta, retirar el manual de la segunda plaza
-y convertir la relación en grupo.
+y convertir la relación en grupo. `relationshipManualId` es además
+**inmutable**: reapuntarlo a otro manual cambiaría de persona la deuda ya
+registrada sin tocar el histórico.
 
 **Las relaciones entre dos cuentas no cambian**: siguen en `schemaVersion: 2`
 con el id canónico `relationship_{uidMenor}~{uidMayor}`, que es lo que impide
@@ -94,6 +96,17 @@ UID en `linkedUid` sin tocar el actor histórico ni reescribir nada.
 cuentas.** Una relación v3 tiene un solo miembro y aun así está completa: el
 manual ocupa la segunda plaza. El detalle cuenta `miembros + manuales`, igual
 que ya hacía la hoja de reparto de un ticket.
+
+**Añadir personas a mano es una acción de GRUPOS.** En una relación las dos
+identidades ya están decididas: en v2 la segunda plaza la reserva la
+invitación, y en v3 la ocupa su manual. Por eso el detalle de una relación no
+ofrece «añadir» ni «quitar» manuales —solo renombrar el suyo—, y el
+repositorio rechaza la petición antes de llegar al servidor. Rules lo deniega
+igualmente: es la autoridad, la UI solo evita ofrecer un botón que únicamente
+podía terminar en error. Una relación v2 pendiente, que no tiene manuales ni
+puede tenerlos, no pinta la sección en absoluto. Y mientras el espacio se
+carga tampoco se pinta: sin saber su tipo, la pantalla no enseña acciones que
+después retiraría.
 
 Probado extremo a extremo contra el emulador
 (`relationshipManual.it.test.ts`): se reparte, los balances salen
