@@ -1581,6 +1581,15 @@ mismo contexto; `resolveActorIdentity` queda escrita para ese día. Interfaz:
 «Soy yo» en el ticket abierto por enlace y bandeja «Solicitudes de identidad»
 en el detalle del grupo, con aceptar y rechazar. Contrato en
 `docs/VINCULACION.md`.
+**Propagación ASÍNCRONA:** `accepted` no equivale a acceso. El vínculo nace
+`processing` y solo pasa a `active` cuando `propagateOnManualLink` reproyecta
+todas las sesiones afectadas —localizadas por `collectionGroup('participants')
+.where('manualId')`, no por `session.spaceId`, que omitía casos—. Una sesión
+afectada sin contexto estable deja el vínculo en `failed` con motivo, nunca
+`active` a medias; reintentar es volver a `processing`. Un GUEST no puede
+solicitar: debe convertirse en cuenta antes (su UID anónimo muere con el
+dispositivo y vincular es irreversible). La bandeja global del anfitrión se
+apoya en `spaceOwnerUid` denormalizado y validado por Rules.
 **Revisión:** decidir si la actividad (P6) debe registrar la vinculación como
 un hecho más de la cronología.
 

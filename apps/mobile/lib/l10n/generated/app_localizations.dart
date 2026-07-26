@@ -3106,6 +3106,24 @@ abstract class AppLocalizations {
   /// **'Identidad vinculada'**
   String get manualLinkLinked;
 
+  /// No description provided for @manualLinkPendingInSpace.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{1 solicitud} other{{count} solicitudes}}'**
+  String manualLinkPendingInSpace(int count);
+
+  /// No description provided for @manualLinkProcessing.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculando… tendrás acceso en unos segundos'**
+  String get manualLinkProcessing;
+
+  /// No description provided for @manualLinkFailedLegacy.
+  ///
+  /// In es, this message translates to:
+  /// **'Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.'**
+  String get manualLinkFailedLegacy;
+
   /// No description provided for @ticketLinkPreparing.
   ///
   /// In es, this message translates to:

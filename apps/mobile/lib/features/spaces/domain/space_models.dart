@@ -178,6 +178,8 @@ class ManualLinkRequest {
     required this.uid,
     required this.status,
     this.displayName = '',
+    this.spaceId = '',
+    this.attempt = 1,
     this.createdAt,
   });
 
@@ -185,10 +187,18 @@ class ManualLinkRequest {
   final String manualId;
   final String uid;
 
+  /// Espacio al que pertenece. Se deriva de la ruta del documento en la
+  /// bandeja global, donde hace falta para agrupar y navegar.
+  final String spaceId;
+
   /// Nombre con el que se presenta quien solicita. Solo presentación: la
   /// identidad es el UID, y el actor económico sigue siendo el manual.
   final String displayName;
   final ManualLinkStatus status;
+
+  /// Número de intento. Un rechazo no deja a nadie sin salida —el anfitrión
+  /// puede equivocarse— pero cada reintento queda contado.
+  final int attempt;
   final DateTime? createdAt;
 
   bool get isPending => status == ManualLinkStatus.pending;

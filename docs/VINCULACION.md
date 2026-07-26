@@ -39,6 +39,78 @@ spaces/{spaceId}/manualLinkRequests/{manualId}_{uid}
 a efectos de audiencia**. Nada más cambia: mismos ids de documento, mismos
 actores, mismos importes, mismos balances, mismas liquidaciones.
 
+## Efecto real: propagación con estado explícito (C1)
+
+`recompute` lee los alias del espacio, pero escribir `linkedUid` no disparaba
+nada: la app decía «vinculado» y el acceso no existía hasta que alguien
+editaba un ticket por otro motivo. **Corregido con reproyección explícita.**
+
+- `propagateOnManualLink` (trigger sobre `manualParticipants`) detecta la
+  transición `linkedUid: null → uid` y reproyecta **todas las sesiones
+  afectadas**. El criterio es el real —`collectionGroup('participants')
+  .where('manualId','==',…)`— y no `session.spaceId`: `linkTicket` vincula el
+  TICKET a un espacio sin tocar la sesión, así que filtrar por `spaceId`
+  omitía sesiones afectadas (M3).
+- El vínculo nace `linkStatus: 'processing'` y solo pasa a `'active'` cuando
+  la propagación termina. **La UI nunca afirma acceso que no exista.** Si
+  falla queda `'failed'` con el motivo; reintentar es seguro porque
+  `recomputeSession` converge y solo escribe si algo cambió.
+
+**Por qué reproyectar y no resolver al leer.** Resolver el alias en la
+consulta obligaría al cliente a buscar además por `debtorUid`/`creditorUid`,
+a que Rules autorizasen cada documento con un `get()` por página, y sobre
+todo a **consolidar saldos en el cliente**, rompiendo DC-7 (la function es la
+calculadora autoritativa). Además la supresión de auto-deudas (C2) tiene que
+ocurrir en el motor: resolver C1 al leer y C2 al calcular dejaría el modelo
+híbrido que hay que evitar.
+
+### Sesiones sin contexto estable (M3)
+
+Una sesión afectada **sin `spaceId`** no puede resolver alias —`recompute`
+los lee del espacio de la sesión—, así que reproyectarla dejaría el vínculo a
+medias. En vez de omitirla en silencio, la propagación **se detiene**:
+`linkStatus: 'failed'` con `linkError: 'legacy-sessions-without-context'` y
+el número de sesiones bloqueadas. **El estado nunca termina en `active`
+habiendo dejado economía fuera.** La app lo traduce a un mensaje
+comprensible; el detalle completo vive solo en logs.
+
+### La vinculación es ASÍNCRONA
+
+Conviene decirlo sin rodeos:
+
+- `accepted` **no equivale todavía a acceso**. Significa que el anfitrión
+  aprobó, no que la reproyección haya terminado.
+- El acceso solo es efectivo en **`active`**.
+- Una propagación puede **fallar** y se reintenta devolviendo el estado a
+  `processing`; el trigger reconoce esa transición además del alta.
+- El histórico no se reescribe, pero **la materialización de documentos
+  derivados sí puede cambiar** (ver más abajo).
+
+## Una persona nunca se debe dinero a sí misma (C2)
+
+Dos actores distintos pueden ser la misma persona: su UID y un
+`manual:{id}` vinculado a ese UID. Antes eso generaba una obligación consigo
+mismo y una liquidación pidiendo transferirse dinero.
+
+`recompute` compara ahora la **identidad efectiva** (`resolveActorIdentity`,
+que ya no es código muerto) y omite la obligación cuando deudor y acreedor
+son la misma persona. **No se toca el reparto**: `balances` y
+`sessionTotals` son idénticos antes y después; lo único que cambia es qué
+obligaciones se publican. Los actores históricos siguen intactos.
+
+Además, la reserva `linkedIdentities/{uid}` impide de raíz que una persona
+quede vinculada a dos manuales del mismo espacio.
+
+## Invitados: hay que convertirse en cuenta antes (M1)
+
+Un GUEST **no puede solicitar** la vinculación. Su UID vive en una sesión
+anónima ligada al dispositivo: atarle un historial económico lo condenaría a
+desaparecer con el móvil, y como vincular es irreversible no habría rescate.
+Debe convertir su acceso en cuenta primero — la conversión **conserva el
+UID** (ADR-023), así que no pierde nada. Decisión deliberada frente a
+implementar una recuperación auditada: menos superficie y ningún estado
+irrecuperable.
+
 ## Seguridad: aprobación del anfitrión
 
 Vincular es apropiarse de un historial económico, así que hacen falta **dos
@@ -55,8 +127,15 @@ partes**:
 Invariantes que Rules impone:
 
 - un manual **no puede nacer vinculado**;
-- **vincular es irreversible**: ni se revincula ni se desvincula, porque eso
-  reescribiría a quién pertenece un historial ya escrito;
+- **vincular es irreversible**: ni se revincula, ni se desvincula, **ni se
+  borra el manual vinculado** — el borrado era una puerta trasera que
+  eliminaba el alias y dejaba la solicitud aceptada apuntando a la nada;
+- **solo pueden solicitarlo** quienes tienen relación real con el manual:
+  miembros del espacio, o quien posea un `ticketAccess` vigente cuyo manual y
+  pid coincidan según la proyección autoritativa. Conocer el `manualId` no
+  basta: el enlace de ticket lo publica a cualquiera que lo reciba;
+- el **nombre declarado** por quien solicita está acotado (1..40) y congelado
+  tras crear: es la prueba de qué se le enseñó al anfitrión al decidir;
 - no se solicita sobre un manual ya vinculado;
 - las solicitudes **no son enumerables** salvo por el anfitrión;
 - las solicitudes **no se borran**: son el rastro de que hubo aprobación.
@@ -69,9 +148,17 @@ documentos existentes siguen siendo válidos tal cual. Un `linkedUid` nulo
 
 ## Qué se conserva
 
-Gastos, balances, pagos, actividad e historial: intactos, con pruebas que lo
-demuestran comparando el agregado antes y después de vincular (mismos ids,
-mismos actores, mismos importes, mismos `settlementSync`, mismo pid).
+Gastos, balances, pagos, actividad e historial: intactos. Comparando el
+agregado antes y después de vincular se conservan **actores, importes,
+deudor, acreedor, pid y `settlementSync`**.
+
+**Matiz importante, antes lo afirmé de más**: no es cierto que el conjunto de
+documentos sea siempre idéntico. Entre dos manuales sin lectores, la
+obligación no se publicaba (`readers.length === 0`); al vincular a uno,
+**aparece** un `economicEntry` que antes no existía. Y con C2, cuando deudor
+y acreedor resultan ser la misma persona, un documento **desaparece**. Lo que
+se garantiza es que ningún importe, actor ni reparto cambia — no que la
+materialización proyectada sea la misma.
 
 ## Pruebas
 
@@ -82,6 +169,54 @@ mismos actores, mismos importes, mismos `settlementSync`, mismo pid).
   negativas — suplantación sin aprobación, pedir en nombre de otro,
   autoaprobarse, escribir el vínculo sin solicitud, revincular, desvincular,
   solicitar sobre uno ya vinculado, enumerar, borrar el rastro.
+
+## Bandeja global del anfitrión (M4)
+
+Un indicador en Inicio con el total de solicitudes pendientes de **todos** sus
+grupos, agrupadas por espacio y con acceso directo. Antes había que entrar
+grupo por grupo para descubrirlas.
+
+Se apoya en `spaceOwnerUid` denormalizado en la solicitud: lo aporta el
+cliente pero **no lo controla** — Rules lo valida contra el propietario real
+del espacio y lo hace inmutable. Sin él, un collection group necesitaría un
+`get()` por documento y sería inviable. Índice compuesto
+`(spaceOwnerUid, status)`.
+
+## Vocabulario, para no confundir capas
+
+| Término | Qué es |
+|---|---|
+| **Actor histórico** | `manual:{manualId}` o un UID. Es lo escrito en los documentos y **nunca cambia**. |
+| **Identidad efectiva** | A quién corresponde ese actor hoy, aplicando alias. Solo se usa para decidir. |
+| **Obligación calculada** | Lo que el motor deriva del reparto. |
+| **Documento materializado** | El `economicEntry` que llega a escribirse. **Puede aparecer o desaparecer** al vincular. |
+| **Audiencia** | `memberUids`: quién puede leerlo. Es lo que amplía la vinculación. |
+
+## Ciclo de vida de la solicitud
+
+```
+(nada) --crear--> pending --anfitrión acepta--> accepted   [TERMINAL]
+                     |                              `-> linkStatus: processing -> active | failed
+                     |--anfitrión rechaza--------> rejected
+                     |--el solicitante retira----> rejected
+                                                      |
+                                                      `--nuevo intento--> pending (attempt+1)
+```
+
+- **Una solicitud por `manualId + uid`**, con ID determinista: crear es
+  idempotente y reintentar no duplica.
+- **`accepted` es terminal de verdad**: no vuelve a `pending` ni a
+  `rejected`. Es lo que respalda un vínculo ya escrito.
+- **`rejected` no deja a nadie sin salida**: el solicitante puede volver a
+  intentarlo subiendo `attempt`. No se reescribe un terminal en silencio —el
+  contador es el rastro— y el reintento exige que el manual siga sin vincular
+  y que ese UID no tenga ya reserva.
+- **Nunca se borra** una solicitud: es la prueba de que hubo decisión.
+- **Si el MANUAL se vincula a otro UID** mientras la nuestra está rechazada,
+  el reintento queda bloqueado: ya no hay nada que reclamar.
+- **Dos anfitriones o dos pestañas a la vez**: Rules evalúa contra el estado
+  comprometido, así que la segunda operación ve `linkedUid` no nulo (o la
+  reserva ya existente) y falla limpiamente.
 
 ## Interfaz
 

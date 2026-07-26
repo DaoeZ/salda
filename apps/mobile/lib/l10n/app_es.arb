@@ -583,6 +583,12 @@
   "manualLinkAskSent": "Solicitud enviada. El anfitrión debe aceptarla.",
   "manualLinkPending": "Pendiente de que el anfitrión lo acepte",
   "manualLinkLinked": "Identidad vinculada",
+  "manualLinkPendingInSpace": "{count, plural, =1{1 solicitud} other{{count} solicitudes}}",
+  "@manualLinkPendingInSpace": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "manualLinkProcessing": "Vinculando… tendrás acceso en unos segundos",
+  "manualLinkFailedLegacy": "Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.",
   "ticketLinkPreparing": "Preparando el enlace…",
   "ticketLinkNotReady": "El ticket todavía se está procesando. Inténtalo de nuevo en unos segundos.",
   "spaceLinkExpiryLabel": "Caducidad",

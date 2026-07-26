@@ -23,7 +23,11 @@ import {
   type SettlementDraft,
   type TicketContribution,
 } from './domain/balanceEngine.js';
-import { accountUidsOf, manualActor } from './domain/economicActor.js';
+import {
+  accountUidsOf,
+  manualActor,
+  resolveActorIdentity,
+} from './domain/economicActor.js';
 import type { Cents } from './domain/money.js';
 import {
   splitTicket,
@@ -331,9 +335,20 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
       const payerActor = actorByPid.get(paidBy);
       if (payerActor) {
         const byDebtor = new Map<string, Cents>();
+        const aliases = s.manualAliases ?? {};
+        // C2: dos actores DISTINTOS pueden ser la misma persona — su UID y un
+        // `manual:{id}` vinculado a ese UID. Sin esto se generaba una
+        // obligación de alguien consigo mismo, con un único lector en ambos
+        // extremos y una liquidación pidiendo transferirse dinero a sí mismo.
+        // Se compara la IDENTIDAD efectiva, no el actor: los actores
+        // históricos siguen intactos en los documentos.
+        const payerIdentity = resolveActorIdentity(payerActor, aliases);
         for (const [pid, amount] of Object.entries(consumption)) {
           const debtorActor = actorByPid.get(pid);
           if (!debtorActor || debtorActor === payerActor || amount <= 0) {
+            continue;
+          }
+          if (resolveActorIdentity(debtorActor, aliases) === payerIdentity) {
             continue;
           }
           byDebtor.set(debtorActor, (byDebtor.get(debtorActor) ?? 0) + amount);

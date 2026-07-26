@@ -519,20 +519,64 @@ service cloud.firestore {
     // Solicitud de vinculación (ADR-037). La pide la persona; la aprueba el
     // ANFITRIÓN. Ese doble paso es lo que impide que alguien se apropie del
     // historial económico de otro simplemente diciendo que es él.
-    function validManualLinkRequest(data, manualId, uid) {
+    function validManualLinkRequest(data, manualId, uid, spaceId) {
       return data.keys().hasOnly([
-          'manualId', 'uid', 'displayName', 'status',
+          'manualId', 'uid', 'displayName', 'status', 'spaceOwnerUid',
+          'attempt', 'viaSessionId', 'viaTicketId', 'viaPid',
           'createdAt', 'updatedAt', 'schemaVersion'
         ])
+        // CICLO DE VIDA: `attempt` versiona el intento. Un rechazo no puede
+        // dejar a alguien sin salida para siempre —el anfitrión puede
+        // haberse equivocado— pero tampoco se reescribe un documento
+        // terminal en silencio: cada nuevo intento incrementa el contador,
+        // que queda como rastro de cuántas veces se pidió.
+        && data.attempt is int
+        && data.attempt >= 1
+        // M4: propietario denormalizado para la bandeja GLOBAL. Lo aporta el
+        // cliente pero NO lo controla: Rules lo valida contra el propietario
+        // real del espacio y lo hace inmutable. Sin él, un collection group
+        // exigiría un get() por documento y sería inviable.
+        && data.spaceOwnerUid == spaceData(spaceId).ownerUid
         && data.keys().hasAll([
           'manualId', 'uid', 'status', 'createdAt', 'updatedAt',
           'schemaVersion'
         ])
         && data.manualId == manualId
         && data.uid == uid
+        // A2: el nombre declarado por quien solicita es TEXTO DE UN TERCERO y
+        // se le enseña al anfitrión justo en el momento de decidir. Sin
+        // acotarlo, un atacante escribe ahí lo que quiera ("Marta
+        // (verificado)") o un texto enorme que rompe la tarjeta. Mismo límite
+        // que el resto de nombres del proyecto.
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40
         && data.status in ['pending', 'accepted', 'rejected']
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
+    }
+
+    // A1: relación legítima con el MANUAL. Conocer el `manualId` NO basta: el
+    // enlace de ticket (ADR-036) lo publica a cualquiera que reciba el enlace,
+    // así que un reenvío por WhatsApp entregaba a desconocidos la capacidad de
+    // inyectar solicitudes en la bandeja del anfitrión.
+    //
+    // Se exige una de dos pruebas AUTORITATIVAS, ninguna aportada por el
+    // cliente: ser miembro del espacio, o tener un `ticketAccess` vigente
+    // sobre un ticket donde ESE manual participa según `ticketParticipants`.
+    function mayClaimManual(spaceId, manualId, sessionId, ticketId, pid) {
+      return isSpaceMember(spaceId)
+        || (
+          sessionId != ''
+          && ticketId != ''
+          && pid != ''
+          // El acceso al ticket se revalida entero (enlace vivo incluido).
+          && hasTicketAccessTo(sessionId, ticketId)
+          // Y ese acceso debe ser justamente el de ESTE manual.
+          && ticketAccessData(sessionId, ticketId).get('manualId', '')
+            == manualId
+          && participatesInTicket(sessionId, ticketId, pid)
+        );
     }
 
     // Owner comprobado sin asumir que el espacio exista (get() sobre un
@@ -768,12 +812,23 @@ service cloud.firestore {
               && request.resource.data.linkedUid is string
               && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/manualLinkRequests/$(manualId + '_' + request.resource.data.linkedUid))
                   .data.status == 'accepted'
+              // A3: y la reserva del UID, en el mismo batch. Los tres
+              // documentos se escriben juntos o no se escribe ninguno, así
+              // que no hay estados a medias (aceptada sin vínculo, vínculo
+              // sin reserva, reserva sin vínculo).
+              && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(request.resource.data.linkedUid))
+                  .data.manualId == manualId
             )
           );
 
-        // Borrar la identidad no borra su historial económico: las
-        // obligaciones ya derivadas conservan el actor `manual:{id}`.
-        allow delete: if isSpaceOwner(spaceId);
+        // C3: un MANUAL VINCULADO no se borra. Borrarlo eliminaba el alias
+        // y equivalía a desvincular —justo lo que la regla de update
+        // prohíbe—, dejaba la solicitud aceptada apuntando a un documento
+        // inexistente y hacía perder el acceso al historial en silencio.
+        // Retirarlo de uso es otra cosa: no existe todavía, y hasta que
+        // exista un vinculado se queda.
+        allow delete: if isSpaceOwner(spaceId)
+          && resource.data.get('linkedUid', null) == null;
       }
 
       match /members/{memberUid} {
@@ -839,6 +894,33 @@ service cloud.firestore {
           && (memberUid == request.auth.uid || isSpaceOwner(spaceId));
       }
 
+      // A3: reserva determinista `uid → manualId` dentro del espacio. Su ID
+      // hace imposible que un mismo UID quede vinculado a dos manuales, que
+      // producía obligaciones de una persona consigo misma.
+      //
+      // Alcance POR ESPACIO, no global: el actor económico es local al
+      // contexto y una misma persona puede legítimamente haber sido anotada a
+      // mano en grupos distintos. Global habría bloqueado ese caso real.
+      match /linkedIdentities/{identityUid} {
+        allow read: if canUseSocial() && isSpaceMember(spaceId);
+
+        // Solo nace junto a la aceptación: el propietario la escribe en el
+        // mismo batch, y la solicitud correspondiente debe quedar aceptada.
+        allow create: if isSpaceOwner(spaceId)
+          && identityUid == request.resource.data.uid
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'manualId', 'createdAt', 'schemaVersion'])
+          && request.resource.data.keys().hasAll(
+            ['uid', 'manualId', 'createdAt', 'schemaVersion'])
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.schemaVersion == 1
+          && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/manualLinkRequests/$(request.resource.data.manualId + '_' + identityUid))
+              .data.status == 'accepted';
+
+        // Inmutable: reapuntarla movería a quién pertenece un historial.
+        allow update, delete: if false;
+      }
+
       // Solicitudes de vinculación (ADR-037). ID determinista
       // `{manualId}_{uid}`: no puede haber dos activas de la misma persona
       // sobre el mismo manual, y reintentar reutiliza el documento.
@@ -854,17 +936,35 @@ service cloud.firestore {
 
         // La pide la PROPIA persona, para sí misma. Cuenta o invitado: el
         // manual puede convertirse en cualquiera de los dos.
-        allow create: if canParticipate()
+        // M1: EXIGE CUENTA, no basta con participar. Un invitado vive en una
+        // sesión anónima ligada al dispositivo: vincular un historial
+        // económico a ese UID lo condena a desaparecer con el móvil, y como
+        // vincular es irreversible no habría rescate posible. Debe convertir
+        // su acceso en cuenta primero — la conversión CONSERVA el UID
+        // (ADR-023), así que no pierde nada por el camino.
+        allow create: if canUseSocial()
           && requestId == request.resource.data.manualId + '_' + request.auth.uid
           && validManualLinkRequest(
             request.resource.data, request.resource.data.manualId,
-            request.auth.uid)
+            request.auth.uid, spaceId)
           && request.resource.data.status == 'pending'
+          && request.resource.data.attempt == 1
           && request.resource.data.createdAt is timestamp
           // El manual debe existir y NO estar ya vinculado.
           && exists(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.manualId))
           && get(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.manualId))
-              .data.get('linkedUid', null) == null;
+              .data.get('linkedUid', null) == null
+          // A3: ese UID no puede estar ya vinculado a OTRO manual del mismo
+          // espacio. La reserva es la fuente; aquí se corta antes de molestar
+          // al anfitrión con una solicitud que nunca podrá aceptarse.
+          && !exists(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(request.auth.uid))
+          // A1: prueba de relación legítima con el manual.
+          && mayClaimManual(
+            spaceId,
+            request.resource.data.manualId,
+            request.resource.data.get('viaSessionId', ''),
+            request.resource.data.get('viaTicketId', ''),
+            request.resource.data.get('viaPid', ''));
 
         allow update: if
           // El ANFITRIÓN acepta o rechaza una pendiente. Aceptar va en el
@@ -872,16 +972,38 @@ service cloud.firestore {
           (isSpaceOwner(spaceId)
             && resource.data.status == 'pending'
             && request.resource.data.status in ['accepted', 'rejected']
+            // Solo el estado: el nombre declarado queda congelado como
+            // prueba de QUÉ se le enseñó al anfitrión al decidir.
             && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['status', 'updatedAt'])
-            && request.resource.data.updatedAt is timestamp)
+            && request.resource.data.updatedAt is timestamp
+            // M4: el propietario denormalizado es inmutable.
+            && request.resource.data.spaceOwnerUid == resource.data.spaceOwnerUid
+            // A3: ACEPTAR exige que la reserva del UID se escriba en el
+            // MISMO batch. Rechazar no reserva nada, obviamente.
+            && (request.resource.data.status != 'accepted'
+              || getAfter(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(resource.data.uid))
+                  .data.manualId == resource.data.manualId))
           // Quien la pidió puede retirarla mientras siga pendiente.
-          || (canParticipate()
+          || (canUseSocial()
             && resource.data.uid == request.auth.uid
             && resource.data.status == 'pending'
             && request.resource.data.status == 'rejected'
             && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['status', 'updatedAt']));
+                .hasOnly(['status', 'updatedAt']))
+          // NUEVO INTENTO tras un rechazo: solo el solicitante, solo desde
+          // `rejected` (nunca desde `accepted`, que es terminal de verdad) y
+          // subiendo el contador. El manual no puede estar ya vinculado.
+          || (canUseSocial()
+            && resource.data.uid == request.auth.uid
+            && resource.data.status == 'rejected'
+            && request.resource.data.status == 'pending'
+            && request.resource.data.attempt == resource.data.attempt + 1
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'attempt', 'updatedAt'])
+            && get(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(resource.data.manualId))
+                .data.get('linkedUid', null) == null
+            && !exists(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(request.auth.uid)));
 
         // Nada de borrar: la solicitud es el rastro de POR QUÉ existe un
         // vínculo. Sin ella no se podría demostrar que hubo aprobación.
@@ -1113,6 +1235,14 @@ service cloud.firestore {
       // Limpieza por el owner (p. ej. invitación obsoleta ya resuelta).
       allow delete: if isSpaceOwner(resource.data.spaceId)
         && resource.data.status != 'pending';
+    }
+
+    // M4: bandeja GLOBAL del anfitrión. Collection group acotado al
+    // propietario denormalizado y validado, así que nadie enumera
+    // solicitudes ajenas y la consulta no necesita un get() por documento.
+    match /{path=**}/manualLinkRequests/{requestId} {
+      allow read: if canUseSocial()
+        && resource.data.spaceOwnerUid == request.auth.uid;
     }
 
     // "Mis contextos": collection group SOLO sobre la propia membresía.

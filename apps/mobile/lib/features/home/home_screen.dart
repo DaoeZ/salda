@@ -8,6 +8,7 @@ import '../../core/utils/money_format.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../auth/data/auth_repository.dart';
 import '../auth/data/guest_identity_repository.dart';
+import '../spaces/data/manual_link_repository.dart';
 import '../economy/presentation/economic_overview_screen.dart';
 import '../profile/data/profile_repository.dart';
 import '../review/application/draft_store.dart';
@@ -79,6 +80,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               icon: const Icon(Icons.people_outline),
             ),
           ],
+          // M4: solicitudes de identidad pendientes de TODOS mis grupos. Sin
+          // esto había que entrar grupo por grupo para descubrirlas.
+          if (fullAccount) const _ManualLinkBadge(),
           // Unirse por enlace no exige cuenta: es la puerta de entrada del
           // invitado (ADR-035), así que está siempre visible.
           IconButton(
@@ -691,6 +695,67 @@ class _SessionsSkeleton extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Indicador global de solicitudes de vinculación (M4).
+///
+/// Solo aparece si hay alguna: un contador a cero es ruido. La consulta es un
+/// collection group acotado por `spaceOwnerUid`, así que quien no es
+/// anfitrión no puede enumerar nada.
+class _ManualLinkBadge extends ConsumerWidget {
+  const _ManualLinkBadge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final pending = ref.watch(myPendingManualLinksProvider).value ?? const [];
+    if (pending.isEmpty) return const SizedBox.shrink();
+
+    // Agrupadas por espacio: al anfitrión le importa dónde tiene que decidir.
+    final bySpace = <String, int>{};
+    for (final request in pending) {
+      bySpace[request.spaceId] = (bySpace[request.spaceId] ?? 0) + 1;
+    }
+    return IconButton(
+      tooltip: l10n.manualLinkRequestsTitle,
+      onPressed: () => _open(context, bySpace),
+      icon: Badge.count(
+        count: pending.length,
+        child: const Icon(Icons.person_add_alt),
+      ),
+    );
+  }
+
+  void _open(BuildContext context, Map<String, int> bySpace) {
+    final l10n = AppLocalizations.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                l10n.manualLinkRequestsTitle,
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              subtitle: Text(l10n.manualLinkRequestHelp),
+            ),
+            for (final entry in bySpace.entries)
+              ListTile(
+                leading: const Icon(Icons.groups_outlined),
+                title: Text(l10n.manualLinkPendingInSpace(entry.value)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  context.push('/home/spaces/${entry.key}');
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

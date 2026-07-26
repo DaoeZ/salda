@@ -10,6 +10,7 @@ import {
   computeAggregates,
   resolveParticipantUid,
   settlementId,
+  type RecomputeResult,
   type SessionSnapshot,
 } from '../recompute.js';
 
@@ -1091,4 +1092,253 @@ test('vinculación: entre dos manuales, vincular UNO ya publica la deuda', () =>
   }).economicEntries;
   assert.deepEqual(conUno[0].memberUids, ['uid-marta']);
   assert.equal(conUno[0].debtorUid, 'manual:m1');
+});
+
+test('C2: una persona NUNCA se debe dinero a sí misma', () => {
+  // Marta participa DOS veces en el mismo ticket: con su cuenta (p1, que
+  // además paga) y como el manual m1 que el anfitrión anotó antes.
+  const duplicada = (aliases?: Record<string, string>): SessionSnapshot => ({
+    splitModeDefault: 'byItem',
+    ownerUid: 'uid-marta',
+    participants: [
+      { id: 'p1', isOwner: true, order: 0, userUid: 'uid-marta' },
+      { id: 'p2', order: 1, manualId: 'm1' },
+    ],
+    accounts: [
+      { id: 'a1', tickets: [{
+        id: 't1', grandTotal: 2000, paidByParticipantId: 'p1',
+        lines: [
+          { id: 'l1', totalPrice: 1000,
+            assignment: { type: 'one', participants: { p1: 1 } } },
+          { id: 'l2', totalPrice: 1000,
+            assignment: { type: 'one', participants: { p2: 1 } } },
+        ],
+      }] },
+    ],
+    settlements: [],
+    ...(aliases ? { manualAliases: aliases } : {}),
+  });
+
+  // Sin vincular son dos personas distintas: la obligación es legítima.
+  const sinVincular = computeAggregates(duplicada()).economicEntries;
+  assert.equal(sinVincular.length, 1);
+  assert.equal(sinVincular[0].debtorUid, 'manual:m1');
+
+  // Vinculado m1 a la MISMA persona que paga: la obligación desaparece.
+  const vinculado = computeAggregates(
+    duplicada({ m1: 'uid-marta' })).economicEntries;
+  assert.deepEqual(vinculado, [], 'no puede existir una deuda consigo mismo');
+});
+
+test('C2: suprimir la auto-deuda NO altera el reparto ni el dinero', () => {
+  const base = (aliases?: Record<string, string>): SessionSnapshot => ({
+    splitModeDefault: 'byItem',
+    ownerUid: 'uid-marta',
+    participants: [
+      { id: 'p1', isOwner: true, order: 0, userUid: 'uid-marta' },
+      { id: 'p2', order: 1, manualId: 'm1' },
+      { id: 'p3', order: 2, userUid: 'uid-otro' },
+    ],
+    accounts: [
+      { id: 'a1', tickets: [{
+        id: 't1', grandTotal: 3000, paidByParticipantId: 'p1',
+        lines: [
+          { id: 'l1', totalPrice: 1000,
+            assignment: { type: 'one', participants: { p1: 1 } } },
+          { id: 'l2', totalPrice: 1000,
+            assignment: { type: 'one', participants: { p2: 1 } } },
+          { id: 'l3', totalPrice: 1000,
+            assignment: { type: 'one', participants: { p3: 1 } } },
+        ],
+      }] },
+    ],
+    settlements: [],
+    ...(aliases ? { manualAliases: aliases } : {}),
+  });
+
+  const antes = computeAggregates(base());
+  const despues = computeAggregates(base({ m1: 'uid-marta' }));
+
+  // El reparto por participante (el dinero real) es IDÉNTICO: la supresión
+  // solo afecta a qué obligaciones se publican, nunca a cuánto consumió
+  // cada uno ni a los totales.
+  assert.deepEqual(despues.balances, antes.balances);
+  assert.deepEqual(despues.sessionTotals, antes.sessionTotals);
+  // Y la deuda del tercero sobrevive intacta, con su actor original.
+  const deTercero = despues.economicEntries.filter(
+    (e) => e.debtorUid === 'uid-otro');
+  assert.equal(deTercero.length, 1);
+  assert.equal(deTercero[0].amount,
+    antes.economicEntries.filter((e) => e.debtorUid === 'uid-otro')[0].amount);
+  // La única que desaparece es la de Marta consigo misma.
+  assert.equal(
+    despues.economicEntries.filter((e) => e.debtorUid === 'manual:m1').length,
+    0);
+  assert.equal(despues.economicEntries.length, antes.economicEntries.length - 1);
+});
+
+// ── Auditoria contable de C2 ────────────────────────────────────────────
+// Suprimir una obligacion entre identidades efectivamente iguales solo es
+// correcto si NADA MAS se mueve. Aqui se comprueba la contabilidad entera.
+
+/** Suma neta por identidad efectiva de todas las obligaciones publicadas. */
+function netoPorIdentidad(
+  result: RecomputeResult,
+  aliases: Record<string, string>,
+): Map<string, number> {
+  const resolver = (actor: string): string =>
+    actor.startsWith('manual:')
+      ? (aliases[actor.slice('manual:'.length)] ?? actor)
+      : actor;
+  const neto = new Map<string, number>();
+  for (const e of result.economicEntries) {
+    const d = resolver(e.debtorUid);
+    const c = resolver(e.creditorUid);
+    neto.set(d, (neto.get(d) ?? 0) - e.amount);
+    neto.set(c, (neto.get(c) ?? 0) + e.amount);
+  }
+  return neto;
+}
+
+/** Dos tickets: en uno paga la cuenta, en el otro paga el MANUAL. */
+const cruzada = (aliases?: Record<string, string>): SessionSnapshot => ({
+  splitModeDefault: 'byItem',
+  ownerUid: 'uid-marta',
+  participants: [
+    { id: 'p1', isOwner: true, order: 0, userUid: 'uid-marta' },
+    { id: 'p2', order: 1, manualId: 'm1' },
+    { id: 'p3', order: 2, userUid: 'uid-otro' },
+  ],
+  accounts: [
+    { id: 'a1', tickets: [
+      // Paga la CUENTA de Marta; consumen su manual y un tercero.
+      { id: 't1', grandTotal: 3000, paidByParticipantId: 'p1', lines: [
+        { id: 'l1', totalPrice: 1000,
+          assignment: { type: 'one', participants: { p1: 1 } } },
+        { id: 'l2', totalPrice: 1000,
+          assignment: { type: 'one', participants: { p2: 1 } } },
+        { id: 'l3', totalPrice: 1000,
+          assignment: { type: 'one', participants: { p3: 1 } } },
+      ] },
+      // Paga el MANUAL de Marta: deuda en sentido CONTRARIO.
+      { id: 't2', grandTotal: 900, paidByParticipantId: 'p2', lines: [
+        { id: 'l4', totalPrice: 300,
+          assignment: { type: 'one', participants: { p1: 1 } } },
+        { id: 'l5', totalPrice: 300,
+          assignment: { type: 'one', participants: { p2: 1 } } },
+        { id: 'l6', totalPrice: 300,
+          assignment: { type: 'one', participants: { p3: 1 } } },
+      ] },
+    ] },
+  ],
+  settlements: [],
+  ...(aliases ? { manualAliases: aliases } : {}),
+});
+
+test('C2 contable: ninguna obligacion queda entre una persona y si misma',
+    () => {
+  const vinculado = computeAggregates(cruzada({ m1: 'uid-marta' }));
+  for (const e of vinculado.economicEntries) {
+    const d = e.debtorUid === 'manual:m1' ? 'uid-marta' : e.debtorUid;
+    const c = e.creditorUid === 'manual:m1' ? 'uid-marta' : e.creditorUid;
+    assert.notEqual(d, c, `self-debt en ${e.id}`);
+  }
+});
+
+test('C2 contable: el neto por PERSONA es identico antes y despues', () => {
+  const alias = { m1: 'uid-marta' };
+  const antes = netoPorIdentidad(computeAggregates(cruzada()), alias);
+  const despues = netoPorIdentidad(computeAggregates(cruzada(alias)), alias);
+
+  // Las dos direcciones (UID->MANUAL y MANUAL->UID) se cancelaban entre si:
+  // suprimirlas no mueve un centimo del saldo de nadie.
+  for (const persona of new Set([...antes.keys(), ...despues.keys()])) {
+    assert.equal(
+      despues.get(persona) ?? 0, antes.get(persona) ?? 0,
+      `el neto de ${persona} cambio`,
+    );
+  }
+  // Y el sistema sigue cuadrando a cero.
+  assert.equal([...despues.values()].reduce((a, b) => a + b, 0), 0);
+});
+
+test('C2 contable: el tercero conserva sus deudas en AMBOS sentidos', () => {
+  const despues = computeAggregates(cruzada({ m1: 'uid-marta' }));
+  const suyas = despues.economicEntries.filter(
+    (e) => e.debtorUid === 'uid-otro');
+  assert.equal(suyas.length, 2);
+  assert.deepEqual(
+    suyas.map((e) => e.creditorUid).sort(),
+    ['manual:m1', 'uid-marta'],
+    'los actores historicos del acreedor NO se reescriben',
+  );
+  assert.equal(suyas.reduce((a, e) => a + e.amount, 0), 1300);
+});
+
+test('C2 contable: balances, totales y settlement no se mueven', () => {
+  const antes = computeAggregates(cruzada());
+  const despues = computeAggregates(cruzada({ m1: 'uid-marta' }));
+  assert.deepEqual(despues.balances, antes.balances);
+  assert.deepEqual(despues.sessionTotals, antes.sessionTotals);
+  // El settlement por PID es el mismo: la supresion es de publicacion
+  // global, no del reparto interno de la sesion.
+  assert.deepEqual(despues.settlementSync, antes.settlementSync);
+  assert.equal(despues.pendingSettlements, antes.pendingSettlements);
+});
+
+test('C2 contable: con un pago confirmado previo, el settlement se respeta',
+    () => {
+  const conPago = (aliases?: Record<string, string>): SessionSnapshot => ({
+    ...cruzada(aliases),
+    settlements: [
+      { id: 'pending_p3_p1', from: 'p3', to: 'p1', amount: 500,
+        state: 'confirmed' },
+    ],
+  });
+  const antes = computeAggregates(conPago());
+  const despues = computeAggregates(conPago({ m1: 'uid-marta' }));
+  // Una liquidacion confirmada esta CONGELADA: vincular no la descongela.
+  assert.deepEqual(despues.settlementSync, antes.settlementSync);
+  assert.deepEqual(despues.sessionTotals, antes.sessionTotals);
+  assert.equal(
+    despues.sessionTotals.settledConfirmed,
+    antes.sessionTotals.settledConfirmed,
+  );
+});
+
+test('C2 contable: dos MANUALES vinculados al MISMO uid (dato legacy)', () => {
+  // Las Rules lo impiden desde A3, pero un dato anterior puede existir: el
+  // motor no debe generar deuda entre ellos ni duplicar a la persona.
+  const dosManuales: SessionSnapshot = {
+    splitModeDefault: 'byItem',
+    ownerUid: 'uid-tercero',
+    participants: [
+      { id: 'p1', isOwner: true, order: 0, userUid: 'uid-tercero' },
+      { id: 'p2', order: 1, manualId: 'm1' },
+      { id: 'p3', order: 2, manualId: 'm2' },
+    ],
+    accounts: [{ id: 'a1', tickets: [
+      { id: 't1', grandTotal: 3000, paidByParticipantId: 'p2', lines: [
+        { id: 'l1', totalPrice: 1000,
+          assignment: { type: 'one', participants: { p1: 1 } } },
+        { id: 'l2', totalPrice: 1000,
+          assignment: { type: 'one', participants: { p2: 1 } } },
+        { id: 'l3', totalPrice: 1000,
+          assignment: { type: 'one', participants: { p3: 1 } } },
+      ] },
+    ] }],
+    settlements: [],
+    manualAliases: { m1: 'uid-marta', m2: 'uid-marta' },
+  };
+  const result = computeAggregates(dosManuales);
+  // m2 -> m1 seria Marta debiendose a si misma: no se publica.
+  assert.equal(
+    result.economicEntries.filter((e) => e.debtorUid === 'manual:m2').length,
+    0,
+  );
+  // La del tercero si, y con Marta como lectora.
+  const tercero = result.economicEntries.filter(
+    (e) => e.debtorUid === 'uid-tercero');
+  assert.equal(tercero.length, 1);
+  assert.deepEqual(tercero[0].memberUids, ['uid-marta', 'uid-tercero']);
 });

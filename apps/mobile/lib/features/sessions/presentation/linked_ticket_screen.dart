@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../../spaces/data/manual_link_repository.dart';
+import '../../spaces/data/spaces_repository.dart' show spaceProvider;
 import '../../spaces/domain/space_models.dart' show ManualLinkStatus;
 import '../data/ticket_links_repository.dart';
 import '../domain/ticket_link_models.dart';
@@ -159,6 +160,11 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
                 spaceId: link.spaceId,
                 manualId: _access!.manualId,
                 displayName: _names[myPid] ?? '',
+                // Procedencia: Rules la revalida contra ticketAccess y la
+                // proyección autoritativa. No es una afirmación del cliente.
+                sessionId: link.sessionId,
+                ticketId: link.ticketId,
+                pid: _access!.pid,
               ),
           ],
           const SizedBox(height: TokenSpacing.md),
@@ -250,11 +256,17 @@ class _ManualLinkRequestCard extends ConsumerStatefulWidget {
     required this.spaceId,
     required this.manualId,
     required this.displayName,
+    required this.sessionId,
+    required this.ticketId,
+    required this.pid,
   });
 
   final String spaceId;
   final String manualId;
   final String displayName;
+  final String sessionId;
+  final String ticketId;
+  final String pid;
 
   @override
   ConsumerState<_ManualLinkRequestCard> createState() =>
@@ -307,6 +319,12 @@ class _ManualLinkRequestCardState
   Future<void> _ask() async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final ownerUid =
+        ref.read(spaceProvider(widget.spaceId)).value?.ownerUid ?? '';
+    if (ownerUid.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+      return;
+    }
     setState(() => _busy = true);
     try {
       await ref
@@ -315,6 +333,11 @@ class _ManualLinkRequestCardState
             widget.spaceId,
             widget.manualId,
             displayName: widget.displayName,
+            // Propietario del espacio: Rules lo revalida contra el real.
+            spaceOwnerUid: ownerUid,
+            viaSessionId: widget.sessionId,
+            viaTicketId: widget.ticketId,
+            viaPid: widget.pid,
           );
       messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkAskSent)));
     } on Object {

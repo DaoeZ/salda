@@ -1712,6 +1712,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get manualLinkLinked => 'Identidad vinculada';
 
   @override
+  String manualLinkPendingInSpace(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count solicitudes',
+      one: '1 solicitud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get manualLinkProcessing =>
+      'Vinculando… tendrás acceso en unos segundos';
+
+  @override
+  String get manualLinkFailedLegacy =>
+      'Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.';
+
+  @override
   String get ticketLinkPreparing => 'Preparando el enlace…';
 
   @override

@@ -27,7 +27,7 @@ void main() {
 
   test('pedir la vinculación crea una solicitud PENDIENTE para uno mismo',
       () async {
-    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta');
+    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
 
     final raw = (await firestore
             .doc('spaces/sp1/manualLinkRequests/m1_uid-marta')
@@ -45,7 +45,7 @@ void main() {
   });
 
   test('el anfitrión ve las pendientes de su espacio', () async {
-    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta');
+    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
 
     final pending = await repoFor('owner').watchPending('sp1').first;
     expect(pending, hasLength(1));
@@ -56,7 +56,7 @@ void main() {
 
   test('aceptar escribe el vínculo y resuelve la solicitud, a la vez',
       () async {
-    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta');
+    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
     final owner = repoFor('owner');
     await owner.approve('sp1', (await owner.watchPending('sp1').first).single);
 
@@ -75,12 +75,21 @@ void main() {
             .get())
         .data()!;
     expect(request['status'], 'accepted');
+    // A3: la reserva uid → manual se escribe en el MISMO batch. Sin ella,
+    // la misma persona podria vincularse a dos manuales y acabar
+    // debiendose dinero a si misma.
+    final reserva = (await firestore
+            .doc('spaces/sp1/linkedIdentities/uid-marta')
+            .get())
+        .data()!;
+    expect(reserva['manualId'], 'm1');
+    expect(reserva['uid'], 'uid-marta');
     // Y deja de estar pendiente en la bandeja.
     expect(await owner.watchPending('sp1').first, isEmpty);
   });
 
   test('rechazar NO vincula y conserva el rastro', () async {
-    await repoFor('uid-marta').request('sp1', 'm1');
+    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
     await repoFor('owner').reject('sp1', 'm1_uid-marta');
 
     final manual = (await firestore
@@ -97,7 +106,7 @@ void main() {
   });
 
   test('un INVITADO puede pedirlo igual que una cuenta', () async {
-    await repoFor('guest-1').request('sp1', 'm1', displayName: 'Alba');
+    await repoFor('guest-1').request('sp1', 'm1', displayName: 'Alba', spaceOwnerUid: 'owner');
     final owner = repoFor('owner');
     await owner.approve('sp1', (await owner.watchPending('sp1').first).single);
 
@@ -112,7 +121,7 @@ void main() {
     final marta = repoFor('uid-marta');
     expect(await marta.watchMine('sp1', 'm1').first, isNull);
 
-    await marta.request('sp1', 'm1');
+    await marta.request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
     expect((await marta.watchMine('sp1', 'm1').first)!.isPending, isTrue);
 
     final owner = repoFor('owner');
@@ -126,12 +135,24 @@ void main() {
   test('el id de la solicitud es determinista: reintentar no duplica',
       () async {
     final marta = repoFor('uid-marta');
-    await marta.request('sp1', 'm1');
-    await marta.request('sp1', 'm1');
+    await marta.request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
+    await marta.request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
 
     final all =
         await firestore.collection('spaces/sp1/manualLinkRequests').get();
     expect(all.docs, hasLength(1));
     expect(all.docs.single.id, ManualLinkRepository.requestId('m1', 'uid-marta'));
+  });
+
+  test('M4: la solicitud lleva el propietario denormalizado', () async {
+    await repoFor('uid-marta')
+        .request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
+    final raw = (await firestore
+            .doc('spaces/sp1/manualLinkRequests/m1_uid-marta')
+            .get())
+        .data()!;
+    // Es lo que permite la bandeja global sin un get() por documento. Rules
+    // lo valida contra el propietario real, asi que no es una afirmacion.
+    expect(raw['spaceOwnerUid'], 'owner');
   });
 }

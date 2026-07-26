@@ -43,3 +43,5 @@ export {
   activityOnSettlementWrite,
   activityOnEconomicPaymentWrite,
 } from './activity.js';
+// Propagación de vinculaciones MANUAL↔identidad (ADR-037, C1).
+export { propagateOnManualLink } from './manualLink.js';
