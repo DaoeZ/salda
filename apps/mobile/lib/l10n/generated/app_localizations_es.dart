@@ -1556,7 +1556,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get groupNeedsMembers =>
-      'El grupo necesita al menos tres miembros antes de crear tickets.';
+      'Añade a alguien más al grupo antes de crear tickets. Si no tiene la app, añádelo como persona sin cuenta.';
 
   @override
   String get contextChoose => 'Elige una relación o grupo';

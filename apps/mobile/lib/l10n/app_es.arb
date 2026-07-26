@@ -537,7 +537,10 @@
   "groupCreateHelp": "Gastos entre tres o más personas",
   "ticketContextMissing": "Abre una relación o un grupo antes de crear el ticket.",
   "relationshipNeedsAcceptance": "La otra persona debe aceptar la invitación antes de crear tickets.",
-  "groupNeedsMembers": "El grupo necesita al menos tres miembros antes de crear tickets.",
+  "groupNeedsMembers": "Añade a alguien más al grupo antes de crear tickets. Si no tiene la app, añádelo como persona sin cuenta.",
+  "@groupNeedsMembers": {
+    "description": "BUG-6: hacen falta DOS personas para repartir, no tres cuentas. Se nombra la salida real para quien no tiene app."
+  },
   "contextChoose": "Elige una relación o grupo",
   "ticketContextLocked": "Este ticket pertenece a su contexto y no se puede desvincular",
   "commonConfirm": "Confirmar",

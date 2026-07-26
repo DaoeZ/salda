@@ -83,3 +83,41 @@ String resolveActorIdentity(
   final manualId = manualIdOf(actor);
   return (manualId == null ? null : aliases[manualId]) ?? actor;
 }
+
+/// PERSONAS distintas que hay hoy en un contexto (BUG-6).
+///
+/// Es la única respuesta autoritativa a "¿con cuánta gente puedo repartir un
+/// gasto?". Contar documentos de membresía respondía a otra pregunta —cuántas
+/// CUENTAS hay— y dejaba fuera a quien no tiene ninguna: una persona sin app
+/// pesa económicamente igual que una con cuenta (ADR-033).
+///
+/// [accountUids] son las membresías (cuentas e INVITADOS, que sí tienen UID);
+/// [manualLinks] va de `manualId` al UID con el que se vinculó, o null si
+/// todavía no lo está.
+///
+/// Colapsa por [resolveActorIdentity], el mismo criterio con el que recompute
+/// consolida saldos: un manual vinculado y su cuenta son UNA persona, no dos.
+/// Descarta los identificadores vacíos o con ':' —documentos legacy o rotos—
+/// en vez de contarlos como una persona más. No reescribe ningún actor: esto
+/// solo cuenta, el histórico se queda como está.
+List<String> effectiveEconomicIdentities({
+  required Iterable<String> accountUids,
+  required Map<String, String?> manualLinks,
+}) {
+  bool valid(String value) => value.isNotEmpty && !value.contains(':');
+
+  final aliases = <String, String>{
+    for (final entry in manualLinks.entries)
+      if (valid(entry.key) && entry.value != null && valid(entry.value!))
+        entry.key: entry.value!,
+  };
+  final identities = <String>{};
+  for (final uid in accountUids) {
+    if (valid(uid)) identities.add(uid);
+  }
+  for (final manualId in manualLinks.keys) {
+    if (!valid(manualId)) continue;
+    identities.add(resolveActorIdentity(manualActor(manualId), aliases));
+  }
+  return identities.toList()..sort();
+}

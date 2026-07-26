@@ -2,6 +2,7 @@ import 'package:domain/domain.dart';
 import 'package:test/test.dart';
 
 void main() {
+  bug6();
   group('actor económico (ADR-033)', () {
     test('una cuenta es su propio UID; un manual lleva prefijo', () {
       expect(accountActor('aBc123'), 'aBc123');
@@ -44,6 +45,103 @@ void main() {
       const id = 'mp-estable';
       expect(manualActor(id), manualActor(id));
       expect(manualIdOf(manualActor(id)), id);
+    });
+  });
+}
+
+/// BUG-6: cuántas PERSONAS hay en un contexto. Contar membresías respondía a
+/// otra pregunta y dejaba fuera a quien no tiene cuenta.
+void bug6() {
+  group('effectiveEconomicIdentities', () {
+    test('una cuenta sola es UNA identidad', () {
+      final ids = effectiveEconomicIdentities(
+        accountUids: const ['edgar'],
+        manualLinks: const {},
+      );
+      expect(ids, ['edgar']);
+    });
+
+    test('cuenta + MANUAL son DOS: el caso de Pablo', () {
+      final ids = effectiveEconomicIdentities(
+        accountUids: const ['edgar'],
+        manualLinks: const {'m-pablo': null},
+      );
+      expect(ids.length, 2);
+      expect(ids, contains('manual:m-pablo'));
+    });
+
+    test('cuenta + INVITADO son DOS (un invitado tiene UID)', () {
+      final ids = effectiveEconomicIdentities(
+        accountUids: const ['edgar', 'uid-invitado'],
+        manualLinks: const {},
+      );
+      expect(ids.length, 2);
+    });
+
+    test('dos manuales además del propietario son TRES', () {
+      final ids = effectiveEconomicIdentities(
+        accountUids: const ['edgar'],
+        manualLinks: const {'m1': null, 'm2': null},
+      );
+      expect(ids.length, 3);
+    });
+
+    test('un MANUAL vinculado y su cuenta son UNA persona, no dos', () {
+      final ids = effectiveEconomicIdentities(
+        accountUids: const ['edgar', 'uid-pablo'],
+        manualLinks: const {'m-pablo': 'uid-pablo'},
+      );
+      expect(ids, ['edgar', 'uid-pablo']);
+      expect(ids, isNot(contains('manual:m-pablo')));
+    });
+
+    test('vinculado a alguien que aún NO es miembro sigue siendo uno', () {
+      // ADR-037 no da membresía: la persona es una identidad igual.
+      final ids = effectiveEconomicIdentities(
+        accountUids: const ['edgar'],
+        manualLinks: const {'m-pablo': 'uid-pablo'},
+      );
+      expect(ids, ['edgar', 'uid-pablo']);
+    });
+
+    test('quitar el manual deja una sola identidad', () {
+      expect(
+        effectiveEconomicIdentities(
+          accountUids: const ['edgar'],
+          manualLinks: const {},
+        ).length,
+        1,
+      );
+    });
+
+    test('membresías repetidas no inflan la cuenta', () {
+      final ids = effectiveEconomicIdentities(
+        accountUids: const ['edgar', 'edgar'],
+        manualLinks: const {},
+      );
+      expect(ids, ['edgar']);
+    });
+
+    test('documentos legacy inválidos no cuentan como personas', () {
+      final ids = effectiveEconomicIdentities(
+        // Vacíos y con ':' — un actor no puede construirse con ellos.
+        accountUids: const ['edgar', '', 'con:dospuntos'],
+        manualLinks: const {'': null, 'roto:id': null, 'm1': ''},
+      );
+      expect(ids, ['edgar', 'manual:m1']);
+    });
+
+    test('es el MISMO criterio con el que se consolidan saldos', () {
+      // Si divergiera, la app dejaría repartir entre dos personas que
+      // recompute trataría como una (o al revés).
+      const aliases = {'m-pablo': 'uid-pablo'};
+      expect(
+        resolveActorIdentity('manual:m-pablo', aliases),
+        effectiveEconomicIdentities(
+          accountUids: const [],
+          manualLinks: const {'m-pablo': 'uid-pablo'},
+        ).single,
+      );
     });
   });
 }

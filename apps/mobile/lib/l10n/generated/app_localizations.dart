@@ -2824,10 +2824,10 @@ abstract class AppLocalizations {
   /// **'La otra persona debe aceptar la invitación antes de crear tickets.'**
   String get relationshipNeedsAcceptance;
 
-  /// No description provided for @groupNeedsMembers.
+  /// BUG-6: hacen falta DOS personas para repartir, no tres cuentas. Se nombra la salida real para quien no tiene app.
   ///
   /// In es, this message translates to:
-  /// **'El grupo necesita al menos tres miembros antes de crear tickets.'**
+  /// **'Añade a alguien más al grupo antes de crear tickets. Si no tiene la app, añádelo como persona sin cuenta.'**
   String get groupNeedsMembers;
 
   /// No description provided for @contextChoose.

@@ -154,8 +154,36 @@ Probado extremo a extremo contra el emulador
 +2000/−2000, se genera la liquidación del manual hacia la cuenta, y al
 vincular después se conserva el mismo documento, el mismo importe y el actor
 `manual:{id}` — lo único que cambia es que Pablo pasa a poder leerlo. Rules impide otro ID, un tercer miembro o
-una invitación fuera de la pareja. Un grupo mantiene membresía flexible, pero la
-app exige al menos tres miembros antes de permitir gastos nuevos.
+una invitación fuera de la pareja.
+
+### Cuántas personas hacen falta para repartir (BUG-6)
+
+Repartir un gasto exige **dos identidades económicas**, y una identidad es una
+persona: una cuenta, un INVITADO o un participante MANUAL. No es lo mismo que
+una membresía, que es solo la de quien tiene UID.
+
+El criterio vive en un único sitio, `effectiveEconomicIdentities`
+(packages/domain, junto a los actores de ADR-033), y lo consumen el detalle
+del espacio, la hoja de reparto y la guarda del controlador de creación.
+Colapsa con `resolveActorIdentity` —el mismo primitivo con el que recompute
+consolida saldos—, así que un MANUAL vinculado y su cuenta cuentan UNA vez;
+descarta identificadores vacíos o con `:`; y no mira las invitaciones, porque
+reservar una plaza no incorpora a nadie.
+
+- **Relación**: exactamente dos. Una v2 con la invitación sin aceptar tiene
+  una sola identidad incorporada y no opera; una v3 con MANUAL sí.
+- **Grupo**: dos o más. **Antes exigía tres**, que es cuántas personas
+  justifican crear un grupo en vez de una relación (ADR-030), no cuántas
+  hacen falta para partir una cuenta. Esa confusión bloqueaba el caso real
+  —compartir gastos con alguien que no tiene la app— y obligaba a pedirle
+  que se registrara. Un grupo también encoge: que se vaya el tercero no
+  invalida los gastos entre los dos que quedan.
+
+El backend nunca tuvo esa restricción: no hay ninguna comprobación de número
+de participantes en Rules ni en Functions, y el ciclo completo de un grupo
+con una cuenta y un MANUAL —reparto, balances, liquidación y obligación con
+actor `manual:{id}`— está probado contra el emulador en
+`groupManual.it.test.ts`, incluido el MANUAL como pagador.
 
 Decisiones clave:
 

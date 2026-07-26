@@ -12,7 +12,7 @@ import '../../review/application/review_draft.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../settings/data/user_profile_repository.dart';
 import '../../spaces/data/spaces_repository.dart';
-import '../../spaces/domain/space_models.dart';
+import '../../spaces/domain/space_identities.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
 import 'add_ticket_controller.dart';
@@ -40,9 +40,13 @@ class CreateSessionController extends Notifier<AsyncValue<String?>> {
       if (pendingSpace == null) {
         throw const MissingTicketContextException();
       }
-      final validCount = pendingSpace.kind == SpaceKind.relationship
-          ? participantNames.length == 2
-          : participantNames.length >= 3;
+      // Guarda de último recurso contra un fallo de la UI. Cuenta PERSONAS,
+      // igual que la hoja de reparto y el detalle (BUG-6): exigir tres en un
+      // grupo bloqueaba repartir con alguien sin cuenta.
+      final validCount = contextReadyForExpenses(
+        pendingSpace.kind,
+        participantNames.length,
+      );
       if (!validCount || participantUids.length != participantNames.length) {
         throw const MissingTicketContextException();
       }

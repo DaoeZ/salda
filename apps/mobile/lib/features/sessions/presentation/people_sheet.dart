@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../spaces/data/spaces_repository.dart';
+import '../../spaces/domain/space_identities.dart';
 import '../../spaces/domain/space_models.dart';
 import '../application/create_session_controller.dart';
 
@@ -102,6 +103,16 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
         final manuals =
             ref.watch(spaceManualParticipantsProvider(target.id)).value ??
             const <ManualParticipant>[];
+        // Un MANUAL ya vinculado cuya cuenta también es miembro es UNA
+        // persona (BUG-6): listarlo dos veces la partiría en dos deudas y
+        // podría enfrentarla consigo misma. El actor histórico no se toca;
+        // aquí solo se elige con qué identidad entra en ESTE ticket, y la
+        // cuenta manda porque puede leer y confirmar.
+        final memberUids = {for (final member in ordered) member.uid};
+        final shown = [
+          for (final manual in manuals)
+            if (!memberUids.contains(manual.linkedUid)) manual,
+        ];
         final people = [
           for (final member in ordered)
             (
@@ -119,12 +130,14 @@ class _PeopleFormState extends ConsumerState<_PeopleForm> {
                             ?.displayName ??
                         '…',
             ),
-          for (final manual in manuals)
+          for (final manual in shown)
             (uid: '', manualId: manual.id, name: manual.displayName),
         ];
-        final complete = target.kind == SpaceKind.relationship
-            ? people.length == 2
-            : people.length >= 3;
+        final complete = contextReadyForExpenses(
+          target.kind,
+          spaceEconomicIdentities(members: spaceMembers, manuals: manuals)
+              .length,
+        );
         if (payerIndex >= people.length) payerIndex = 0;
 
         return SingleChildScrollView(

@@ -16,6 +16,7 @@ import '../../profile/presentation/profile_avatar.dart';
 import '../../scan/presentation/scan_flow.dart';
 import '../data/manual_link_repository.dart';
 import '../data/spaces_repository.dart';
+import '../domain/space_identities.dart';
 import '../domain/space_models.dart';
 import 'space_avatar.dart';
 import 'space_title_text.dart';
@@ -73,17 +74,23 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
         body: Center(child: Text(l10n.spaceGone)),
       );
     }
-    final manuals =
-        ref.watch(spaceManualParticipantsProvider(widget.spaceId)).value ??
-        const <ManualParticipant>[];
+    final manualsAsync = ref.watch(
+      spaceManualParticipantsProvider(widget.spaceId),
+    );
+    final manuals = manualsAsync.value ?? const <ManualParticipant>[];
     // Lo que hace a un contexto operativo son las IDENTIDADES ECONÓMICAS, no
-    // las cuentas. Una relación con un participante MANUAL (BUG-2) tiene un
-    // solo miembro y aun así está completa: el manual ocupa la segunda plaza
-    // y participa en repartos y balances igual que una cuenta.
-    final participants = members.length + manuals.length;
-    final contextReady = space.isRelationship
-        ? participants == 2
-        : participants >= 3;
+    // las cuentas (BUG-6): un MANUAL pesa igual que quien tiene app, y un
+    // manual ya vinculado no cuenta dos veces junto a su cuenta.
+    final contextReady = contextReadyForExpenses(
+      space.kind,
+      spaceEconomicIdentities(members: members, manuals: manuals).length,
+    );
+    // Mientras faltan datos no se afirma que falte gente: con las listas
+    // todavía vacías el resultado sería "no operativo" y la pantalla
+    // parpadearía entre un aviso falso y el estado real.
+    final countingPeople =
+        !manualsAsync.hasValue ||
+        !ref.watch(spaceMembersProvider(widget.spaceId)).hasValue;
 
     return Scaffold(
       appBar: AppBar(
@@ -241,7 +248,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
                 ),
               ),
             ),
-          if (!contextReady) ...[
+          if (!contextReady && !countingPeople) ...[
             const SizedBox(height: TokenSpacing.md),
             Card(
               child: Padding(
@@ -269,7 +276,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
       ),
       floatingActionButton: space.isActive
           ? FloatingActionButton.extended(
-              onPressed: _scanning || !contextReady
+              onPressed: _scanning || !contextReady || countingPeople
                   ? null
                   : () {
                       // El próximo ticket guardado se vincula a ESTE espacio
