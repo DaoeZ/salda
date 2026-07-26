@@ -6,10 +6,40 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Clave de release, si existe. `key.properties` y los almacenes (*.jks,
-// *.keystore) están gitignorados: aquí nunca hay secretos, solo la ruta por
-// la que se leerían. Sin el archivo, el proyecto sigue funcionando igual que
-// hasta ahora — firmando con la clave de depuración.
+// ── Firma de DESARROLLO COMPARTIDA (BUG-1) ───────────────────────────────
+//
+// El problema: cada máquina genera su propio `~/.android/debug.keystore`, así
+// que el APK sale con un SHA-1 distinto en cada entorno. Google Sign-In
+// autoriza por (package + SHA-1), de modo que solo funcionaba donde esa
+// huella estuviera registrada en Firebase; en el resto fallaba con
+// DEVELOPER_ERROR. Lo mismo rompe los App Links, que se verifican contra el
+// SHA-256 publicado en assetlinks.json.
+//
+// La solución: TODOS los entornos autorizados firman desarrollo con el MISMO
+// certificado. Ni la keystore ni las contraseñas entran en Git: se leen de un
+// archivo local ignorado o de variables de entorno (CI/cloud).
+fun devSigningValue(propertyKey: String, envKey: String): String? {
+    val fromFile = rootProject.file("dev-keystore.properties")
+        .takeIf { it.exists() }
+        ?.let { file ->
+            Properties().apply { file.inputStream().use { load(it) } }
+                .getProperty(propertyKey)
+        }
+    return (fromFile ?: System.getenv(envKey))?.takeIf { it.isNotBlank() }
+}
+
+val devStorePath = devSigningValue("storeFile", "SALDA_DEV_KEYSTORE")
+val devStorePassword =
+    devSigningValue("storePassword", "SALDA_DEV_KEYSTORE_PASSWORD")
+val devKeyAlias = devSigningValue("keyAlias", "SALDA_DEV_KEY_ALIAS")
+val devKeyPassword = devSigningValue("keyPassword", "SALDA_DEV_KEY_PASSWORD")
+val devKeystoreFile = devStorePath?.let { file(it) }
+val hasDevKeystore = devKeystoreFile?.exists() == true &&
+    devStorePassword != null && devKeyAlias != null && devKeyPassword != null
+
+// Clave de RELEASE (Play), independiente de la anterior. `key.properties` y
+// los almacenes (*.jks, *.keystore) están gitignorados: aquí nunca hay
+// secretos, solo la ruta por la que se leerían.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
 val keystoreProperties = Properties().apply {
@@ -39,6 +69,15 @@ android {
     }
 
     signingConfigs {
+        // Firma de desarrollo COMPARTIDA entre todos los entornos.
+        if (hasDevKeystore) {
+            create("dev") {
+                storeFile = devKeystoreFile
+                storePassword = devStorePassword
+                keyAlias = devKeyAlias
+                keyPassword = devKeyPassword
+            }
+        }
         // Solo se declara si hay clave real: crear una config vacía haría
         // fallar builds de desarrollo que hoy funcionan.
         if (hasReleaseKeystore) {
@@ -52,6 +91,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // NUNCA cae en `~/.android/debug.keystore` sin avisar: si falta la
+            // firma compartida, el guardián de abajo detiene el ensamblado.
+            if (hasDevKeystore) signingConfig = signingConfigs.getByName("dev")
+        }
         release {
             // ESTADO ACTUAL: sin clave propia, `release` se firma con la de
             // DEPURACIÓN. Es deliberado —permite `flutter run --release` y
@@ -59,19 +103,48 @@ android {
             // rechaza y, si se colara, quedaría atado a un certificado que
             // cualquiera puede reproducir. El guardián de abajo impide que
             // eso llegue a un artefacto de publicación.
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            signingConfig = when {
+                hasReleaseKeystore -> signingConfigs.getByName("release")
+                // Sin clave de Play, una release de PRUEBA se firma con el
+                // certificado compartido de desarrollo: así también funcionan
+                // Google Sign-In y los App Links al probar en release.
+                hasDevKeystore -> signingConfigs.getByName("dev")
+                else -> signingConfigs.getByName("debug")
             }
         }
     }
 }
 
-// Red de seguridad: el AAB es el formato con el que se sube a Play, así que
-// es el único que se bloquea. Los APK de desarrollo (`flutter build apk`,
-// `flutter run --release`) siguen funcionando con un aviso visible.
+// BUG-1: sin firma compartida no se ENSAMBLA ni se INSTALA nada. Se
+// comprueba sobre el grafo de tareas, no en la configuración, para que
+// `flutter test`, `dart analyze`, `signingReport` y cualquier tarea que no
+// produzca un artefacto sigan funcionando en un entorno recién clonado.
 gradle.taskGraph.whenReady {
+    val producingArtifact = allTasks.any { task ->
+        listOf("assemble", "bundle", "install", "package").any {
+            task.name.startsWith(it)
+        }
+    }
+    if (producingArtifact && !hasDevKeystore &&
+        !project.hasProperty("allowLocalDebugKeystore")) {
+        val motivo = when {
+            devStorePath == null ->
+                "no hay configuracion: falta dev-keystore.properties o las variables SALDA_DEV_*"
+            devKeystoreFile?.exists() != true ->
+                "la keystore indicada no existe en: " + devStorePath
+            else -> "faltan storePassword, keyAlias o keyPassword"
+        }
+        throw GradleException(
+            "Firma de desarrollo COMPARTIDA no configurada (" + motivo + ").\n" +
+                "Sin ella el APK saldria con el certificado local de esta " +
+                "maquina y Google Sign-In fallaria con DEVELOPER_ERROR, " +
+                "ademas de romper los App Links.\n" +
+                "Configuralo siguiendo docs/ENTORNOS.md (seccion 'Firma de " +
+                "desarrollo compartida'), o repite con " +
+                "-PallowLocalDebugKeystore=true si de verdad solo quieres un " +
+                "APK local sin Google Sign-In."
+        )
+    }
     if (hasReleaseKeystore) return@whenReady
     val buildingBundle = allTasks.any { it.name.startsWith("bundle") && it.name.contains("Release") }
     val buildingApk = allTasks.any { it.name.startsWith("assemble") && it.name.contains("Release") }

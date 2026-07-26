@@ -61,3 +61,6 @@ GoogleService-Info.plist
 serviceAccount*.json
 # firebase_options.dart SÍ se commitea: es config pública de cliente
 # (la seguridad la dan las reglas + App Check).
+
+# Firma de desarrollo compartida (BUG-1): nunca en Git.
+dev-keystore.properties
