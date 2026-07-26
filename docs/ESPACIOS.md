@@ -48,7 +48,25 @@ inventaría una intención social y podría cambiar la presentación histórica.
 
 Una relación usa el ID canónico `relationship_{uidMenor}~{uidMayor}` y conserva
 los dos UID ordenados e inmutables en `relationshipUids`, incluso mientras la
-segunda persona decide la invitación. Rules impide otro ID, un tercer miembro o
+segunda persona decide la invitación.
+
+**Consecuencia que conviene tener presente (BUG-2):** como el identificador se
+deriva de AMBOS UID, hay que conocer el de la otra persona **antes** de crear
+la relación. Eso es lo que hace que A→B y B→A sean el mismo contexto, pero
+también implica que la segunda plaza **solo** puede completarse con una cuenta
+localizable:
+
+| Vía | ¿Válida en una relación? | Motivo |
+|---|---|---|
+| Cuenta existente | **Sí** | La búsqueda por username o nombre devuelve su UID |
+| Enlace de incorporación | **No** | El ID tendría que calcularse sin saber quién aceptará |
+| Participante MANUAL | **No** | No tiene UID: no puede ocupar una de las dos plazas |
+| GUEST | Solo si se conoce su UID | Tiene UID propio, pero por diseño no es buscable (ADR-034) |
+
+Para compartir gastos con alguien sin cuenta está el **grupo**, que sí admite
+participantes MANUAL y enlaces. La pantalla de creación lo ofrece en vez de
+dejar un callejón sin salida. Rules impide explícitamente crear un
+`manualParticipant` en un espacio de tipo `relationship`. Rules impide otro ID, un tercer miembro o
 una invitación fuera de la pareja. Un grupo mantiene membresía flexible, pero la
 app exige al menos tres miembros antes de permitir gastos nuevos.
 

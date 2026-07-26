@@ -2884,6 +2884,64 @@ describe('vinculación de identidad', () => {
       req('m1', OWNER, { attempt: 5 })));
   });
 
+  // ── BUG-2: la segunda plaza de una RELACIÓN ────────────────────────
+  it('BUG-2: una RELACIÓN no admite participantes MANUAL', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/rel1'), {
+        name: 'Ana y Bruno', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+        kind: 'relationship', relationshipUids: [SOCIAL_OUTSIDER, THIRD],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+    });
+    // Un MANUAL no tiene UID: seria un tercer actor economico en un
+    // contexto de exactamente dos personas.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/rel1/manualParticipants/mx'), {
+        manualId: 'mx', displayName: 'Sin cuenta', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    // En un GRUPO sigue permitido, como siempre.
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/mx'), {
+        manualId: 'mx', displayName: 'Sin cuenta', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+  });
+
+  it('BUG-2: una RELACIÓN no admite una tercera plaza', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/rel1'), {
+        name: 'Ana y Bruno', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+        kind: 'relationship', relationshipUids: [SOCIAL_OUTSIDER, THIRD],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+      await setDoc(doc(f, `spaces/rel1/members/${SOCIAL_OUTSIDER}`),
+        { uid: SOCIAL_OUTSIDER, joinedAt: serverTimestamp() });
+      await setDoc(doc(f, `spaceInvites/rel1_${FOURTH}`), {
+        spaceId: 'rel1', spaceName: 'Ana y Bruno',
+        fromUid: SOCIAL_OUTSIDER, toUid: FOURTH, status: 'accepted',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+    });
+    // FOURTH no esta en relationshipUids: la plaza esta reservada.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/rel1/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() }));
+    // Ni invitar a un tercero fuera de la pareja canonica.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/rel1_${OWNER}`), {
+        spaceId: 'rel1', spaceName: 'Ana y Bruno',
+        fromUid: SOCIAL_OUTSIDER, toUid: OWNER, status: 'pending',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      }));
+  });
+
   it('la solicitud NO se puede borrar: es el rastro de la aprobación',
       async () => {
     await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),

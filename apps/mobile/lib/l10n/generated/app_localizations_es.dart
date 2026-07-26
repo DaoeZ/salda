@@ -1490,6 +1490,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get relationshipCreateHelp => 'Gastos entre dos personas';
 
   @override
+  String get relationshipNoAccountTitle => '¿No tiene cuenta en Salda?';
+
+  @override
+  String get relationshipNoAccountBody =>
+      'Una relación son dos cuentas. Para compartir gastos con alguien sin cuenta, crea un grupo: admite personas añadidas a mano y enlaces de invitación.';
+
+  @override
   String get relationshipSearchHelp =>
       'Busca a la persona con la que quieres compartir gastos.';
 

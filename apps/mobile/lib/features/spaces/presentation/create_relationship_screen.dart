@@ -12,6 +12,24 @@ import '../data/spaces_repository.dart';
 
 /// Selección explícita de la segunda persona de una relación. No infiere la
 /// pareja desde amistad, tickets ni deuda: crearla siempre es una decisión.
+///
+/// POR QUÉ SOLO SE BUSCA UNA CUENTA (BUG-2). Una relación son exactamente DOS
+/// UID y su identificador es canónico —`relationship_{uidMenor}~{uidMayor}`,
+/// ADR-030—, de modo que hay que conocer el UID de la otra persona ANTES de
+/// crearla; eso es lo que hace que A→B y B→A sean el mismo contexto y no dos
+/// relaciones duplicadas. De ahí que las otras vías no encajen:
+///
+/// - **Enlace abierto**: el identificador tendría que calcularse sin saber
+///   quién va a aceptar. Incompatible sin rediseñar ADR-030.
+/// - **MANUAL**: no tiene UID, así que no puede ocupar una de las dos plazas.
+///   Rules lo impide ahora explícitamente.
+/// - **GUEST**: sí puede ser la segunda persona —tiene UID propio— pero por
+///   diseño no es buscable (ADR-034), así que no hay forma de alcanzarlo
+///   desde aquí.
+///
+/// Para compartir gastos con alguien sin cuenta existe el GRUPO, que sí
+/// admite participantes MANUAL y enlaces de incorporación. La pantalla lo
+/// ofrece en vez de dejar al usuario en un callejón sin salida.
 class CreateRelationshipScreen extends ConsumerStatefulWidget {
   const CreateRelationshipScreen({super.key});
 
@@ -114,6 +132,25 @@ class _CreateRelationshipScreenState
               ),
             ),
           ),
+          // La pantalla explica QUÉ es una relación y ofrece la alternativa
+          // real cuando la otra persona no tiene cuenta, en vez de ser solo
+          // una caja de búsqueda sin salida.
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: TokenSpacing.lg,
+            ),
+            child: Card(
+              child: ListTile(
+                leading: const Icon(Icons.groups_outlined),
+                title: Text(l10n.relationshipNoAccountTitle),
+                subtitle: Text(l10n.relationshipNoAccountBody),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: creatingUid == null
+                    ? () => context.go('/home')
+                    : null,
+              ),
+            ),
+          ),
           if (searching) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: failed
@@ -143,7 +180,11 @@ class _CreateRelationshipScreenState
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text('@${profile.username}'),
+                        // Una cuenta puede no tener username todavía: en ese
+                        // caso no se pinta un '@' huérfano.
+                        subtitle: profile.username.isEmpty
+                            ? null
+                            : Text('@${profile.username}'),
                         trailing: busy
                             ? const SizedBox.square(
                                 dimension: 24,

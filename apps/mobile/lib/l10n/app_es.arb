@@ -512,6 +512,8 @@
   "groupsEmpty": "Crea un grupo para tres o más personas",
   "relationshipCreate": "Nueva relación",
   "relationshipCreateHelp": "Gastos entre dos personas",
+  "relationshipNoAccountTitle": "¿No tiene cuenta en Salda?",
+  "relationshipNoAccountBody": "Una relación son dos cuentas. Para compartir gastos con alguien sin cuenta, crea un grupo: admite personas añadidas a mano y enlaces de invitación.",
   "relationshipSearchHelp": "Busca a la persona con la que quieres compartir gastos.",
   "groupCreate": "Nuevo grupo",
   "groupCreateHelp": "Gastos entre tres o más personas",

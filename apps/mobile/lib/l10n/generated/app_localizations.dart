@@ -2716,6 +2716,18 @@ abstract class AppLocalizations {
   /// **'Gastos entre dos personas'**
   String get relationshipCreateHelp;
 
+  /// No description provided for @relationshipNoAccountTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿No tiene cuenta en Salda?'**
+  String get relationshipNoAccountTitle;
+
+  /// No description provided for @relationshipNoAccountBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Una relación son dos cuentas. Para compartir gastos con alguien sin cuenta, crea un grupo: admite personas añadidas a mano y enlaces de invitación.'**
+  String get relationshipNoAccountBody;
+
   /// No description provided for @relationshipSearchHelp.
   ///
   /// In es, this message translates to:

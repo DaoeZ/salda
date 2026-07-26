@@ -782,7 +782,12 @@ service cloud.firestore {
         // y editarlos sigue siendo exclusivo del propietario.
         allow read: if canParticipate() && isSpaceMember(spaceId);
 
+        // BUG-2: una RELACIÓN son exactamente DOS UID (ADR-030). Un MANUAL
+        // no tiene UID, así que meterlo ahí crearía un tercer actor
+        // económico en un contexto de dos personas — un estado que el
+        // modelo no contempla y que nada impedía hasta ahora.
         allow create: if isSpaceOwner(spaceId)
+          && spaceData(spaceId).get('kind', 'group') == 'group'
           && spaceData(spaceId).status == 'active'
           && validManualParticipant(request.resource.data, manualId)
           // Nadie NACE vinculado: la vinculación solo llega por una
