@@ -297,6 +297,10 @@ class SpaceTicket {
   /// sessions/{sid}/accounts/{aid}/tickets/{tid}
   final String path;
   final String sessionId;
+
+  /// Id del documento del ticket, derivado de la ruta. Es lo que necesita la
+  /// navegación: la ruta completa no viaja por el enlace.
+  String get id => path.split('/').last;
   final String merchantName;
   final int grandTotalCents;
   final String? date;

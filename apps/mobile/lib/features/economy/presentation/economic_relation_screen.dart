@@ -2,7 +2,6 @@ import 'package:design_tokens/design_tokens.dart';
 import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/money_format.dart';
 import '../../../core/theme/app_theme.dart';
@@ -10,6 +9,7 @@ import '../../../core/ui/badges.dart';
 import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
+import '../../sessions/presentation/ticket_navigation.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
 import '../data/economic_repository.dart';
@@ -326,7 +326,13 @@ class _EntryTile extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final viewerOwes = entry.debtorUid == viewerUid;
     return ListTile(
-      onTap: () => context.push('/home/session/${entry.sessionId}'),
+      // La fila describe UN ticket: llevaba a la sesión entera, donde
+      // había que volver a buscarlo.
+      onTap: () => openTicket(
+        context,
+        sessionId: entry.sessionId,
+        ticketId: entry.ticketId,
+      ),
       title: Text(
         entry.ticketName,
         maxLines: 1,

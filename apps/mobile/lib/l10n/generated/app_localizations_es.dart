@@ -1081,6 +1081,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get spaceAddTicket => 'Añadir ticket';
 
   @override
+  String get ticketGoneTitle => 'Este gasto ya no está disponible';
+
+  @override
+  String get ticketGoneBody =>
+      'Puede que se haya borrado o que hayas perdido el acceso a su contexto.';
+
+  @override
   String get spaceActionError =>
       'No se pudo completar la acción. Inténtalo de nuevo.';
 

@@ -20,7 +20,7 @@ import '../../features/sessions/presentation/join_ticket_screen.dart';
 import '../../features/sessions/presentation/linked_ticket_screen.dart';
 import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
-import '../../features/sessions/presentation/ticket_detail_screen.dart';
+import '../../features/sessions/presentation/ticket_navigation.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/spaces/data/spaces_repository.dart';
 import '../../features/spaces/presentation/space_detail_screen.dart';
@@ -235,10 +235,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 builder: (_, state) =>
                     ShareScreen(sessionId: state.pathParameters['sid']!),
               ),
+              // Por IDENTIFICADOR, no por objeto: así cualquier
+              // superficie puede enlazar a un ticket y el enlace es
+              // reconstruible (volver atrás, restaurar estado).
               GoRoute(
-                path: 'ticket',
-                builder: (_, state) =>
-                    TicketDetailScreen(ticket: state.extra! as TicketRef),
+                path: 'ticket/:tid',
+                builder: (_, state) => TicketRoute(
+                  sessionId: state.pathParameters['sid']!,
+                  ticketId: state.pathParameters['tid']!,
+                ),
               ),
             ],
           ),

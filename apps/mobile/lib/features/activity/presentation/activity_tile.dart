@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../sessions/presentation/ticket_navigation.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/badges.dart';
@@ -142,8 +143,17 @@ class ActivityTile extends ConsumerWidget {
   void _open(BuildContext context) {
     final spaceId = event.spaceId;
     final sessionId = event.sessionId;
+    final ticketId = event.ticketId;
     if (event.paymentId != null) {
       context.push('/home/economy');
+    } else if (sessionId != null &&
+        sessionId.isNotEmpty &&
+        ticketId != null &&
+        ticketId.isNotEmpty) {
+      // El evento SÍ identifica un ticket: se abre ese, no el espacio
+      // entero. Los eventos antiguos sin `ticketId` caen a las ramas de
+      // abajo — nunca se adivina un ticket por su nombre o su importe.
+      openTicket(context, sessionId: sessionId, ticketId: ticketId);
     } else if (spaceId != null && spaceId.isNotEmpty) {
       context.push('/home/spaces/$spaceId');
     } else if (sessionId != null && sessionId.isNotEmpty) {

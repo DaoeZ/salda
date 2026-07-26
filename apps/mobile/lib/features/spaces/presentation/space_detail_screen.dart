@@ -9,6 +9,7 @@ import '../../../core/ui/badges.dart';
 import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
+import '../../sessions/presentation/ticket_navigation.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../activity/presentation/space_activity_section.dart';
 import '../../chat/presentation/space_chat_section.dart';
@@ -914,7 +915,6 @@ class _SpaceTickets extends ConsumerWidget {
               children: [
                 for (final ticket in list)
                   ListTile(
-                    dense: true,
                     leading: const Icon(Icons.receipt_long_outlined),
                     title: Text(
                       ticket.merchantName.isEmpty
@@ -927,6 +927,14 @@ class _SpaceTickets extends ConsumerWidget {
                     trailing: MoneyText(
                       Money(ticket.grandTotalCents),
                       size: MoneySize.small,
+                    ),
+                    // El ticket se veía pero no se abría: la fila nunca tuvo
+                    // acción. `dense` además dejaba el alto por debajo del
+                    // objetivo táctil mínimo.
+                    onTap: () => openTicket(
+                      context,
+                      sessionId: ticket.sessionId,
+                      ticketId: ticket.id,
                     ),
                   ),
               ],

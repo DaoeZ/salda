@@ -389,6 +389,8 @@
   "spaceTicketsEmpty": "Aún no hay tickets vinculados. Crea uno desde aquí o vincula uno existente desde su detalle.",
   "spaceTicketUntitled": "Ticket",
   "spaceAddTicket": "Añadir ticket",
+  "ticketGoneTitle": "Este gasto ya no está disponible",
+  "ticketGoneBody": "Puede que se haya borrado o que hayas perdido el acceso a su contexto.",
   "spaceActionError": "No se pudo completar la acción. Inténtalo de nuevo.",
   "spaceSessionNotReady": "Tu sesión aún no está lista para compartir gastos. Comprueba que has verificado el correo y completado tu perfil, y vuelve a entrar.",
   "spaceLinkTooltip": "Espacio compartido",

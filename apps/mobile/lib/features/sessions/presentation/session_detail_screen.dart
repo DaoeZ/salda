@@ -16,8 +16,8 @@ import '../application/session_export.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
+import 'ticket_navigation.dart';
 import 'settlement_progress_bar.dart';
-import 'ticket_detail_screen.dart';
 
 /// Detalle de sesión: Resumen (balances + liquidaciones) · Cuentas · Actividad.
 /// Los importes vienen de los agregados autoritativos de la function; la app
@@ -761,13 +761,12 @@ class _AccountCard extends ConsumerWidget {
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
-              onTap: () => context.push(
-                '/home/session/$sessionId/ticket',
-                extra: TicketRef(
-                  sessionId: sessionId,
-                  ticket: ticket,
-                  payerName: names[ticket.paidBy] ?? '—',
-                ),
+              // Misma ruta que el resto de superficies: una sola forma de
+              // abrir un ticket en toda la app.
+              onTap: () => openTicket(
+                context,
+                sessionId: sessionId,
+                ticketId: ticket.id,
               ),
             ),
         ],

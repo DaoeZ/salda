@@ -1972,6 +1972,18 @@ abstract class AppLocalizations {
   /// **'Añadir ticket'**
   String get spaceAddTicket;
 
+  /// No description provided for @ticketGoneTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto ya no está disponible'**
+  String get ticketGoneTitle;
+
+  /// No description provided for @ticketGoneBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Puede que se haya borrado o que hayas perdido el acceso a su contexto.'**
+  String get ticketGoneBody;
+
   /// No description provided for @spaceActionError.
   ///
   /// In es, this message translates to:
