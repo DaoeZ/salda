@@ -1490,6 +1490,28 @@ class AppLocalizationsEs extends AppLocalizations {
   String get relationshipCreateHelp => 'Gastos entre dos personas';
 
   @override
+  String get relationshipAlreadyInvited =>
+      'Ya le habías invitado. Sigue pendiente de que acepte.';
+
+  @override
+  String get relationshipReinvited => 'Le hemos vuelto a enviar la invitación.';
+
+  @override
+  String get relationshipAlreadyActive => 'Ya tenéis una relación activa.';
+
+  @override
+  String get relationshipInvitedByOther =>
+      'Esa persona ya te invitó. Acepta su invitación desde Inicio.';
+
+  @override
+  String get relationshipIncompatible =>
+      'Esta relación tiene datos antiguos que no podemos completar. Avísanos antes de reintentar.';
+
+  @override
+  String get relationshipNotAllowed =>
+      'No puedes crear una relación contigo mismo.';
+
+  @override
   String get relationshipNoAccountTitle => '¿No tiene cuenta en Salda?';
 
   @override

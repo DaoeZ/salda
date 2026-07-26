@@ -2716,6 +2716,42 @@ abstract class AppLocalizations {
   /// **'Gastos entre dos personas'**
   String get relationshipCreateHelp;
 
+  /// No description provided for @relationshipAlreadyInvited.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya le habías invitado. Sigue pendiente de que acepte.'**
+  String get relationshipAlreadyInvited;
+
+  /// No description provided for @relationshipReinvited.
+  ///
+  /// In es, this message translates to:
+  /// **'Le hemos vuelto a enviar la invitación.'**
+  String get relationshipReinvited;
+
+  /// No description provided for @relationshipAlreadyActive.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya tenéis una relación activa.'**
+  String get relationshipAlreadyActive;
+
+  /// No description provided for @relationshipInvitedByOther.
+  ///
+  /// In es, this message translates to:
+  /// **'Esa persona ya te invitó. Acepta su invitación desde Inicio.'**
+  String get relationshipInvitedByOther;
+
+  /// No description provided for @relationshipIncompatible.
+  ///
+  /// In es, this message translates to:
+  /// **'Esta relación tiene datos antiguos que no podemos completar. Avísanos antes de reintentar.'**
+  String get relationshipIncompatible;
+
+  /// No description provided for @relationshipNotAllowed.
+  ///
+  /// In es, this message translates to:
+  /// **'No puedes crear una relación contigo mismo.'**
+  String get relationshipNotAllowed;
+
   /// No description provided for @relationshipNoAccountTitle.
   ///
   /// In es, this message translates to:

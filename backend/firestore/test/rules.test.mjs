@@ -2953,5 +2953,82 @@ describe('vinculación de identidad', () => {
   });
 });
 
+// ─── BUG-3: invitaciones de relación en AMBOS ordenes de UID ──────────
+describe('BUG-3 relaciones: crear en ambos sentidos', () => {
+  beforeEach(seedSocialProfiles);
+
+  // Orden lexicografico real: 'fourth-uid' < 'third-uid'.
+  const relId = (a, b) => {
+    const [x, y] = [a, b].sort();
+    return `relationship_${x}~${y}`;
+  };
+
+  /** Exactamente lo que hace createRelationship en la app. */
+  const crear = async (f, fromUid, toUid) => {
+    const id = relId(fromUid, toUid);
+    const pair = [fromUid, toUid].sort();
+    // La app LEE primero el doc canonico dentro de la transaccion.
+    await getDoc(doc(f, `spaces/${id}`));
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${id}`), {
+      name: 'Ana y Bruno', ownerUid: fromUid, kind: 'relationship',
+      relationshipUids: pair, status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${id}/members/${fromUid}`),
+      { uid: fromUid, joinedAt: serverTimestamp() });
+    batch.set(doc(f, `spaceInvites/${id}_${toUid}`), {
+      spaceId: id, spaceName: 'Ana y Bruno', fromUid, toUid,
+      status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return batch.commit();
+  };
+
+  /** Aceptar: membresia + invitacion resuelta en el mismo batch. */
+  const aceptar = (f, uid, id) => {
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/${id}_${uid}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/${id}/members/${uid}`),
+      { uid, joinedAt: serverTimestamp() });
+    return batch.commit();
+  };
+
+  it('el UID MENOR invita al MAYOR', async () => {
+    await assertSucceeds(crear(db(FOURTH), FOURTH, THIRD));
+    await assertSucceeds(aceptar(db(THIRD), THIRD, relId(FOURTH, THIRD)));
+  });
+
+  it('el UID MAYOR invita al MENOR', async () => {
+    await assertSucceeds(crear(db(THIRD), THIRD, FOURTH));
+    await assertSucceeds(aceptar(db(FOURTH), FOURTH, relId(THIRD, FOURTH)));
+  });
+
+  it('el creador NO puede aceptar su propia invitacion', async () => {
+    await crear(db(FOURTH), FOURTH, THIRD);
+    await assertFails(aceptar(db(FOURTH), FOURTH, relId(FOURTH, THIRD)));
+  });
+
+  it('una cuenta ajena no puede aceptar ni leer la invitacion', async () => {
+    await crear(db(FOURTH), FOURTH, THIRD);
+    const id = relId(FOURTH, THIRD);
+    await assertFails(aceptar(db(STRANGER), STRANGER, id));
+    await assertFails(getDoc(doc(db(STRANGER), `spaceInvites/${id}_${THIRD}`)));
+  });
+
+  it('el owner NO se deriva del orden lexicografico', async () => {
+    // Crea el MAYOR: el owner debe ser el, aunque vaya segundo en el id.
+    await crear(db(THIRD), THIRD, FOURTH);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(
+        doc(ctx.firestore(), `spaces/${relId(THIRD, FOURTH)}`));
+      assert.equal(snap.data().ownerUid, THIRD);
+      assert.deepEqual(snap.data().relationshipUids, [FOURTH, THIRD]);
+    });
+  });
+});
+
 // Nota: assert está importado para fallos explícitos en helpers futuros.
 void assert;

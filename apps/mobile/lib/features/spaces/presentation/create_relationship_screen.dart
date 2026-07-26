@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,24 +90,55 @@ class _CreateRelationshipScreenState
   }
 
   Future<void> create(PublicProfile other) async {
+    if (creatingUid != null) return; // guarda de doble pulsación
+    final l10n = AppLocalizations.of(context);
     setState(() => creatingUid = other.uid);
     try {
       final own = ref.read(myProfileProvider).value;
       final name = own == null
           ? other.displayName
           : '${own.displayName} · ${other.displayName}';
-      final id = await ref
+      final result = await ref
           .read(spacesRepositoryProvider)
           .createRelationship(toUid: other.uid, name: name);
-      if (mounted) context.go('/home/spaces/$id');
-    } on Object {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context).spaceActionError),
-          ),
-        );
+      if (!mounted) return;
+      // Cada desenlace se cuenta con sus palabras: crear, reenviar tras un
+      // rechazo o descubrir que ya estaba activa no son lo mismo.
+      final aviso = switch (result.outcome) {
+        RelationshipOutcome.created => null,
+        RelationshipOutcome.alreadyInvited => l10n.relationshipAlreadyInvited,
+        RelationshipOutcome.reinvited => l10n.relationshipReinvited,
+        RelationshipOutcome.alreadyActive => l10n.relationshipAlreadyActive,
+      };
+      if (aviso != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(aviso)));
       }
+      context.go('/home/spaces/${result.id}');
+    } on SpaceFailure catch (failure) {
+      // BUG-3: antes TODO caía en un único «no se pudo completar la acción»,
+      // justo en los casos que dependen de tu historia con esa cuenta.
+      if (!mounted) return;
+      final mensaje = switch (failure.code) {
+        SpaceFailureCode.invitedByOther => l10n.relationshipInvitedByOther,
+        SpaceFailureCode.incompatibleData => l10n.relationshipIncompatible,
+        SpaceFailureCode.accountRequired => l10n.contextAccountRequired,
+        SpaceFailureCode.notAllowed => l10n.relationshipNotAllowed,
+        _ => l10n.spaceActionError,
+      };
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensaje)),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      // Diagnóstico útil sin datos sensibles: código y operación, nunca
+      // tokens ni el id técnico en pantalla.
+      debugPrint('createRelationship falló: $error');
+      final esRed = error is FirebaseException && error.code == 'unavailable';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(esRed ? l10n.authErrorNetwork : l10n.spaceActionError),
+        ),
+      );
     } finally {
       if (mounted) setState(() => creatingUid = null);
     }

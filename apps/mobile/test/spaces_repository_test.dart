@@ -35,10 +35,12 @@ void main() {
     test(
       'relación usa id canónico y reserva exactamente los dos UID',
       () async {
-        final id = await repoFor(
+        final created = await repoFor(
           'uid-b',
         ).createRelationship(toUid: 'uid-a', name: 'Ana y Bruno');
+        final id = created.id;
 
+        expect(created.outcome, RelationshipOutcome.created);
         expect(id, relationshipSpaceId('uid-a', 'uid-b'));
         expect(id, relationshipSpaceId('uid-b', 'uid-a'));
         final space = (await firestore.doc('spaces/$id').get()).data()!;
@@ -49,6 +51,9 @@ void main() {
           containsPair('status', 'pending'),
         );
 
+        // BUG-3: antes esto era `alreadyMember`, que la pantalla mostraba
+        // como «no se pudo completar la acción». Ahora se distingue: la
+        // creó la otra persona, así que lo correcto es ACEPTAR.
         expect(
           () => repoFor(
             'uid-a',
@@ -57,7 +62,7 @@ void main() {
             isA<SpaceFailure>().having(
               (failure) => failure.code,
               'code',
-              SpaceFailureCode.alreadyMember,
+              SpaceFailureCode.invitedByOther,
             ),
           ),
         );
@@ -387,5 +392,113 @@ void main() {
         expect(tickets, isEmpty);
       },
     );
+  });
+
+  group('BUG-3: invitaciones de relacion segun la cuenta', () {
+    // El id es canonico, asi que el resultado depende de la historia con ESA
+    // persona. Antes cualquier documento preexistente aborta ba con un error
+    // generico y dejaba un callejon sin salida permanente.
+    Future<void> seedProfiles() async {
+      for (final uid in ['uid-a', 'uid-b']) {
+        await firestore.doc('profiles/$uid').set({'displayName': uid});
+      }
+    }
+
+    test('crear en AMBOS sentidos produce el MISMO id canonico', () async {
+      await seedProfiles();
+      final ida = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      expect(ida.outcome, RelationshipOutcome.created);
+
+      // La otra persona intenta crearla: mismo espacio canonico.
+      expect(
+        relationshipSpaceId('uid-b', 'uid-a'),
+        relationshipSpaceId('uid-a', 'uid-b'),
+      );
+    });
+
+    test('si la creo la OTRA persona, se dice que hay que aceptar', () async {
+      await seedProfiles();
+      await repoFor('uid-b').createRelationship(toUid: 'uid-a', name: 'B y A');
+
+      // uid-a intenta crearla: antes -> alreadyMember -> error generico.
+      expect(
+        () => repoFor('uid-a')
+            .createRelationship(toUid: 'uid-b', name: 'A y B'),
+        throwsA(
+          isA<SpaceFailure>().having(
+            (f) => f.code, 'code', SpaceFailureCode.invitedByOther,
+          ),
+        ),
+      );
+    });
+
+    test('tras un RECHAZO se puede volver a invitar', () async {
+      await seedProfiles();
+      final creada = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      await repoFor('uid-b').rejectInvite('${creada.id}_uid-b');
+
+      // Antes esto era imposible para siempre con esa persona.
+      final reintento = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      expect(reintento.outcome, RelationshipOutcome.reinvited);
+      expect(reintento.id, creada.id);
+      final invite = (await firestore
+              .doc('spaceInvites/${creada.id}_uid-b')
+              .get())
+          .data()!;
+      expect(invite['status'], 'pending');
+    });
+
+    test('repetir la creacion no duplica nada (idempotente)', () async {
+      await seedProfiles();
+      final primera = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      final segunda = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+
+      expect(segunda.id, primera.id);
+      expect(segunda.outcome, RelationshipOutcome.alreadyInvited);
+      final invites =
+          await firestore.collection('spaceInvites').get();
+      expect(invites.docs, hasLength(1));
+    });
+
+    test('con la relacion ya ACTIVA lo dice y no reescribe', () async {
+      await seedProfiles();
+      final creada = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      // uid-b acepta.
+      final invite = (await repoFor('uid-b').watchMyInvites().first).single;
+      await repoFor('uid-b').acceptInvite(invite);
+
+      final otra = await repoFor('uid-a')
+          .createRelationship(toUid: 'uid-b', name: 'A y B');
+      expect(otra.outcome, RelationshipOutcome.alreadyActive);
+      expect(otra.id, creada.id);
+    });
+
+    test('el owner NO depende del orden lexicografico', () async {
+      await seedProfiles();
+      // 'uid-b' > 'uid-a': el creador es el mayor.
+      final creada = await repoFor('uid-b')
+          .createRelationship(toUid: 'uid-a', name: 'B y A');
+      final space = (await firestore.doc('spaces/${creada.id}').get()).data()!;
+      expect(space['ownerUid'], 'uid-b');
+      expect(space['relationshipUids'], ['uid-a', 'uid-b']);
+    });
+
+    test('crear una relacion consigo mismo se rechaza', () async {
+      expect(
+        () => repoFor('uid-a')
+            .createRelationship(toUid: 'uid-a', name: 'Yo'),
+        throwsA(
+          isA<SpaceFailure>().having(
+            (f) => f.code, 'code', SpaceFailureCode.notAllowed,
+          ),
+        ),
+      );
+    });
   });
 }

@@ -14,7 +14,31 @@ enum SpaceFailureCode {
   alreadyMember,
   ownerCannotLeave,
   targetUnavailable,
+  /// La otra persona ya creó la relación y te invitó: hay que ACEPTAR, no
+  /// crear. Antes esto caía en `alreadyMember` y se mostraba como un error
+  /// genérico, con la relación esperando en Inicio (BUG-3).
+  invitedByOther,
+  /// Documento canónico presente pero en un estado que no encaja con el
+  /// modelo (datos antiguos o parciales). Recuperable avisando, nunca
+  /// escribiendo encima a ciegas.
+  incompatibleData,
 }
+
+/// Cómo terminó `createRelationship`. Distinguirlo es lo que permite a la UI
+/// decir algo útil en vez de «no se pudo completar la acción».
+enum RelationshipOutcome {
+  /// Relación y primera invitación creadas.
+  created,
+  /// Ya existía con una invitación pendiente tuya: no se duplica nada.
+  alreadyInvited,
+  /// Había una invitación rechazada o cancelada y se ha vuelto a enviar.
+  reinvited,
+  /// Las dos personas ya son miembros: la relación está activa.
+  alreadyActive,
+}
+
+/// Resultado de crear una relación: su id y qué ocurrió realmente.
+typedef RelationshipResult = ({String id, RelationshipOutcome outcome});
 
 class SpaceFailure implements Exception {
   const SpaceFailure(this.code);
@@ -264,7 +288,15 @@ class SpacesRepository {
 
   /// Crea la relación y su invitación inicial de forma atómica. El ID y los
   /// UID reservados hacen que A→B y B→A sean el mismo contexto económico.
-  Future<String> createRelationship({
+  ///
+  /// BUG-3: antes, CUALQUIER documento canónico preexistente abortaba con
+  /// `alreadyMember`, que la pantalla mostraba como un error genérico. Como
+  /// el id se deriva del par de UID, eso ocurría exactamente en los casos en
+  /// que la relación ya tenía historia con ESA cuenta —la otra persona te
+  /// había invitado antes, o hubo un rechazo previo— y dejaba un callejón
+  /// sin salida permanente con ella. Ahora cada situación se distingue y la
+  /// que tiene arreglo se resuelve sola.
+  Future<RelationshipResult> createRelationship({
     required String toUid,
     required String name,
   }) async {
@@ -276,7 +308,16 @@ class SpacesRepository {
     final pair = [fromUid, toUid]..sort();
     final space = _spaces.doc(relationshipSpaceId(fromUid, toUid));
     final invite = _invites.doc(SpaceInvite.idFor(space.id, toUid));
+
+    final existing = await space.get();
+    if (existing.exists) {
+      return _resumeRelationship(space, invite, existing, fromUid, toUid);
+    }
+
     await firestore.runTransaction((transaction) async {
+      // Se relee DENTRO de la transacción: entre la comprobación anterior y
+      // este punto la otra persona puede haber creado la misma relación
+      // canónica. Si ocurre, converge en el camino de reanudación.
       if ((await transaction.get(space)).exists) {
         throw const SpaceFailure(SpaceFailureCode.alreadyMember);
       }
@@ -303,8 +344,77 @@ class SpacesRepository {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+    }).catchError((Object error) async {
+      // Carrera: la creó la otra persona mientras tanto. No es un fallo.
+      if (error is SpaceFailure &&
+          error.code == SpaceFailureCode.alreadyMember) {
+        return;
+      }
+      throw error;
     });
-    return space.id;
+
+    final after = await space.get();
+    if (!after.exists) throw const SpaceFailure(SpaceFailureCode.notAllowed);
+    // Si la ganó la otra persona, el resultado converge al mismo estado.
+    if ((after.data()?['ownerUid'] as String?) != fromUid) {
+      return _resumeRelationship(space, invite, after, fromUid, toUid);
+    }
+    return (id: space.id, outcome: RelationshipOutcome.created);
+  }
+
+  /// Qué hacer cuando la relación canónica YA existe. Cada rama corresponde
+  /// a una situación real distinta, y solo una es un error de verdad.
+  Future<RelationshipResult> _resumeRelationship(
+    DocumentReference<Map<String, dynamic>> space,
+    DocumentReference<Map<String, dynamic>> invite,
+    DocumentSnapshot<Map<String, dynamic>> existing,
+    String fromUid,
+    String toUid,
+  ) async {
+    final ownerUid = (existing.data()?['ownerUid'] as String?) ?? '';
+    final members = space.collection('members');
+    final soyMiembro = (await members.doc(fromUid).get()).exists;
+    final esMiembro = (await members.doc(toUid).get()).exists;
+
+    // Las dos plazas ocupadas: la relación ya está viva.
+    if (soyMiembro && esMiembro) {
+      return (id: space.id, outcome: RelationshipOutcome.alreadyActive);
+    }
+
+    // La creó la OTRA persona: lo correcto es aceptar su invitación, no
+    // crear nada. La pantalla lo dirá con esas palabras.
+    if (ownerUid == toUid) {
+      throw const SpaceFailure(SpaceFailureCode.invitedByOther);
+    }
+
+    if (ownerUid != fromUid) {
+      // Ni mía ni suya: dato antiguo o incoherente. No se escribe encima.
+      throw const SpaceFailure(SpaceFailureCode.incompatibleData);
+    }
+
+    final inviteSnap = await invite.get();
+    final status = inviteSnap.data()?['status'] as String?;
+    if (status == 'pending') {
+      return (id: space.id, outcome: RelationshipOutcome.alreadyInvited);
+    }
+    if (status == 'accepted') {
+      return (id: space.id, outcome: RelationshipOutcome.alreadyActive);
+    }
+
+    // Rechazada, cancelada o perdida: se REENVÍA sobre el mismo documento
+    // determinista, que es justo lo que Rules permite al propietario. Antes
+    // no había forma de volver a invitar a esa persona nunca más.
+    await invite.set({
+      'spaceId': space.id,
+      'spaceName': (existing.data()?['name'] as String?) ?? '',
+      'fromUid': fromUid,
+      'toUid': toUid,
+      'status': 'pending',
+      'createdAt':
+          inviteSnap.data()?['createdAt'] ?? FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    return (id: space.id, outcome: RelationshipOutcome.reinvited);
   }
 
   Future<void> rename(String spaceId, String name, {String? avatarEmoji}) =>
