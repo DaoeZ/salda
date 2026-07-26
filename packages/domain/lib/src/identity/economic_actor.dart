@@ -53,5 +53,33 @@ String? manualIdOf(String actor) => isManualActor(actor)
 /// audiencia que puede leer la obligación. Una obligación entre una cuenta y
 /// un manual tiene UN solo lector; entre dos manuales, ninguno (nunca se
 /// publica globalmente: vive en el balance de su sesión).
-List<String> accountUidsOf(Iterable<String> actors) =>
-    (actors.where(isAccountActor).toSet().toList())..sort();
+List<String> accountUidsOf(
+  Iterable<String> actors, [
+  Map<String, String> aliases = const {},
+]) {
+  final uids = <String>{};
+  for (final actor in actors) {
+    if (isAccountActor(actor)) {
+      uids.add(actor);
+      continue;
+    }
+    // VINCULACIÓN (ADR-037): un manual vinculado NO cambia de actor —sigue
+    // siendo `manual:{id}`, la clave con la que están escritas todas sus
+    // obligaciones— pero su persona pasa a ser LECTORA de lo suyo.
+    final manualId = manualIdOf(actor);
+    final linked = manualId == null ? null : aliases[manualId];
+    if (linked != null) uids.add(linked);
+  }
+  return uids.toList()..sort();
+}
+
+/// Identidad con la que se PRESENTA un actor hoy. Solo para consolidar
+/// saldos al leer: la misma persona no debe aparecer como dos deudas
+/// partidas. Los documentos no se tocan.
+String resolveActorIdentity(
+  String actor, [
+  Map<String, String> aliases = const {},
+]) {
+  final manualId = manualIdOf(actor);
+  return (manualId == null ? null : aliases[manualId]) ?? actor;
+}

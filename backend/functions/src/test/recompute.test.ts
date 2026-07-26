@@ -1000,3 +1000,95 @@ test('proyección: recomputes repetidos son idénticos (idempotencia)', () => {
   const b = computeAggregates(perItem()).ticketParticipants;
   assert.deepEqual(a, b);
 });
+
+// ── Vinculación de identidad (ADR-037) ────────────────────────────────────
+// La promesa: al vincular un MANUAL con una cuenta o un invitado NO se
+// pierde ni se mueve nada. El actor sigue siendo `manual:{id}` —la clave con
+// la que están escritas todas las obligaciones— y lo único que cambia es que
+// la persona pasa a poder LEER lo suyo.
+
+const conManual = (): SessionSnapshot => ({
+  splitModeDefault: 'byItem',
+  ownerUid: 'uid-anfitrion',
+  participants: [
+    { id: 'p1', isOwner: true, order: 0, userUid: 'uid-anfitrion' },
+    { id: 'p2', order: 1, manualId: 'm1' },
+  ],
+  accounts: [
+    {
+      id: 'a1',
+      tickets: [
+        {
+          id: 't1', grandTotal: 2000, paidByParticipantId: 'p1',
+          lines: [
+            { id: 'l1', totalPrice: 1000,
+              assignment: { type: 'one', participants: { p1: 1 } } },
+            { id: 'l2', totalPrice: 1000,
+              assignment: { type: 'one', participants: { p2: 1 } } },
+          ],
+        },
+      ],
+    },
+  ],
+  settlements: [],
+});
+
+test('vinculación: el actor económico NO cambia', () => {
+  const sinVincular = computeAggregates(conManual()).economicEntries;
+  const vinculado = computeAggregates({
+    ...conManual(), manualAliases: { m1: 'uid-marta' },
+  }).economicEntries;
+
+  // MISMO id de documento y MISMOS actores: nada que migrar.
+  assert.deepEqual(
+    vinculado.map((e) => e.id), sinVincular.map((e) => e.id));
+  assert.equal(vinculado[0].debtorUid, 'manual:m1');
+  assert.equal(vinculado[0].creditorUid, 'uid-anfitrion');
+  assert.equal(vinculado[0].amount, sinVincular[0].amount);
+});
+
+test('vinculación: la persona pasa a ser LECTORA de lo suyo', () => {
+  // Antes: la obligación cuenta↔manual solo la leía la cuenta.
+  const antes = computeAggregates(conManual()).economicEntries;
+  assert.deepEqual(antes[0].memberUids, ['uid-anfitrion']);
+
+  // Después: se AÑADE su UID. Eso es toda la vinculación.
+  const despues = computeAggregates({
+    ...conManual(), manualAliases: { m1: 'uid-marta' },
+  }).economicEntries;
+  assert.deepEqual(despues[0].memberUids, ['uid-anfitrion', 'uid-marta']);
+});
+
+test('vinculación: balances e importes de la sesión no se mueven', () => {
+  const antes = computeAggregates(conManual());
+  const despues = computeAggregates({
+    ...conManual(), manualAliases: { m1: 'uid-marta' },
+  });
+  assert.deepEqual(despues.balances, antes.balances);
+  assert.deepEqual(despues.sessionTotals, antes.sessionTotals);
+  assert.deepEqual(despues.settlementSync, antes.settlementSync);
+  // Y el participante sigue siendo el mismo: el pid nunca cambia.
+  assert.deepEqual(
+    despues.ticketParticipants.map((e) => e.pid),
+    antes.ticketParticipants.map((e) => e.pid));
+});
+
+test('vinculación: entre dos manuales, vincular UNO ya publica la deuda', () => {
+  const dosManuales = (): SessionSnapshot => ({
+    ...conManual(),
+    participants: [
+      { id: 'p1', isOwner: true, order: 0, manualId: 'm0' },
+      { id: 'p2', order: 1, manualId: 'm1' },
+    ],
+    ownerUid: undefined,
+  });
+  // Sin vincular a nadie no hay lector: la deuda no sale a la economía
+  // global (ADR-033) y se queda en el balance de su sesión.
+  assert.deepEqual(computeAggregates(dosManuales()).economicEntries, []);
+  // Vinculado uno de los dos, ya hay quien la lea.
+  const conUno = computeAggregates({
+    ...dosManuales(), manualAliases: { m1: 'uid-marta' },
+  }).economicEntries;
+  assert.deepEqual(conUno[0].memberUids, ['uid-marta']);
+  assert.equal(conUno[0].debtorUid, 'manual:m1');
+});

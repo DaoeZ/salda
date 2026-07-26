@@ -24,6 +24,45 @@ export const isAccountActor = (actor: string): boolean =>
 export const manualIdOf = (actor: string): string | undefined =>
   isManualActor(actor) ? actor.slice(manualActorPrefix.length) : undefined;
 
-/** UIDs reales de una pareja de actores: la audiencia que puede leerla. */
-export const accountUidsOf = (actors: readonly string[]): string[] =>
-  [...new Set(actors.filter(isAccountActor))].sort();
+/**
+ * UIDs reales de una pareja de actores: la audiencia que puede leerla.
+ *
+ * VINCULACIÓN (ADR-037). `aliases` mapea `manualId → uid` de los
+ * participantes manuales ya vinculados. Un actor manual vinculado NO se
+ * sustituye —el actor es y seguirá siendo `manual:{id}`, que es la clave con
+ * la que están escritas todas las obligaciones—, pero su persona pasa a ser
+ * LECTORA de lo suyo. Esa es toda la vinculación: se AÑADE identidad, no se
+ * reescribe historia.
+ */
+export const accountUidsOf = (
+  actors: readonly string[],
+  aliases: Readonly<Record<string, string>> = {},
+): string[] => {
+  const uids = new Set<string>();
+  for (const actor of actors) {
+    if (isAccountActor(actor)) {
+      uids.add(actor);
+      continue;
+    }
+    const manualId = manualIdOf(actor);
+    const linked = manualId ? aliases[manualId] : undefined;
+    if (linked) uids.add(linked);
+  }
+  return [...uids].sort();
+};
+
+/**
+ * Resuelve un actor a la identidad con la que se PRESENTA hoy.
+ *
+ * Se usa solo para consolidar saldos al leer: dos actores distintos que son
+ * la misma persona (su UID y su `manual:{id}` vinculado) no deben aparecer
+ * como dos deudas partidas. Los documentos no se tocan.
+ */
+export const resolveActorIdentity = (
+  actor: string,
+  aliases: Readonly<Record<string, string>> = {},
+): string => {
+  const manualId = manualIdOf(actor);
+  const linked = manualId ? aliases[manualId] : undefined;
+  return linked ?? actor;
+};

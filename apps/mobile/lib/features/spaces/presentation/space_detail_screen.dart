@@ -14,6 +14,7 @@ import '../../economy/presentation/space_economic_summary.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/profile_avatar.dart';
 import '../../scan/presentation/scan_flow.dart';
+import '../data/manual_link_repository.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_models.dart';
 import 'space_avatar.dart';
@@ -188,6 +189,7 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
               ],
             ),
           ),
+          if (amOwner) _PendingManualLinks(spaceId: space.id),
           if (amOwner) _PendingInvites(spaceId: space.id),
           _ManualParticipants(
             spaceId: space.id,
@@ -870,5 +872,103 @@ class _SpaceTickets extends ConsumerWidget {
               ),
             ),
     );
+  }
+}
+
+/// Bandeja del ANFITRIÓN: solicitudes de vinculación de identidad (ADR-037).
+///
+/// Vincular es reconocer que una persona real es un participante que hasta
+/// ahora solo era un nombre. Como eso le da acceso a un historial económico,
+/// lo decide el anfitrión y nadie más: Rules no permite escribir el vínculo
+/// sin que la aceptación viaje en el mismo batch.
+///
+/// Aceptar NO mueve nada de lo ya registrado: el actor sigue siendo
+/// `manual:{id}` y el participante, el mismo. Solo se añade la identidad.
+class _PendingManualLinks extends ConsumerWidget {
+  const _PendingManualLinks({required this.spaceId});
+
+  final String spaceId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final requests =
+        ref.watch(pendingManualLinksProvider(spaceId)).value ??
+        const <ManualLinkRequest>[];
+    if (requests.isEmpty) return const SizedBox.shrink();
+
+    final manuals =
+        ref.watch(spaceManualParticipantsProvider(spaceId)).value ??
+        const <ManualParticipant>[];
+    String manualName(String manualId) => manuals
+        .where((m) => m.id == manualId)
+        .map((m) => m.displayName)
+        .firstOrNull ?? manualId;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: TokenSpacing.lg),
+        Text(l10n.manualLinkRequestsTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: TokenSpacing.xs),
+        Text(l10n.manualLinkRequestHelp, style: theme.textTheme.bodySmall),
+        const SizedBox(height: TokenSpacing.sm),
+        for (final request in requests)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.person_add_alt),
+              title: Text(
+                l10n.manualLinkRequestBody(
+                  request.displayName.isEmpty
+                      ? l10n.peopleYou
+                      : request.displayName,
+                  manualName(request.manualId),
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: () => _decide(context, ref, request, false),
+                    child: Text(l10n.manualLinkReject),
+                  ),
+                  FilledButton(
+                    onPressed: () => _decide(context, ref, request, true),
+                    child: Text(l10n.manualLinkAccept),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _decide(
+    BuildContext context,
+    WidgetRef ref,
+    ManualLinkRequest request,
+    bool accept,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(manualLinkRepositoryProvider);
+    try {
+      if (accept) {
+        await repo.approve(spaceId, request);
+      } else {
+        await repo.reject(spaceId, request.id);
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            accept ? l10n.manualLinkAccepted : l10n.manualLinkRejected,
+          ),
+        ),
+      );
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+    }
   }
 }

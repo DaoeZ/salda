@@ -1672,6 +1672,46 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ticketLinkRevoke => 'Revocar el enlace';
 
   @override
+  String get manualLinkRequestsTitle => 'Solicitudes de identidad';
+
+  @override
+  String manualLinkRequestBody(String name, String manual) {
+    return '$name dice ser $manual';
+  }
+
+  @override
+  String get manualLinkRequestHelp =>
+      'Si lo aceptas, esa persona pasará a ver sus gastos y su saldo. No cambia nada de lo ya registrado.';
+
+  @override
+  String get manualLinkAccept => 'Aceptar';
+
+  @override
+  String get manualLinkReject => 'Rechazar';
+
+  @override
+  String get manualLinkAccepted => 'Identidad vinculada';
+
+  @override
+  String get manualLinkRejected => 'Solicitud rechazada';
+
+  @override
+  String get manualLinkError => 'No hemos podido completar la operación';
+
+  @override
+  String get manualLinkAsk => 'Soy yo';
+
+  @override
+  String get manualLinkAskSent =>
+      'Solicitud enviada. El anfitrión debe aceptarla.';
+
+  @override
+  String get manualLinkPending => 'Pendiente de que el anfitrión lo acepte';
+
+  @override
+  String get manualLinkLinked => 'Identidad vinculada';
+
+  @override
   String get ticketLinkPreparing => 'Preparando el enlace…';
 
   @override

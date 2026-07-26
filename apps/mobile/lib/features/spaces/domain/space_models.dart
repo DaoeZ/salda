@@ -162,6 +162,38 @@ class SpaceInvite {
   static String idFor(String spaceId, String toUid) => '${spaceId}_$toUid';
 }
 
+/// Estado de una solicitud de vinculación (ADR-037).
+enum ManualLinkStatus { pending, accepted, rejected }
+
+/// Solicitud de vinculación de un participante MANUAL con una identidad
+/// (cuenta o invitado), Sprint 6 / ADR-037.
+///
+/// La pide la propia persona y la aprueba el ANFITRIÓN: ese doble paso es lo
+/// que impide que alguien se apropie del historial económico de otro. No se
+/// borra nunca — es el rastro de que hubo aprobación.
+class ManualLinkRequest {
+  const ManualLinkRequest({
+    required this.id,
+    required this.manualId,
+    required this.uid,
+    required this.status,
+    this.displayName = '',
+    this.createdAt,
+  });
+
+  final String id;
+  final String manualId;
+  final String uid;
+
+  /// Nombre con el que se presenta quien solicita. Solo presentación: la
+  /// identidad es el UID, y el actor económico sigue siendo el manual.
+  final String displayName;
+  final ManualLinkStatus status;
+  final DateTime? createdAt;
+
+  bool get isPending => status == ManualLinkStatus.pending;
+}
+
 /// Enlace de incorporación a un GRUPO (Sprint 4, ADR-035).
 ///
 /// El [token] es el identificador del documento y a la vez el secreto (128

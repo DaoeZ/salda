@@ -1,5 +1,8 @@
 # BIBLIA DEL PROYECTO SALDA
 
+**Versión:** 1.17 · **Fecha:** 2026-07-26 · **Changelog:** v1.17 — vinculación
+MANUAL↔cuenta/invitado por ALIAS y con aprobación del anfitrión, sin migración
+ni cambio de actor (ADR-037). Anterior:
 **Versión:** 1.16 · **Fecha:** 2026-07-25 · **Changelog:** v1.16 — enlaces de
 ticket con identificación TEMPORAL de participantes MANUAL, sin vinculación ni
 cambio de actor económico (ADR-036). Versión anterior:
@@ -1545,6 +1548,41 @@ suplantación silenciosa. Contrato en `docs/ENLACES_TICKET.md`.
 **Revisión:** en el Sprint 6, sustituir o invalidar estas pruebas al vincular
 —un MANUAL con `linkedUid` ya deja de ser elegible en Rules— sin tocar el
 historial económico, del que nunca formaron parte.
+
+### ADR-037: Vinculación por ALIAS, con aprobación del anfitrión
+**Estado:** Aceptada · **Fecha:** 2026-07-26 (Sprint 6)
+**Contexto:** ADR-033 dejó abierta la vinculación de un MANUAL con una cuenta
+y declaró preferente el alias; ADR-034 y ADR-036 heredaron la decisión. Había
+que permitir que quien fue anotado a mano se convierta en invitado o en
+cuenta SIN perder historial, y sin abrir la puerta a que alguien se apropie
+del historial de otro.
+**Decisión:** [HECHO] **alias, no migración**. El actor económico NO cambia
+nunca: sigue siendo `manual:{manualId}`, la clave con la que están escritas
+todas las obligaciones, y el `participantId` tampoco cambia. Vincular solo
+AÑADE identidad: `manualParticipants/{manualId}.linkedUid` pasa de null a un
+UID, y `recompute` usa ese alias exclusivamente para AUDIENCIA —
+`accountUidsOf` resuelve un actor manual vinculado a su UID, de modo que la
+persona pasa a poder LEER lo suyo. Mismos ids de documento, mismos actores,
+mismos importes, mismos balances, mismas liquidaciones. **No hay migración**:
+es justo la propiedad por la que se eligió el alias.
+**Seguridad:** vincular requiere DOS partes. La persona crea
+`manualLinkRequests/{manualId}_{uid}` para sí misma (Rules exige
+`uid == auth.uid`); solo el ANFITRIÓN la acepta o rechaza, y aceptar escribe
+el `linkedUid` en el MISMO batch, validado con getAfter. Sin ese
+emparejamiento no existe forma de escribir un vínculo. Invariantes: nadie
+nace vinculado; vincular es IRREVERSIBLE (revincular o desvincular
+reescribiría a quién pertenece un historial ya escrito); no se solicita sobre
+un manual ya vinculado; las solicitudes no son enumerables salvo por el
+anfitrión y no se borran, porque son el rastro de la aprobación.
+**Consecuencias:** los documentos anteriores siguen válidos sin tocarlos
+(`linkedUid` nulo se comporta como siempre). Queda fuera consolidar en una
+sola fila los saldos de quien tuviera obligaciones propias Y heredadas en el
+mismo contexto; `resolveActorIdentity` queda escrita para ese día. Interfaz:
+«Soy yo» en el ticket abierto por enlace y bandeja «Solicitudes de identidad»
+en el detalle del grupo, con aceptar y rechazar. Contrato en
+`docs/VINCULACION.md`.
+**Revisión:** decidir si la actividad (P6) debe registrar la vinculación como
+un hecho más de la cronología.
 
 ---
 

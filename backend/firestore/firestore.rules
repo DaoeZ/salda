@@ -507,7 +507,30 @@ service cloud.firestore {
         && data.displayName is string
         && data.displayName.size() >= 1
         && data.displayName.size() <= 40
-        && data.get('linkedUid', null) == null
+        // VINCULACIÓN (ADR-037): `linkedUid` pasa de estar forzado a null a
+        // ser un UID, pero SOLO por la vía de una solicitud aprobada por el
+        // anfitrión (ver la regla de update). Aquí solo se valida la forma.
+        && (data.get('linkedUid', null) == null
+          || (data.linkedUid is string && data.linkedUid.size() > 0))
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    // Solicitud de vinculación (ADR-037). La pide la persona; la aprueba el
+    // ANFITRIÓN. Ese doble paso es lo que impide que alguien se apropie del
+    // historial económico de otro simplemente diciendo que es él.
+    function validManualLinkRequest(data, manualId, uid) {
+      return data.keys().hasOnly([
+          'manualId', 'uid', 'displayName', 'status',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'manualId', 'uid', 'status', 'createdAt', 'updatedAt',
+          'schemaVersion'
+        ])
+        && data.manualId == manualId
+        && data.uid == uid
+        && data.status in ['pending', 'accepted', 'rejected']
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
     }
@@ -718,14 +741,35 @@ service cloud.firestore {
         allow create: if isSpaceOwner(spaceId)
           && spaceData(spaceId).status == 'active'
           && validManualParticipant(request.resource.data, manualId)
+          // Nadie NACE vinculado: la vinculación solo llega por una
+          // solicitud que el anfitrión aprueba (ADR-037).
+          && request.resource.data.get('linkedUid', null) == null
           && request.resource.data.createdAt is timestamp
           && request.resource.data.createdByUid == request.auth.uid;
 
-        // Solo el nombre visible es mutable; identidad y vínculo, jamás.
+        // Dos mutaciones, y ninguna toca la identidad económica:
+        //  (a) renombrar — el actor `manual:{id}` no depende del nombre;
+        //  (b) VINCULAR (ADR-037): escribir `linkedUid` una sola vez, y solo
+        //      si en el MISMO batch hay una solicitud que el anfitrión está
+        //      aceptando. Sin ese emparejamiento no hay forma de vincular.
         allow update: if isSpaceOwner(spaceId)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['displayName', 'updatedAt'])
-          && validManualParticipant(request.resource.data, manualId);
+          && validManualParticipant(request.resource.data, manualId)
+          && (
+            (request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['displayName', 'updatedAt'])
+              && request.resource.data.get('linkedUid', null)
+                == resource.data.get('linkedUid', null))
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['linkedUid', 'updatedAt'])
+              // Se vincula UNA vez: revincular reescribiría a quién
+              // pertenece un historial ya escrito.
+              && resource.data.get('linkedUid', null) == null
+              && request.resource.data.linkedUid is string
+              && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/manualLinkRequests/$(manualId + '_' + request.resource.data.linkedUid))
+                  .data.status == 'accepted'
+            )
+          );
 
         // Borrar la identidad no borra su historial económico: las
         // obligaciones ya derivadas conservan el actor `manual:{id}`.
@@ -793,6 +837,55 @@ service cloud.firestore {
         allow delete: if canUseSocial()
           && resource.data.uid != spaceData(spaceId).ownerUid
           && (memberUid == request.auth.uid || isSpaceOwner(spaceId));
+      }
+
+      // Solicitudes de vinculación (ADR-037). ID determinista
+      // `{manualId}_{uid}`: no puede haber dos activas de la misma persona
+      // sobre el mismo manual, y reintentar reutiliza el documento.
+      match /manualLinkRequests/{requestId} {
+        // La ve quien la pide y el anfitrión, que es quien decide.
+        allow get: if canParticipate()
+          && (resource == null
+            ? requestId.split('_').size() >= 2
+            : (resource.data.uid == request.auth.uid
+              || isSpaceOwner(spaceId)));
+        // El anfitrión lista las pendientes de SU espacio; nadie más.
+        allow list: if isSpaceOwner(spaceId);
+
+        // La pide la PROPIA persona, para sí misma. Cuenta o invitado: el
+        // manual puede convertirse en cualquiera de los dos.
+        allow create: if canParticipate()
+          && requestId == request.resource.data.manualId + '_' + request.auth.uid
+          && validManualLinkRequest(
+            request.resource.data, request.resource.data.manualId,
+            request.auth.uid)
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt is timestamp
+          // El manual debe existir y NO estar ya vinculado.
+          && exists(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.manualId))
+          && get(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.manualId))
+              .data.get('linkedUid', null) == null;
+
+        allow update: if
+          // El ANFITRIÓN acepta o rechaza una pendiente. Aceptar va en el
+          // mismo batch que el `linkedUid`, validado por la otra regla.
+          (isSpaceOwner(spaceId)
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['accepted', 'rejected']
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt'])
+            && request.resource.data.updatedAt is timestamp)
+          // Quien la pidió puede retirarla mientras siga pendiente.
+          || (canParticipate()
+            && resource.data.uid == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'rejected'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt']));
+
+        // Nada de borrar: la solicitud es el rastro de POR QUÉ existe un
+        // vínculo. Sin ella no se podría demostrar que hubo aprobación.
+        allow delete: if false;
       }
 
       // Prueba de conocimiento del enlace de grupo (ADR-035), calcada del

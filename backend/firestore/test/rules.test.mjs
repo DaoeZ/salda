@@ -2559,5 +2559,169 @@ describe('enlaces de ticket', () => {
   });
 });
 
+
+// ─── Vinculación MANUAL → cuenta o invitado (Sprint 6, ADR-037) ────────
+describe('vinculación de identidad', () => {
+  // sp1 lo posee SOCIAL_OUTSIDER. FOURTH es una cuenta con perfil; GUEST es
+  // un invitado con identidad. THIRD hará de suplantador.
+  const req = (manualId, uid, overrides = {}) => ({
+    manualId, uid, displayName: 'Marta',
+    status: 'pending',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  /** Aprobar: solicitud a `accepted` + linkedUid, en UN batch. */
+  const approve = (f, manualId, uid) => {
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaces/sp1/manualLinkRequests/${manualId}_${uid}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.update(doc(f, `spaces/sp1/manualParticipants/${manualId}`),
+      { linkedUid: uid, updatedAt: serverTimestamp() });
+    return batch.commit();
+  };
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/m1'), {
+        manualId: 'm1', displayName: 'Marta', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+      await setDoc(doc(f, `guestIdentities/${GUEST}`), {
+        uid: GUEST, displayName: 'Alba invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+    });
+  });
+
+  it('un manual NO puede nacer vinculado', async () => {
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m9'), {
+        manualId: 'm9', displayName: 'Nuevo', linkedUid: FOURTH,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+  });
+
+  it('la solicitud la pide la propia persona, para sí misma', async () => {
+    await assertSucceeds(setDoc(
+      doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH)));
+    // Un INVITADO también puede: el manual puede volverse invitado o cuenta.
+    await assertSucceeds(setDoc(
+      doc(db(GUEST), `spaces/sp1/manualLinkRequests/m1_${GUEST}`),
+      req('m1', GUEST)));
+    // Pedirla EN NOMBRE de otro: denegado.
+    await assertFails(setDoc(
+      doc(db(THIRD), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH)));
+  });
+
+  it('SUPLANTACIÓN: sin aprobación del anfitrión no hay vínculo', async () => {
+    await setDoc(doc(db(THIRD), `spaces/sp1/manualLinkRequests/m1_${THIRD}`),
+      req('m1', THIRD));
+    // El propio solicitante no puede aceptarse.
+    await assertFails(approve(db(THIRD), 'm1', THIRD));
+    // Ni escribir el linkedUid por su cuenta.
+    await assertFails(updateDoc(
+      doc(db(THIRD), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: THIRD, updatedAt: serverTimestamp() }));
+    // Ni un miembro cualquiera del espacio.
+    await assertFails(approve(db(STRANGER), 'm1', THIRD));
+  });
+
+  it('el ANFITRIÓN acepta y el vínculo queda escrito', async () => {
+    await setDoc(doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH));
+    await assertSucceeds(approve(db(SOCIAL_OUTSIDER), 'm1', FOURTH));
+  });
+
+  it('el ANFITRIÓN puede rechazar, y entonces no hay vínculo', async () => {
+    await setDoc(doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      { status: 'rejected', updatedAt: serverTimestamp() }));
+    // Rechazada ⇒ el linkedUid no se puede escribir.
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: FOURTH, updatedAt: serverTimestamp() }));
+  });
+
+  it('el vínculo no se puede escribir SIN la solicitud en el mismo batch',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+        req('m1', FOURTH, { status: 'accepted' }));
+    });
+    // Aunque la solicitud YA esté aceptada, el emparejamiento es del batch:
+    // esto sí vale, porque getAfter ve el estado final.
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: FOURTH, updatedAt: serverTimestamp() }));
+    // Pero vincular a alguien SIN solicitud alguna, no.
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: THIRD, updatedAt: serverTimestamp() }));
+  });
+
+  it('vincular es IRREVERSIBLE: no se revincula ni se desvincula', async () => {
+    await setDoc(doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', FOURTH);
+    // Reescribir a quién pertenece un historial ya escrito: jamás. La
+    // solicitud se siembra saltándose Rules porque pedirla ya está denegado
+    // (se comprueba aparte): aquí interesa el paso siguiente.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), `spaces/sp1/manualLinkRequests/m1_${THIRD}`),
+        req('m1', THIRD));
+    });
+    await assertFails(approve(db(SOCIAL_OUTSIDER), 'm1', THIRD));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: null, updatedAt: serverTimestamp() }));
+  });
+
+  it('no se solicita sobre un manual YA vinculado', async () => {
+    await setDoc(doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', FOURTH);
+    await assertFails(setDoc(
+      doc(db(THIRD), `spaces/sp1/manualLinkRequests/m1_${THIRD}`),
+      req('m1', THIRD)));
+  });
+
+  it('renombrar sigue funcionando y NO toca el vínculo', async () => {
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { displayName: 'Marta G.', updatedAt: serverTimestamp() }));
+  });
+
+  it('las solicitudes NO son enumerables por quien no es el anfitrión',
+      async () => {
+    await assertFails(getDocs(
+      collection(db(STRANGER), 'spaces/sp1/manualLinkRequests')));
+    await assertSucceeds(getDocs(
+      collection(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualLinkRequests')));
+  });
+
+  it('la solicitud NO se puede borrar: es el rastro de la aprobación',
+      async () => {
+    await setDoc(doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH));
+    await assertFails(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`)));
+    await assertFails(deleteDoc(
+      doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`)));
+  });
+});
+
 // Nota: assert está importado para fallos explícitos en helpers futuros.
 void assert;

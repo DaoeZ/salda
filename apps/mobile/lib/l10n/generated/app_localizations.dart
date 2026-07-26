@@ -3034,6 +3034,78 @@ abstract class AppLocalizations {
   /// **'Revocar el enlace'**
   String get ticketLinkRevoke;
 
+  /// No description provided for @manualLinkRequestsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitudes de identidad'**
+  String get manualLinkRequestsTitle;
+
+  /// No description provided for @manualLinkRequestBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} dice ser {manual}'**
+  String manualLinkRequestBody(String name, String manual);
+
+  /// No description provided for @manualLinkRequestHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Si lo aceptas, esa persona pasará a ver sus gastos y su saldo. No cambia nada de lo ya registrado.'**
+  String get manualLinkRequestHelp;
+
+  /// No description provided for @manualLinkAccept.
+  ///
+  /// In es, this message translates to:
+  /// **'Aceptar'**
+  String get manualLinkAccept;
+
+  /// No description provided for @manualLinkReject.
+  ///
+  /// In es, this message translates to:
+  /// **'Rechazar'**
+  String get manualLinkReject;
+
+  /// No description provided for @manualLinkAccepted.
+  ///
+  /// In es, this message translates to:
+  /// **'Identidad vinculada'**
+  String get manualLinkAccepted;
+
+  /// No description provided for @manualLinkRejected.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitud rechazada'**
+  String get manualLinkRejected;
+
+  /// No description provided for @manualLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido completar la operación'**
+  String get manualLinkError;
+
+  /// No description provided for @manualLinkAsk.
+  ///
+  /// In es, this message translates to:
+  /// **'Soy yo'**
+  String get manualLinkAsk;
+
+  /// No description provided for @manualLinkAskSent.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitud enviada. El anfitrión debe aceptarla.'**
+  String get manualLinkAskSent;
+
+  /// No description provided for @manualLinkPending.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente de que el anfitrión lo acepte'**
+  String get manualLinkPending;
+
+  /// No description provided for @manualLinkLinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Identidad vinculada'**
+  String get manualLinkLinked;
+
   /// No description provided for @ticketLinkPreparing.
   ///
   /// In es, this message translates to:

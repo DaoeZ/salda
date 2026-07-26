@@ -120,6 +120,12 @@ export interface SessionSnapshot {
   settlements: SettlementDoc[];
   /** Pagos P5 confirmados que afectan a tickets de esta sesión. */
   externalConfirmed?: Array<{ from: string; to: string; amount: Cents }>;
+  /**
+   * VINCULACIÓN (ADR-037): `manualId → uid` de los manuales ya vinculados y
+   * APROBADOS por el anfitrión. No cambia ningún actor: solo hace que la
+   * persona vinculada sea LECTORA de las obligaciones que ya existían.
+   */
+  manualAliases?: Record<string, string>;
 }
 
 export interface TicketParticipantProjection {
@@ -336,7 +342,8 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
           .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
           // Entre dos manuales no hay nadie que pueda leerla: esa deuda vive
           // en el balance de su sesión, no en la economía global.
-          const readers = accountUidsOf([debtorActor, payerActor]);
+          const readers = accountUidsOf(
+            [debtorActor, payerActor], s.manualAliases ?? {});
           if (readers.length === 0) continue;
           economicEntries.push({
             id: `${account.id}_${ticket.id}_${
@@ -374,7 +381,8 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         settlement.amount <= 0) continue;
     // Un pago que salda a un manual también reduce su deuda global; si nadie
     // puede leerlo (manual↔manual) se queda en el balance de la sesión.
-    const readers = accountUidsOf([payerUid, receiverUid]);
+    const readers = accountUidsOf(
+      [payerUid, receiverUid], s.manualAliases ?? {});
     if (readers.length === 0) continue;
     legacyPayments.push({
       id: `legacy_${settlement.id}`,
@@ -639,6 +647,21 @@ export async function recomputeSession(sid: string): Promise<void> {
     if (uid) pidByUid.set(uid, participant.id);
   }
   const currentEntryIds = new Set(economicEntriesSnap.docs.map((doc) => doc.id));
+  // VINCULACIÓN (ADR-037): alias `manualId → uid` de los manuales que el
+  // anfitrión ya APROBÓ. Vive en el espacio, que es donde vive la identidad
+  // manual. Un alias NO cambia el actor: solo añade lectores.
+  const manualAliases: Record<string, string> = {};
+  const spaceId = sessionSnap.data()?.spaceId as string | undefined;
+  if (spaceId) {
+    const manuals = await db
+      .collection(`spaces/${spaceId}/manualParticipants`)
+      .get();
+    for (const manual of manuals.docs) {
+      const linked = manual.data().linkedUid as string | undefined;
+      if (linked) manualAliases[manual.id] = linked;
+    }
+  }
+
   const externalConfirmed: Array<{ from: string; to: string; amount: Cents }> = [];
   for (const payment of externalPaymentsSnap.docs) {
     const data = payment.data();
@@ -685,6 +708,7 @@ export async function recomputeSession(sid: string): Promise<void> {
       state: st.data().state as SettlementDoc['state'],
     })),
     externalConfirmed,
+    manualAliases,
   };
 
   if (snapshot.participants.length === 0) return; // sesión a medio crear

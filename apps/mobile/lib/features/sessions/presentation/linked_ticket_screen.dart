@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
+import '../../spaces/data/manual_link_repository.dart';
+import '../../spaces/domain/space_models.dart' show ManualLinkStatus;
 import '../data/ticket_links_repository.dart';
 import '../domain/ticket_link_models.dart';
 
@@ -135,7 +137,7 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
       body: ListView(
         padding: const EdgeInsets.all(TokenSpacing.lg),
         children: [
-          if (_access?.identifiesAManual ?? false)
+          if (_access?.identifiesAManual ?? false) ...[
             Card(
               child: ListTile(
                 leading: const Icon(Icons.person_outline),
@@ -149,6 +151,16 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
                 ),
               ),
             ),
+            // Pedir la VINCULACIÓN (ADR-037): pasar de una identificación
+            // temporal a que esta persona sea reconocida como ese
+            // participante. Lo decide el anfitrión, no quien lo pide.
+            if (link.spaceId.isNotEmpty)
+              _ManualLinkRequestCard(
+                spaceId: link.spaceId,
+                manualId: _access!.manualId,
+                displayName: _names[myPid] ?? '',
+              ),
+          ],
           const SizedBox(height: TokenSpacing.md),
           Text(l10n.ticketLinkLines, style: theme.textTheme.titleMedium),
           const SizedBox(height: TokenSpacing.sm),
@@ -226,3 +238,89 @@ class _LineTile extends StatelessWidget {
 
 String _euros(int cents) =>
     '${(cents / 100).toStringAsFixed(2).replaceAll('.', ',')} €';
+
+/// «Soy yo»: solicitud de vinculación desde el ticket (ADR-037).
+///
+/// Es lo único que puede hacer quien se ha identificado temporalmente. La
+/// decisión es del anfitrión, así que aquí solo se pide y se muestra el
+/// estado. Aceptarla no moverá ningún importe: el actor sigue siendo
+/// `manual:{id}` y solo se añade la identidad.
+class _ManualLinkRequestCard extends ConsumerStatefulWidget {
+  const _ManualLinkRequestCard({
+    required this.spaceId,
+    required this.manualId,
+    required this.displayName,
+  });
+
+  final String spaceId;
+  final String manualId;
+  final String displayName;
+
+  @override
+  ConsumerState<_ManualLinkRequestCard> createState() =>
+      _ManualLinkRequestCardState();
+}
+
+class _ManualLinkRequestCardState
+    extends ConsumerState<_ManualLinkRequestCard> {
+  var _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final mine = ref
+        .watch(myManualLinkProvider((
+          spaceId: widget.spaceId,
+          manualId: widget.manualId,
+        )))
+        .value;
+
+    if (mine?.status == ManualLinkStatus.accepted) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.verified_user_outlined),
+          title: Text(l10n.manualLinkLinked),
+        ),
+      );
+    }
+    if (mine?.isPending ?? false) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.hourglass_empty),
+          title: Text(l10n.manualLinkPending),
+        ),
+      );
+    }
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.person_add_alt),
+        title: Text(l10n.manualLinkAsk),
+        subtitle: Text(l10n.manualLinkRequestHelp),
+        trailing: FilledButton(
+          onPressed: _busy ? null : _ask,
+          child: Text(l10n.manualLinkAsk),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _ask() async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(manualLinkRepositoryProvider)
+          .request(
+            widget.spaceId,
+            widget.manualId,
+            displayName: widget.displayName,
+          );
+      messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkAskSent)));
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
