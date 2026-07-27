@@ -2,12 +2,19 @@
   import { parseShareLink } from './lib/link';
   import { guest } from './lib/session.svelte';
   import ErrorView from './views/ErrorView.svelte';
+  import OpenInAppView from './views/OpenInAppView.svelte';
   import PickItems from './views/PickItems.svelte';
   import Summary from './views/Summary.svelte';
   import TicketView from './views/TicketView.svelte';
   import WhoAreYou from './views/WhoAreYou.svelte';
 
   const link = parseShareLink(location.pathname, location.hash);
+
+  // Enlaces de la APP —invitación a grupo (/g/) y ticket compartido (/t/)—.
+  // Hosting sirve esta SPA para cualquier ruta, así que hasta ahora caían en
+  // «este enlace no funciona»: la web solo entiende /s/. No son suyos: hay
+  // que saltar a la aplicación.
+  const appLink = location.pathname.match(/^\/(g|t)\/([A-Za-z0-9_-]+)\/?$/);
   let screen = $state<'summary' | 'pick' | 'ticket'>('summary');
 
   if (link) {
@@ -16,7 +23,9 @@
 </script>
 
 <main>
-  {#if !link || guest.phase === 'invalid'}
+  {#if appLink}
+    <OpenInAppView kind={appLink[1] as 'g' | 't'} token={appLink[2]} />
+  {:else if !link || guest.phase === 'invalid'}
     <ErrorView />
   {:else if guest.phase === 'connecting' || !guest.session}
     <!-- Skeleton, nunca spinner a pantalla completa (spec §3.8) -->
