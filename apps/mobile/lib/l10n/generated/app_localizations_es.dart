@@ -1092,6 +1092,17 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo completar la acción. Inténtalo de nuevo.';
 
   @override
+  String get socialEmailNotVerified =>
+      'Verifica tu correo antes de compartir gastos.';
+
+  @override
+  String get socialProfileNotReady =>
+      'Necesitamos terminar de preparar tu perfil. Inténtalo de nuevo.';
+
+  @override
+  String get profileRequiredForSocial => 'Necesario para compartir gastos';
+
+  @override
   String get spaceSessionNotReady =>
       'Tu sesión aún no está lista para compartir gastos. Comprueba que has verificado el correo y completado tu perfil, y vuelve a entrar.';
 

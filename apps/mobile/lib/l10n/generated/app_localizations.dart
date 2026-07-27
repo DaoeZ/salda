@@ -1990,6 +1990,24 @@ abstract class AppLocalizations {
   /// **'No se pudo completar la acción. Inténtalo de nuevo.'**
   String get spaceActionError;
 
+  /// No description provided for @socialEmailNotVerified.
+  ///
+  /// In es, this message translates to:
+  /// **'Verifica tu correo antes de compartir gastos.'**
+  String get socialEmailNotVerified;
+
+  /// No description provided for @socialProfileNotReady.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesitamos terminar de preparar tu perfil. Inténtalo de nuevo.'**
+  String get socialProfileNotReady;
+
+  /// No description provided for @profileRequiredForSocial.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesario para compartir gastos'**
+  String get profileRequiredForSocial;
+
   /// No description provided for @spaceSessionNotReady.
   ///
   /// In es, this message translates to:

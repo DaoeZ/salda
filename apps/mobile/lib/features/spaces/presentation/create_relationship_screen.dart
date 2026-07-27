@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
+import '../../auth/application/social_account.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/profile_avatar.dart';
 import '../data/spaces_repository.dart';
@@ -44,6 +46,20 @@ String spaceFailureText(AppLocalizations l10n, SpaceFailureCode code) =>
       // que exigen las Rules para escribir en el ámbito social.
       SpaceFailureCode.permissionDenied => l10n.spaceSessionNotReady,
       _ => l10n.spaceActionError,
+    };
+
+/// Mensaje por causa concreta. Cada precondición tiene su salida: usar el
+/// mismo texto para todas fue lo que dejó al usuario mirando una pantalla
+/// que decía «verifica tu correo» con el correo ya verificado.
+String socialReadinessText(AppLocalizations l10n, SocialReadiness readiness) =>
+    switch (readiness) {
+      SocialReadiness.ready => '',
+      SocialReadiness.notSignedIn => l10n.contextAccountRequired,
+      SocialReadiness.anonymous => l10n.contextAccountRequired,
+      SocialReadiness.emailNotVerified => l10n.socialEmailNotVerified,
+      SocialReadiness.staleToken => l10n.spaceSessionNotReady,
+      SocialReadiness.publicProfileMissing ||
+      SocialReadiness.publicProfileUnavailable => l10n.socialProfileNotReady,
     };
 
 class CreateRelationshipScreen extends ConsumerStatefulWidget {
@@ -199,27 +215,53 @@ class _CreateRelationshipScreenState
 
     setState(() => creatingUid = '');
     try {
-      final result = await ref
-          .read(spacesRepositoryProvider)
-          .createRelationshipWithManual(name: name, manualName: name);
+      // La cuenta puede estar bien y aun así no cumplir lo que exigen las
+      // Rules: entrar con Google no crea el perfil público, y sin él toda
+      // escritura social se deniega. Se comprueba y se repara ANTES.
+      final estado = await ref.read(socialAccountServiceProvider).prepare();
+      if (!estado.isReady) {
+        if (!mounted) return;
+        _avisar(socialReadinessText(l10n, estado.readiness));
+        return;
+      }
+      final repo = ref.read(spacesRepositoryProvider);
+      RelationshipResult result;
+      try {
+        result = await repo.createRelationshipWithManual(
+          name: name,
+          manualName: name,
+        );
+      } on SpaceFailure catch (failure) {
+        // UN solo reintento, y solo si la reparación acaba de cambiar algo:
+        // el token puede seguir sin reflejar el perfil recién creado.
+        if (failure.code != SpaceFailureCode.permissionDenied ||
+            !estado.repaired) {
+          rethrow;
+        }
+        await ref.read(authRepositoryProvider).refreshEmailVerification();
+        result = await repo.createRelationshipWithManual(
+          name: name,
+          manualName: name,
+        );
+      }
       if (mounted) context.go('/home/spaces/${result.id}');
     } on SpaceFailure catch (failure) {
       // Antes TODO caía en «No se pudo completar la acción», que no dice ni
       // qué pasó ni qué hacer. Cada causa real tiene ahora su salida.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(spaceFailureText(l10n, failure.code))),
-      );
+      _avisar(spaceFailureText(l10n, failure.code));
     } on Object catch (error) {
       if (!mounted) return;
       debugPrint('crear relación con manual falló: ${error.runtimeType}');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+      _avisar(l10n.spaceActionError);
     } finally {
       if (mounted) setState(() => creatingUid = null);
     }
   }
+
+  void _avisar(String mensaje) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(mensaje)));
 
   @override
   Widget build(BuildContext context) {

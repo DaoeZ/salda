@@ -227,6 +227,39 @@ void main() {
     await cerrar(tester);
   });
 
+  testWidgets('cuenta de Google SIN perfil público: se repara y se crea', (
+    tester,
+  ) async {
+    // El caso real: nombre y correo verificados vienen de Google, pero
+    // `profiles/{uid}` no existe porque nadie pasó por la pantalla de
+    // perfil. Antes esto moría en «Tu sesión aún no está lista».
+    expect((await firestore.collection('profiles').get()).docs, isEmpty);
+    await pump(tester);
+    await crearConNombre(tester, 'Pablo');
+
+    // El perfil se creó solo…
+    final perfil = await firestore.doc('profiles/owner').get();
+    expect(perfil.exists, isTrue);
+    // …y la relación también, sin pedirle nada al usuario.
+    expect((await firestore.collection('spaces').get()).docs.length, 1);
+    expect(find.textContaining('Tu sesión aún no está lista'), findsNothing);
+    await cerrar(tester);
+  });
+
+  testWidgets('con el perfil ya creado no se repara nada', (tester) async {
+    await firestore.doc('profiles/owner').set({
+      'displayName': 'Edgar',
+      'username': 'edgar',
+      'schemaVersion': 1,
+    });
+    await pump(tester);
+    await crearConNombre(tester, 'Pablo');
+    // Sigue habiendo UN solo perfil: la reparación no duplica documentos.
+    expect((await firestore.collection('profiles').get()).docs.length, 1);
+    expect((await firestore.collection('spaces').get()).docs.length, 1);
+    await cerrar(tester);
+  });
+
   testWidgets('si el servidor deniega, el mensaje dice qué hacer', (
     tester,
   ) async {

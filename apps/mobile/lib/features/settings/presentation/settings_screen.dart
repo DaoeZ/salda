@@ -152,7 +152,13 @@ class _ProfileTile extends ConsumerWidget {
               radius: 16,
             ),
       title: Text(profile?.displayName ?? l10n.profileBannerTitle),
-      subtitle: profile == null ? null : Text('@${profile.username}'),
+      // Sin perfil PÚBLICO no se puede compartir gastos, por mucho que el
+      // nombre y el correo de la cuenta se vean bien: esos vienen de Google
+      // y Rules no los miran. Decirlo aquí evita que la pantalla parezca
+      // completa mientras el servidor rechaza cada escritura.
+      subtitle: profile == null
+          ? Text(l10n.profileRequiredForSocial)
+          : Text('@${profile.username}'),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.push('/home/profile'),
     );
