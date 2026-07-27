@@ -20,15 +20,17 @@ void main() {
   const marta = EligibleManual(pid: 'p5', manualId: 'm1', displayName: 'Marta');
   const luis = EligibleManual(pid: 'p6', manualId: 'm2', displayName: 'Luis');
 
+  /// Un enlace va DIRIGIDO a una persona: [target] no es decorativo, es el
+  /// alcance del token.
   Future<TicketJoinLink> seedLink({
     JoinLinkLifetime lifetime = JoinLinkLifetime.never,
-    List<EligibleManual> manuals = const [marta, luis],
+    EligibleManual target = marta,
   }) => repoFor('owner').createLink(
     sessionId: 's1',
     accountId: 'a1',
     ticketId: 't1',
     merchantName: 'Mercadona',
-    manuals: manuals,
+    target: target,
     lifetime: lifetime,
   );
 
@@ -101,16 +103,35 @@ void main() {
       expect(link.ticketPath, 'sessions/s1/accounts/a1/tickets/t1');
     });
 
-    test('solo se denormalizan los MANUAL: ni cuentas ni invitados', () async {
+    test('el enlace publica UN destinatario, no la lista del ticket', () async {
       final link = await seedLink();
-      final names = link.manuals.map((m) => m.displayName).toList();
+      final raw = (await firestore.doc('ticketLinks/${link.token}').get())
+          .data()!;
 
-      expect(names, ['Marta', 'Luis']);
-      // Edgar (cuenta) y Alba (invitada) NO aparecen, aunque participen.
-      expect(names, isNot(contains('Edgar')));
-      expect(names, isNot(contains('Alba')));
-      // Y no se filtra cuánta gente hay en total.
-      expect(link.manuals.length, 2);
+      expect(link.target!.manualId, 'm1');
+      expect(link.target!.displayName, 'Marta');
+      expect(raw['targetManualId'], 'm1');
+      expect(raw['targetPid'], 'p5');
+      expect(raw['schemaVersion'], 2);
+      // Luis participa en el ticket y NO aparece por ningún lado: publicar la
+      // lista entera es lo que permitía reclamar a otro.
+      expect(raw.toString(), isNot(contains('Luis')));
+      expect(raw.toString(), isNot(contains('m2')));
+      // Ni las cuentas ni los invitados, como antes.
+      expect(raw.containsKey('manuals'), isFalse);
+    });
+
+    test('cada persona tiene su propio enlace', () async {
+      final deMarta = await seedLink();
+      final deLuis = await seedLink(target: luis);
+      expect(deMarta.token, isNot(deLuis.token));
+      expect(deLuis.target!.manualId, 'm2');
+      // Y el del ticket se busca POR destinatario: reutilizar el de otro
+      // seria volver al enlace generico.
+      final vivo = await repoFor(
+        'owner',
+      ).watchActiveLink('s1', 't1', manualId: 'm2').first;
+      expect(vivo!.token, deLuis.token);
     });
 
     test('revocado y caducado se presentan igual que inexistente', () async {
@@ -151,7 +172,7 @@ void main() {
           accountId: 'a1',
           ticketId: 't9',
           merchantName: 'Recien',
-          manuals: const [marta],
+          target: marta,
           // Sin espera: el timeout corto solo acota, no garantiza nada.
         ),
         throwsA(isA<TicketLinkNotReady>()),
@@ -204,7 +225,7 @@ void main() {
     test('abrir un 2o ticket NO invalida el acceso al 1o', () async {
       final link = await seedLink();
       final ana = repoFor('ana');
-      await ana.identifyAsManual(link, marta);
+      await ana.identifyAsTarget(link);
       // La clave incluye el ticketId, así que ambos accesos coexisten.
       expect((await ana.myAccess('s1', 't1'))!.manualId, 'm1');
       expect(await ana.myAccess('s1', 't2'), isNull);
@@ -212,7 +233,7 @@ void main() {
 
     test('elegir un MANUAL escribe prueba y cerrojo', () async {
       final link = await seedLink();
-      final outcome = await repoFor('ana').identifyAsManual(link, marta);
+      final outcome = await repoFor('ana').identifyAsTarget(link);
       expect(outcome, TicketLinkOutcome.opened);
 
       final access =
@@ -230,24 +251,88 @@ void main() {
 
     test('otro dispositivo NO se queda con el mismo manual', () async {
       final link = await seedLink();
-      await repoFor('ana').identifyAsManual(link, marta);
+      await repoFor('ana').identifyAsTarget(link);
 
       expect(
-        await repoFor('bruno').identifyAsManual(link, marta),
+        await repoFor('bruno').identifyAsTarget(link),
         TicketLinkOutcome.manualTaken,
       );
-      // Pero sí puede coger otro libre.
+      // Y NO le queda alternativa: el enlace representaba a UNA persona.
+      // Con SU propio enlace, Luis sí entra.
+      final deLuis = await seedLink(target: luis);
       expect(
-        await repoFor('bruno').identifyAsManual(link, luis),
+        await repoFor('bruno').identifyAsTarget(deLuis),
         TicketLinkOutcome.opened,
       );
+    });
+
+    test('el enlace NO permite identificarse como otro participante', () async {
+      // Aunque un cliente modificado lo intentara, el repositorio no admite
+      // «a quién»: lo dice el token. Y Rules lo vuelve a comprobar contra
+      // `targetManualId` (ver rules.test.mjs, «un enlace dirigido a Marta»).
+      final deMarta = await seedLink();
+      await repoFor('ana').identifyAsTarget(deMarta);
+      final access = (await repoFor('ana').myAccess('s1', 't1'))!;
+      expect(access.manualId, 'm1');
+      expect(access.pid, 'p5');
+      // El cerrojo de Luis sigue libre: nadie lo ha tocado con este enlace.
+      expect(
+        (await firestore.doc('sessions/s1/ticketClaims/t1_m2').get()).exists,
+        isFalse,
+      );
+    });
+
+    test('un enlace del esquema antiguo no identifica a nadie', () async {
+      // Los ya emitidos publicaban la lista entera. Se leen como enlace SIN
+      // destinatario en vez de degradar a «elige tú», que era el agujero.
+      await firestore.doc('ticketLinks/LEGADO').set({
+        'sessionId': 's1',
+        'accountId': 'a1',
+        'ticketId': 't1',
+        'merchantName': 'Mercadona',
+        'manuals': [marta.toJson(), luis.toJson()],
+        'createdByUid': 'owner',
+        'status': 'active',
+        'schemaVersion': 1,
+      });
+      final legado = (await repoFor('ana').preview('LEGADO'))!;
+      expect(legado.isDirected, isFalse);
+      expect(legado.target, isNull);
+      expect(
+        await repoFor('ana').identifyAsTarget(legado),
+        TicketLinkOutcome.invalid,
+      );
+      expect(
+        (await firestore.doc('sessions/s1/ticketAccess/t1_ana').get()).exists,
+        isFalse,
+      );
+    });
+
+    test('doble pulsación no duplica nada', () async {
+      final link = await seedLink();
+      final ana = repoFor('ana');
+      // Dos toques a la vez sobre el mismo botón: el id del cerrojo y el de
+      // la prueba son deterministas, así que convergen en los mismos dos
+      // documentos.
+      await Future.wait([
+        ana.identifyAsTarget(link),
+        ana.identifyAsTarget(link),
+      ]);
+      final claims = await firestore
+          .collection('sessions/s1/ticketClaims')
+          .get();
+      final accesses = await firestore
+          .collection('sessions/s1/ticketAccess')
+          .get();
+      expect(claims.docs, hasLength(1));
+      expect(accesses.docs, hasLength(1));
     });
 
     test('reabrir el enlace en el mismo dispositivo es idempotente', () async {
       final link = await seedLink();
       final ana = repoFor('ana');
-      expect(await ana.identifyAsManual(link, marta), TicketLinkOutcome.opened);
-      expect(await ana.identifyAsManual(link, marta), TicketLinkOutcome.opened);
+      expect(await ana.identifyAsTarget(link), TicketLinkOutcome.opened);
+      expect(await ana.identifyAsTarget(link), TicketLinkOutcome.opened);
     });
 
     test(
@@ -255,7 +340,7 @@ void main() {
       () async {
         final link = await seedLink();
         final ana = repoFor('ana');
-        await ana.identifyAsManual(link, marta);
+        await ana.identifyAsTarget(link);
         await ana.release(link, (await ana.myAccess('s1', 't1'))!);
 
         expect(
@@ -278,7 +363,7 @@ void main() {
   group('el modelo económico NO se toca (P5 intacto)', () {
     test('identificarse no escribe claimedByDevice ni linkedUid', () async {
       final link = await seedLink();
-      await repoFor('ana').identifyAsManual(link, marta);
+      await repoFor('ana').identifyAsTarget(link);
 
       final p5 = (await firestore.doc('sessions/s1/participants/p5').get())
           .data()!;
@@ -296,7 +381,7 @@ void main() {
       'el flujo no escribe en economicEntries ni economicPayments',
       () async {
         final link = await seedLink();
-        await repoFor('ana').identifyAsManual(link, marta);
+        await repoFor('ana').identifyAsTarget(link);
 
         expect(
           (await firestore.collection('economicEntries').get()).docs,

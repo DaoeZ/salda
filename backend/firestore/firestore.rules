@@ -101,34 +101,41 @@ service cloud.firestore {
           || ticketLinkData(token).expiresAt > request.time);
     }
 
+    // Enlace DIRIGIDO (ADR-036 rev. 2, schemaVersion 2). El destinatario es
+    // parte del enlace; ya no viaja la lista `manuals` de todo el ticket.
+    // Publicarla permitía que quien recibía un enlace hecho para Pedro
+    // eligiera a Ana: la interfaz lo ofrecía y las Rules lo consentían,
+    // porque solo comprobaban «este pid participa en el ticket».
     function validTicketLink(data) {
       return data.keys().hasOnly([
           'sessionId', 'accountId', 'ticketId', 'merchantName', 'spaceId',
-          'manuals', 'createdByUid', 'status', 'createdAt', 'updatedAt',
+          'targetPid', 'targetManualId', 'targetName',
+          'createdByUid', 'status', 'createdAt', 'updatedAt',
           'expiresAt', 'schemaVersion'
         ])
         && data.keys().hasAll([
           'sessionId', 'accountId', 'ticketId', 'merchantName',
+          'targetPid', 'targetManualId',
           'createdByUid', 'status', 'createdAt', 'updatedAt', 'schemaVersion'
         ])
         && data.sessionId is string
         && data.accountId is string
         && data.ticketId is string
-        // Lo ÚNICO que se ve antes de identificarse. Ni importe, ni líneas,
-        // ni participantes: un enlace filtrado no revela cuánto se gastó.
+        // Lo ÚNICO que se ve antes de identificarse, junto al nombre del
+        // destinatario. Ni importe, ni líneas, ni el resto de participantes:
+        // un enlace filtrado no revela cuánto se gastó ni cuántos son.
         && data.merchantName is string
         && data.merchantName.size() <= 60
-        // Nombres de los MANUAL del ticket, denormalizados por el dueño al
-        // crear el enlace. Es la ÚNICA forma de pintar «¿Quién eres?» antes
-        // de tener acceso, y a la vez la más estrecha: la lista contiene
-        // exactamente los manuales de ESTE ticket, nunca cuentas, invitados
-        // ni miembros del grupo, así que no revela su tamaño.
-        && (data.get('manuals', []) is list
-          && data.get('manuals', []).size() <= 30)
+        && data.targetPid is string
+        && data.targetPid.size() > 0
+        && data.targetManualId is string
+        && data.targetManualId.size() > 0
+        && data.get('targetName', '') is string
+        && data.get('targetName', '').size() <= 60
         && data.status in ['active', 'revoked']
         && (data.get('expiresAt', null) == null || data.expiresAt is timestamp)
         && data.updatedAt is timestamp
-        && data.schemaVersion == 1;
+        && data.schemaVersion == 2;
     }
 
     // Un MANUAL ya vinculado de forma definitiva (Sprint 6) deja de ser
@@ -137,6 +144,17 @@ service cloud.firestore {
     // deja escrito para que el sprint de vinculación no tenga que volver a
     // tocar esta regla. Sin espacio (histórico sin organizar) no hay
     // identidad manual que consultar.
+    // El enlace va dirigido a UNA persona: identificarse solo vale para ESA.
+    // Es la barrera de verdad del alcance del token — ocultar el selector en
+    // la app no impediría que un cliente modificado escribiera otro manual.
+    // Un enlace del esquema 1 no tiene destinatario, así que `''` no coincide
+    // con ningún `manualId` no vacío y deja de autorizar identificaciones.
+    function isTicketLinkTarget(data) {
+      return ticketLinkData(data.token).get('targetManualId', '')
+          == data.get('manualId', '')
+        && ticketLinkData(data.token).get('targetPid', '') == data.pid;
+    }
+
     function manualIsLinked(data) {
       return ticketLinkData(data.token).get('spaceId', '') != ''
         && exists(/databases/$(database)/documents/spaces/$(ticketLinkData(data.token).spaceId)/manualParticipants/$(data.manualId))
@@ -1186,17 +1204,36 @@ service cloud.firestore {
         // completa, así que jamás existe un enlace que vaya a fallar por
         // consistencia eventual.
         && ticketProjectionReady(
-          request.resource.data.sessionId, request.resource.data.ticketId);
+          request.resource.data.sessionId, request.resource.data.ticketId)
+        // El destinatario tiene que participar DE VERDAD en el ticket y ser
+        // ese manual: si no, el enlace nacería sin poder canjearse nunca.
+        && participatesInTicket(
+          request.resource.data.sessionId,
+          request.resource.data.ticketId,
+          request.resource.data.targetPid)
+        && get(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId)/participants/$(request.resource.data.targetPid))
+            .data.get('manualId', '') == request.resource.data.targetManualId;
 
       // Revocar/reactivar y refrescar el rótulo. El destino es inmutable:
-      // reapuntar un enlace a otro ticket sería un secuestro.
+      // reapuntar un enlace a otro ticket —o a otra persona— sería un
+      // secuestro.
       allow update: if isOwner(resource.data.sessionId)
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'merchantName', 'updatedAt'])
-        && validTicketLink(request.resource.data)
+        && request.resource.data.status in ['active', 'revoked']
+        // Los enlaces del esquema 1 ya no pasan `validTicketLink`, pero el
+        // dueño tiene que poder REVOCARLOS: si no, quedarían vivos para
+        // siempre. Solo se les admite eso, nunca reactivarlos.
+        && (validTicketLink(request.resource.data)
+          || (resource.data.get('schemaVersion', 1) == 1
+            && request.resource.data.status == 'revoked'))
         && request.resource.data.sessionId == resource.data.sessionId
         && request.resource.data.accountId == resource.data.accountId
         && request.resource.data.ticketId == resource.data.ticketId
+        && request.resource.data.get('targetPid', '')
+          == resource.data.get('targetPid', '')
+        && request.resource.data.get('targetManualId', '')
+          == resource.data.get('targetManualId', '')
         && request.resource.data.createdByUid == resource.data.createdByUid
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.get('expiresAt', null)
@@ -1426,9 +1463,13 @@ service cloud.firestore {
             (participantData(sid, request.resource.data.pid)
                 .get('claimedByDevice', '') == request.auth.uid
               && request.resource.data.get('manualId', '') == '')
-            // (b) Se identifica como un MANUAL del ticket.
+            // (b) Se identifica como el MANUAL DESTINATARIO del enlace.
             || (
               request.resource.data.get('manualId', '') != ''
+              // El token manda: `manualId` y `pid` han de ser los suyos. Sin
+              // esto, cualquier manual del ticket era reclamable con
+              // cualquier enlace del ticket.
+              && isTicketLinkTarget(request.resource.data)
               && participantData(sid, request.resource.data.pid)
                   .get('manualId', '') == request.resource.data.manualId
               && participantData(sid, request.resource.data.pid)

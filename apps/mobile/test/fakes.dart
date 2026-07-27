@@ -10,6 +10,7 @@ import 'package:salda_mobile/features/profile/data/profile_repository.dart';
 import 'package:salda_mobile/features/sessions/data/firestore_session_repository.dart';
 import 'package:salda_mobile/features/sessions/data/session_repository.dart';
 import 'package:salda_mobile/features/economy/data/economic_repository.dart';
+import 'package:salda_mobile/features/spaces/data/manual_link_repository.dart';
 import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
 
 class FakeAuthRepository implements AuthRepository {
@@ -135,6 +136,11 @@ List<Override> loggedInOverrides({
             uid: () => uid,
             isFullAccount: () => true,
           ),
+    ),
+    // Igual que el economico: sin override apuntaba a la instancia REAL, asi
+    // que la bandeja de solicitudes de identidad quedaba sin probar.
+    manualLinkRepositoryProvider.overrideWithValue(
+      ManualLinkRepository(firestore: fake, uid: () => uid),
     ),
     // Sin esto el repositorio economico apuntaba a la instancia REAL de
     // Firestore, asi que en pruebas el balance nunca cargaba y las

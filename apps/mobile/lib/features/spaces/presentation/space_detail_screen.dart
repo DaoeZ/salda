@@ -10,6 +10,7 @@ import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../sessions/presentation/ticket_navigation.dart';
+import '../../../core/ui/action_banner.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../activity/presentation/space_activity_section.dart';
 import '../../chat/presentation/space_chat_section.dart';
@@ -176,7 +177,10 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
                       style: theme.textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 2),
-                    Row(
+                    // `Wrap` y no `Row`: con el texto ampliado «Grupo · 3
+                    // personas» no cabe en 320 px y la fila desbordaba 98 px.
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
                           space.isRelationship
@@ -969,12 +973,15 @@ class _PendingManualLinks extends ConsumerWidget {
     final manuals =
         ref.watch(spaceManualParticipantsProvider(spaceId)).value ??
         const <ManualParticipant>[];
-    String manualName(String manualId) =>
-        manuals
-            .where((m) => m.id == manualId)
-            .map((m) => m.displayName)
-            .firstOrNull ??
-        manualId;
+    // Nunca el identificador: si el participante ya no está, un rótulo
+    // controlado (misma regla que la resolución de nombres económicos).
+    String manualName(String manualId) {
+      final nombre = manuals
+          .where((m) => m.id == manualId)
+          .map((m) => m.displayName.trim())
+          .firstOrNull;
+      return (nombre == null || nombre.isEmpty) ? l10n.personUnnamed : nombre;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -986,8 +993,11 @@ class _PendingManualLinks extends ConsumerWidget {
         const SizedBox(height: TokenSpacing.sm),
         for (final request in requests)
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.person_add_alt),
+            // Los dos botones vivían en `ListTile.trailing`, que da
+            // restricciones laxas: no había franja de desbordamiento, pero el
+            // de aceptar quedaba fuera de la pantalla y no se podía pulsar.
+            child: ActionBanner(
+              icon: Icons.person_add_alt,
               title: Text(
                 l10n.manualLinkRequestBody(
                   request.displayName.isEmpty
@@ -996,19 +1006,16 @@ class _PendingManualLinks extends ConsumerWidget {
                   manualName(request.manualId),
                 ),
               ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextButton(
-                    onPressed: () => _decide(context, ref, request, false),
-                    child: Text(l10n.manualLinkReject),
-                  ),
-                  FilledButton(
-                    onPressed: () => _decide(context, ref, request, true),
-                    child: Text(l10n.manualLinkAccept),
-                  ),
-                ],
-              ),
+              actions: [
+                TextButton(
+                  onPressed: () => _decide(context, ref, request, false),
+                  child: Text(l10n.manualLinkReject),
+                ),
+                FilledButton(
+                  onPressed: () => _decide(context, ref, request, true),
+                  child: Text(l10n.manualLinkAccept),
+                ),
+              ],
             ),
           ),
       ],

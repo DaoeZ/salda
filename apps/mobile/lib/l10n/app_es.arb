@@ -631,10 +631,25 @@
   "ticketLinkTitle": "Ticket compartido",
   "ticketLinkAction": "Compartir este ticket",
   "ticketLinkSharedWithYou": "Te han compartido el ticket de",
-  "ticketLinkWhoAreYou": "¿Quién eres?",
-  "ticketLinkWhoAreYouHelp": "Elige tu nombre para ver lo que te toca en este ticket.",
-  "ticketLinkNoManuals": "Ya no queda ningún nombre libre en este ticket.",
-  "ticketLinkManualTaken": "Ese nombre lo acaba de coger otro dispositivo. Elige otro.",
+  "ticketLinkAreYou": "¿Eres {name}?",
+  "@ticketLinkAreYou": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "ticketLinkAreYouHelp": "Este enlace se creó para esa persona. Si no eres tú, pide el tuyo a quien te lo envió.",
+  "ticketLinkIAm": "Sí, soy {name}",
+  "@ticketLinkIAm": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "ticketLinkNotMe": "No soy esa persona",
+  "ticketLinkNoManuals": "Este enlace ya no identifica a nadie de este ticket.",
+  "ticketLinkManualTaken": "Otra persona ya usó este enlace. Pide uno nuevo a quien te lo envió.",
+  "ticketLinkFor": "Enlace para {name}",
+  "@ticketLinkFor": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "ticketLinkChooseTarget": "¿Para quién es el enlace?",
+  "ticketLinkChooseTargetHelp": "Cada persona recibe su propio enlace: solo podrá identificarse como ella misma.",
+  "ticketLinkNoTargets": "Este ticket no tiene participantes sin cuenta a los que enviar un enlace.",
   "ticketLinkInvalid": "Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.",
   "ticketLinkError": "No hemos podido abrir el ticket. Inténtalo otra vez.",
   "ticketLinkGone": "Este ticket ya no está disponible.",

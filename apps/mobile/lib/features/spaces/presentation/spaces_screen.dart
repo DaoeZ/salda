@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
+import '../../../core/ui/action_banner.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/profile_avatar.dart';
@@ -141,58 +142,49 @@ class _InviteCardState extends ConsumerState<_InviteCard> {
     return Card(
       color: theme.colorScheme.secondaryContainer,
       margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
-        child: Column(
+      child: ActionBanner(
+        // El avatar iba dentro de la fila del texto y le robaba ancho; como
+        // icono del aviso queda arriba y el texto dispone de la línea entera.
+        title: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                if (from != null) ...[
-                  ProfileAvatar(
-                    seed: from.uid,
-                    displayName: from.displayName,
-                    radius: 16,
-                  ),
-                  const SizedBox(width: TokenSpacing.sm),
-                ],
-                Expanded(
-                  // Una RELACIÓN no tiene nombre propio que anunciar: el
-                  // contexto ES la otra persona. Nombrar aquí el espacio
-                  // enseñaba la concatenación «Edgar · Pedro» (BUG-5).
-                  child: Text(
-                    isRelationshipSpaceId(widget.invite.spaceId)
-                        ? l10n.relationshipInviteText(from?.displayName ?? '…')
-                        : l10n.spaceInviteText(
-                            from?.displayName ?? '…',
-                            widget.invite.spaceName,
-                          ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: TokenSpacing.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () =>
-                            _resolve(() => repo.rejectInvite(widget.invite.id)),
-                  child: Text(l10n.spaceInviteReject),
-                ),
-                const SizedBox(width: TokenSpacing.sm),
-                FilledButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _resolve(() => repo.acceptInvite(widget.invite)),
-                  child: Text(l10n.spaceInviteAccept),
-                ),
-              ],
+            if (from != null) ...[
+              ProfileAvatar(
+                seed: from.uid,
+                displayName: from.displayName,
+                radius: 16,
+              ),
+              const SizedBox(width: TokenSpacing.sm),
+            ],
+            Expanded(
+              // Una RELACIÓN no tiene nombre propio que anunciar: el
+              // contexto ES la otra persona. Nombrar aquí el espacio
+              // enseñaba la concatenación «Edgar · Pedro» (BUG-5).
+              child: Text(
+                isRelationshipSpaceId(widget.invite.spaceId)
+                    ? l10n.relationshipInviteText(from?.displayName ?? '…')
+                    : l10n.spaceInviteText(
+                        from?.displayName ?? '…',
+                        widget.invite.spaceName,
+                      ),
+              ),
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () => _resolve(() => repo.rejectInvite(widget.invite.id)),
+            child: Text(l10n.spaceInviteReject),
+          ),
+          FilledButton(
+            onPressed: _busy
+                ? null
+                : () => _resolve(() => repo.acceptInvite(widget.invite)),
+            child: Text(l10n.spaceInviteAccept),
+          ),
+        ],
       ),
     );
   }

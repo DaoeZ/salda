@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/action_banner.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
@@ -63,19 +64,19 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
           .orderBy('order')
           .get();
       // Los participantes NO se leen: el enlace no abre sus nombres. Solo
-      // se conoce el nombre propio, que viene del enlace.
-      final myName = link.manuals
-          .where((m) => m.pid == (access?.pid ?? ''))
-          .map((m) => m.displayName);
+      // se conoce el nombre propio, que es el DESTINATARIO del enlace.
+      final target = link.target;
+      final soyElDestinatario =
+          target != null && target.pid == (access?.pid ?? '');
       if (!mounted) return;
       setState(() {
         _link = link;
         _access = access;
         _ticket = ticket.data();
         _lines = lines.docs;
-        _names = myName.isEmpty
-            ? const {}
-            : {(access?.pid ?? ''): myName.first};
+        _names = soyElDestinatario
+            ? {target.pid: target.displayName}
+            : const {};
         _loading = false;
         // El ticket pudo borrarse, archivarse o moverse después de crear el
         // enlace: se degrada con un mensaje, nunca con una pantalla rota.
@@ -298,14 +299,18 @@ class _ManualLinkRequestCardState
       );
     }
     return Card(
-      child: ListTile(
-        leading: const Icon(Icons.person_add_alt),
+      // El botón repetía el título y colgaba de `trailing`, así que con el
+      // texto ampliado se salía de la pantalla. Ahora la acción va debajo.
+      child: ActionBanner(
+        icon: Icons.person_add_alt,
         title: Text(l10n.manualLinkAsk),
         subtitle: Text(l10n.manualLinkRequestHelp),
-        trailing: FilledButton(
-          onPressed: _busy ? null : _ask,
-          child: Text(l10n.manualLinkAsk),
-        ),
+        actions: [
+          FilledButton(
+            onPressed: _busy ? null : _ask,
+            child: Text(l10n.manualLinkAsk),
+          ),
+        ],
       ),
     );
   }

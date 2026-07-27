@@ -3358,29 +3358,65 @@ abstract class AppLocalizations {
   /// **'Te han compartido el ticket de'**
   String get ticketLinkSharedWithYou;
 
-  /// No description provided for @ticketLinkWhoAreYou.
+  /// No description provided for @ticketLinkAreYou.
   ///
   /// In es, this message translates to:
-  /// **'¿Quién eres?'**
-  String get ticketLinkWhoAreYou;
+  /// **'¿Eres {name}?'**
+  String ticketLinkAreYou(String name);
 
-  /// No description provided for @ticketLinkWhoAreYouHelp.
+  /// No description provided for @ticketLinkAreYouHelp.
   ///
   /// In es, this message translates to:
-  /// **'Elige tu nombre para ver lo que te toca en este ticket.'**
-  String get ticketLinkWhoAreYouHelp;
+  /// **'Este enlace se creó para esa persona. Si no eres tú, pide el tuyo a quien te lo envió.'**
+  String get ticketLinkAreYouHelp;
+
+  /// No description provided for @ticketLinkIAm.
+  ///
+  /// In es, this message translates to:
+  /// **'Sí, soy {name}'**
+  String ticketLinkIAm(String name);
+
+  /// No description provided for @ticketLinkNotMe.
+  ///
+  /// In es, this message translates to:
+  /// **'No soy esa persona'**
+  String get ticketLinkNotMe;
 
   /// No description provided for @ticketLinkNoManuals.
   ///
   /// In es, this message translates to:
-  /// **'Ya no queda ningún nombre libre en este ticket.'**
+  /// **'Este enlace ya no identifica a nadie de este ticket.'**
   String get ticketLinkNoManuals;
 
   /// No description provided for @ticketLinkManualTaken.
   ///
   /// In es, this message translates to:
-  /// **'Ese nombre lo acaba de coger otro dispositivo. Elige otro.'**
+  /// **'Otra persona ya usó este enlace. Pide uno nuevo a quien te lo envió.'**
   String get ticketLinkManualTaken;
+
+  /// No description provided for @ticketLinkFor.
+  ///
+  /// In es, this message translates to:
+  /// **'Enlace para {name}'**
+  String ticketLinkFor(String name);
+
+  /// No description provided for @ticketLinkChooseTarget.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Para quién es el enlace?'**
+  String get ticketLinkChooseTarget;
+
+  /// No description provided for @ticketLinkChooseTargetHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Cada persona recibe su propio enlace: solo podrá identificarse como ella misma.'**
+  String get ticketLinkChooseTargetHelp;
+
+  /// No description provided for @ticketLinkNoTargets.
+  ///
+  /// In es, this message translates to:
+  /// **'Este ticket no tiene participantes sin cuenta a los que enviar un enlace.'**
+  String get ticketLinkNoTargets;
 
   /// No description provided for @ticketLinkInvalid.
   ///

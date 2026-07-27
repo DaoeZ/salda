@@ -7,12 +7,16 @@
 /// de ticket habría dado acceso al grupo entero.
 library;
 
-/// Un MANUAL elegible, tal como se pinta en «¿Quién eres?».
+/// El participante MANUAL al que va DIRIGIDO un enlace.
 ///
 /// Se denormaliza en el enlace porque quien todavía no se ha identificado no
 /// puede leer los participantes de la sesión — y para leerlos necesitaría ya
 /// el acceso que está intentando obtener. Contiene lo mínimo: nombre visible
 /// e identificadores opacos. Nunca correos, UID ni roles.
+///
+/// Antes viajaba una LISTA con todos los manuales del ticket y quien recibía
+/// el enlace elegía cuál era: cualquiera de ellos, no el suyo. El destinatario
+/// es ahora parte del token y Rules lo impone (ADR-036 rev. 2).
 class EligibleManual {
   const EligibleManual({
     required this.pid,
@@ -43,8 +47,14 @@ class EligibleManual {
   }
 }
 
-/// Enlace a un ticket concreto. El [token] es el id del documento y a la vez
-/// el secreto (128 bits), igual que en ADR-035.
+/// Enlace a un ticket concreto y DIRIGIDO a un participante concreto. El
+/// [token] es el id del documento y a la vez el secreto (128 bits), igual
+/// que en ADR-035.
+///
+/// El destinatario forma parte del enlace y NO lo elige quien lo recibe: es
+/// el cambio de ADR-036 rev. 2. Antes el enlace publicaba la lista entera de
+/// manuales del ticket y el receptor escogía, de modo que un enlace hecho
+/// para Pedro servía para reclamar a Ana.
 class TicketJoinLink {
   const TicketJoinLink({
     required this.token,
@@ -55,7 +65,7 @@ class TicketJoinLink {
     required this.createdByUid,
     required this.revoked,
     this.spaceId = '',
-    this.manuals = const [],
+    this.target,
     this.createdAt,
     this.expiresAt,
   });
@@ -71,9 +81,16 @@ class TicketJoinLink {
   final String createdByUid;
   final bool revoked;
   final String spaceId;
-  final List<EligibleManual> manuals;
+
+  /// A quién va dirigido. Null solo en enlaces heredados del esquema 1, que
+  /// ya no permiten identificarse como nadie (ver `usableAt`).
+  final EligibleManual? target;
   final DateTime? createdAt;
   final DateTime? expiresAt;
+
+  /// Un enlace del esquema antiguo no dice a quién representa, así que no
+  /// puede autorizar ninguna identificación. Rules aplica lo mismo.
+  bool get isDirected => target != null;
 
   bool isExpiredAt(DateTime now) =>
       expiresAt != null && !expiresAt!.isAfter(now);
@@ -119,7 +136,9 @@ class TicketAccess {
 enum TicketLinkOutcome {
   opened,
   needsIdentity,
-  needsManualChoice,
+
+  /// El enlace va dirigido a un MANUAL y falta que la persona lo confirme.
+  needsManualConfirmation,
   invalid,
   manualTaken,
 }

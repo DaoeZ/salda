@@ -592,13 +592,12 @@ class _FullscreenPhoto extends StatelessWidget {
   }
 }
 
-/// Compartir ESTE ticket por enlace (Sprint 5, ADR-036).
+/// Compartir ESTE ticket por enlace (ADR-036 rev. 2).
 ///
-/// Los participantes MANUAL del ticket se calculan aquí, al crear el enlace,
-/// y viajan denormalizados dentro de él: quien lo recibe todavía no puede
-/// leer nada de la sesión, así que es la única forma de pintarle «¿Quién
-/// eres?» — y a la vez la más estrecha, porque la lista contiene exactamente
-/// esos manuales y nunca cuentas, invitados ni miembros del grupo.
+/// Un enlace por PERSONA, no uno por ticket. El anfitrión elige a quién se
+/// lo manda y el destinatario queda grabado en el token, así que quien lo
+/// recibe solo puede identificarse como esa persona. El enlace único que
+/// publicaba la lista entera permitía reclamar a cualquiera del ticket.
 class _TicketLinkAction extends ConsumerWidget {
   const _TicketLinkAction({required this.ticketRef});
 
@@ -616,6 +615,52 @@ class _TicketLinkAction extends ConsumerWidget {
 
   Future<void> _share(BuildContext context, WidgetRef ref) async {
     final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final manuals = await _manualsOf(ref);
+    if (!context.mounted) return;
+    if (manuals.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketLinkNoTargets)));
+      return;
+    }
+    final target = await _chooseTarget(context, manuals, l10n);
+    if (target == null || !context.mounted) return;
+    await _shareFor(context, ref, target);
+  }
+
+  /// Elegir destinatario. Con uno solo se pregunta igual: el enlace nombra a
+  /// una persona y conviene verlo antes de mandarlo.
+  Future<EligibleManual?> _chooseTarget(
+    BuildContext context,
+    List<EligibleManual> manuals,
+    AppLocalizations l10n,
+  ) => showModalBottomSheet<EligibleManual>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: Text(l10n.ticketLinkChooseTarget),
+            subtitle: Text(l10n.ticketLinkChooseTargetHelp),
+          ),
+          for (final manual in manuals)
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: Text(manual.displayName),
+              onTap: () => Navigator.pop(sheetContext, manual),
+            ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _shareFor(
+    BuildContext context,
+    WidgetRef ref,
+    EligibleManual target,
+  ) async {
+    final l10n = AppLocalizations.of(context);
     final repo = ref.read(ticketLinksRepositoryProvider);
     final t = ticketRef.ticket;
     // sessions/{sid}/accounts/{aid}/tickets/{tid}
@@ -626,8 +671,9 @@ class _TicketLinkAction extends ConsumerWidget {
     // autoritativa, así que puede tardar un instante tras editar el ticket.
     final messenger = ScaffoldMessenger.of(context);
     try {
+      // Se reutiliza SOLO el enlace de esa misma persona: el de otra no vale.
       final existing = await repo
-          .watchActiveLink(ticketRef.sessionId, t.id)
+          .watchActiveLink(ticketRef.sessionId, t.id, manualId: target.manualId)
           .first;
       if (existing == null &&
           !await repo.isProjectionReady(ticketRef.sessionId, t.id)) {
@@ -643,7 +689,7 @@ class _TicketLinkAction extends ConsumerWidget {
             ticketId: t.id,
             merchantName: t.merchantName,
             spaceId: t.spaceId ?? '',
-            manuals: await _manualsOf(ref),
+            target: target,
           );
       if (!context.mounted) return;
       final url = TicketLinksRepository.linkUrlFor(
@@ -651,7 +697,11 @@ class _TicketLinkAction extends ConsumerWidget {
         link.token,
       );
       await SharePlus.instance.share(
-        ShareParams(text: '${t.merchantName} · ${Brand.appName}\n$url'),
+        ShareParams(
+          text:
+              '${t.merchantName} · ${Brand.appName}\n'
+              '${l10n.ticketLinkFor(target.displayName)}\n$url',
+        ),
       );
     } on TicketLinkNotReady {
       // Recuperable: recompute no ha terminado. Se reintenta a mano.

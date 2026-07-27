@@ -1,7 +1,27 @@
 # Enlaces de Ticket (Sprint 5)
 
-Estado: implementado (2026-07-25). ADR-036. Complementa `docs/ESPACIOS.md`
-(enlaces de grupo, ADR-035) y `docs/RELACIONES_ECONOMICAS.md` (P5, intacto).
+Estado: implementado (2026-07-25). **Revisado el 2026-07-27 (ADR-036 rev. 2):
+el enlace es DIRIGIDO.** Complementa `docs/ESPACIOS.md` (enlaces de grupo,
+ADR-035) y `docs/RELACIONES_ECONOMICAS.md` (P5, intacto).
+
+## Revisión 2: un enlace, una persona
+
+La primera versión hacía **un enlace por ticket**: publicaba la lista de
+todos sus participantes MANUAL y quien lo recibía elegía cuál era. Rules solo
+comprobaba «ese pid participa en este ticket», así que consentía la elección.
+Consecuencia: un enlace generado para Pedro servía para quedarse con la
+identidad económica de Ana, y de ahí —vía ADR-037— para pedir la vinculación
+de su historial.
+
+Ahora hay **un enlace por persona**. El destinatario (`targetPid`,
+`targetManualId`, `targetName`) es parte del documento, es inmutable, y Rules
+exige que la identificación coincida con él. Ocultar el selector en la
+interfaz no habría bastado: un cliente modificado escribe lo que quiera, así
+que la barrera está en `isTicketLinkTarget()`.
+
+Los enlaces del esquema 1 ya emitidos **dejan de identificar a nadie** —el
+`targetManualId` ausente no coincide con ningún `manualId`—; el dueño solo
+puede revocarlos, no reactivarlos.
 
 ## Qué resuelve
 
@@ -24,10 +44,10 @@ opcional e inmutable.
 ```text
 ticketLinks/{token}                       token = 128 bits (ShareCode), ID = secreto
   sessionId · accountId · ticketId        alcance exacto
-  merchantName                            ÚNICO dato visible antes de identificarse
-  manuals: [{ pid, manualId, displayName }]   MANUAL de ESE ticket (≤30)
+  merchantName                            dato visible antes de identificarse
+  targetPid · targetManualId · targetName DESTINATARIO único e inmutable
   spaceId? · createdByUid
-  status: active|revoked · expiresAt? · createdAt · updatedAt · schemaVersion: 1
+  status: active|revoked · expiresAt? · createdAt · updatedAt · schemaVersion: 2
 
 sessions/{sid}/ticketAccess/{ticketId}_{uid}   identificación TEMPORAL
   uid · token · ticketId · pid · manualId? · createdAt · schemaVersion: 1

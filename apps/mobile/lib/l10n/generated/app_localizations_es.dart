@@ -1867,19 +1867,45 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ticketLinkSharedWithYou => 'Te han compartido el ticket de';
 
   @override
-  String get ticketLinkWhoAreYou => '¿Quién eres?';
+  String ticketLinkAreYou(String name) {
+    return '¿Eres $name?';
+  }
 
   @override
-  String get ticketLinkWhoAreYouHelp =>
-      'Elige tu nombre para ver lo que te toca en este ticket.';
+  String get ticketLinkAreYouHelp =>
+      'Este enlace se creó para esa persona. Si no eres tú, pide el tuyo a quien te lo envió.';
+
+  @override
+  String ticketLinkIAm(String name) {
+    return 'Sí, soy $name';
+  }
+
+  @override
+  String get ticketLinkNotMe => 'No soy esa persona';
 
   @override
   String get ticketLinkNoManuals =>
-      'Ya no queda ningún nombre libre en este ticket.';
+      'Este enlace ya no identifica a nadie de este ticket.';
 
   @override
   String get ticketLinkManualTaken =>
-      'Ese nombre lo acaba de coger otro dispositivo. Elige otro.';
+      'Otra persona ya usó este enlace. Pide uno nuevo a quien te lo envió.';
+
+  @override
+  String ticketLinkFor(String name) {
+    return 'Enlace para $name';
+  }
+
+  @override
+  String get ticketLinkChooseTarget => '¿Para quién es el enlace?';
+
+  @override
+  String get ticketLinkChooseTargetHelp =>
+      'Cada persona recibe su propio enlace: solo podrá identificarse como ella misma.';
+
+  @override
+  String get ticketLinkNoTargets =>
+      'Este ticket no tiene participantes sin cuenta a los que enviar un enlace.';
 
   @override
   String get ticketLinkInvalid =>

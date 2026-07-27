@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/ui/action_banner.dart';
 import '../../core/ui/notice.dart';
 import '../../core/ui/states.dart';
 import '../../core/ui/surfaces.dart';
@@ -228,48 +229,35 @@ class _HomeInviteCardState extends ConsumerState<_HomeInviteCard> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final repo = ref.read(spacesRepositoryProvider);
-    return Padding(
+    return ActionBanner(
       padding: const EdgeInsets.fromLTRB(
         TokenSpacing.lg,
         TokenSpacing.md,
-        TokenSpacing.md,
+        TokenSpacing.lg,
         TokenSpacing.md,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SpaceInviteTitle(invite: widget.invite),
-                const SizedBox(height: 3),
-                StatusBadge(
-                  l10n.contextInvitationPending,
-                  tone: BadgeTone.pending,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: TokenSpacing.sm),
-          IconButton(
-            tooltip: l10n.spaceInviteReject,
-            onPressed: busy
-                ? null
-                : () => resolve(() => repo.rejectInvite(widget.invite.id)),
-            icon: const Icon(Icons.close, size: 20),
-          ),
-          FilledButton(
-            onPressed: busy
-                ? null
-                : () => resolve(() => repo.acceptInvite(widget.invite)),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 38),
-              padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.lg),
-            ),
-            child: Text(l10n.spaceInviteAccept),
-          ),
-        ],
+      title: SpaceInviteTitle(invite: widget.invite),
+      badge: StatusBadge(
+        l10n.contextInvitationPending,
+        tone: BadgeTone.pending,
       ),
+      actions: [
+        // Rechazar deja de ser una «X» sin rótulo: con dos acciones en la
+        // misma línea, un icono desnudo obliga a adivinar cuál es cuál.
+        TextButton(
+          onPressed: busy
+              ? null
+              : () => resolve(() => repo.rejectInvite(widget.invite.id)),
+          child: Text(l10n.spaceInviteReject),
+        ),
+        FilledButton(
+          onPressed: busy
+              ? null
+              : () => resolve(() => repo.acceptInvite(widget.invite)),
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 38)),
+          child: Text(l10n.spaceInviteAccept),
+        ),
+      ],
     );
   }
 }
@@ -370,84 +358,67 @@ class _DraftBanner extends ConsumerWidget {
         ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
     if (saved == null || alreadyEditing) return const SizedBox.shrink();
 
-    // Dos acciones (descartar / retomar), así que no encaja en `Notice`;
-    // conserva su forma pero con la superficie y el ritmo del sistema.
+    // Dos acciones (descartar / retomar), asi que no encaja en `Notice`:
+    // usa el aviso con acciones, que las apila cuando no caben.
     return Material(
       color: context.salda.primaryMuted,
-      child: Padding(
+      child: ActionBanner(
         padding: const EdgeInsets.fromLTRB(
           TokenLayout.screenMargin,
           TokenSpacing.sm,
-          TokenSpacing.sm,
+          TokenLayout.screenMargin,
           TokenSpacing.sm,
         ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.receipt_long_outlined,
-              size: 18,
-              color: context.salda.primary,
-            ),
-            const SizedBox(width: TokenSpacing.md),
-            Expanded(
-              child: Text(
-                l10n.draftResumeTitle,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-            TextButton(
+        icon: Icons.receipt_long_outlined,
+        title: Text(l10n.draftResumeTitle),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await ref.read(draftStoreProvider).clear();
+              ref.invalidate(savedDraftProvider);
+            },
+            child: Text(l10n.draftDiscard),
+          ),
+          if (fullAccount)
+            FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 36)),
               onPressed: () async {
-                await ref.read(draftStoreProvider).clear();
-                ref.invalidate(savedDraftProvider);
-              },
-              child: Text(l10n.draftDiscard),
-            ),
-            if (fullAccount)
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 36),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: TokenSpacing.lg,
-                  ),
-                ),
-                onPressed: () async {
-                  if (ref.read(pendingSpaceLinkProvider) == null) {
-                    final spaces =
-                        ref
-                            .read(mySpacesProvider)
-                            .value
-                            ?.where((space) => space.isActive)
-                            .toList() ??
-                        const <Space>[];
-                    final selected = await showDialog<Space>(
-                      context: context,
-                      builder: (dialogContext) => SimpleDialog(
-                        title: Text(l10n.contextChoose),
-                        children: [
-                          for (final space in spaces)
-                            SimpleDialogOption(
-                              onPressed: () =>
-                                  Navigator.pop(dialogContext, space),
-                              child: SpaceTitleText(
-                                spaceId: space.id,
-                                storedName: space.name,
-                              ),
+                if (ref.read(pendingSpaceLinkProvider) == null) {
+                  final spaces =
+                      ref
+                          .read(mySpacesProvider)
+                          .value
+                          ?.where((space) => space.isActive)
+                          .toList() ??
+                      const <Space>[];
+                  final selected = await showDialog<Space>(
+                    context: context,
+                    builder: (dialogContext) => SimpleDialog(
+                      title: Text(l10n.contextChoose),
+                      children: [
+                        for (final space in spaces)
+                          SimpleDialogOption(
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, space),
+                            child: SpaceTitleText(
+                              spaceId: space.id,
+                              storedName: space.name,
                             ),
-                        ],
-                      ),
-                    );
-                    if (selected == null || !context.mounted) return;
-                    ref
-                        .read(pendingSpaceLinkProvider.notifier)
-                        .set(selected.id, selected.name, selected.kind);
-                  }
-                  ref.read(reviewDraftProvider.notifier).loadFrom(saved);
-                  if (context.mounted) context.push('/home/review');
-                },
-                child: Text(l10n.draftResume),
-              ),
-          ],
-        ),
+                          ),
+                      ],
+                    ),
+                  );
+                  if (selected == null || !context.mounted) return;
+                  ref
+                      .read(pendingSpaceLinkProvider.notifier)
+                      .set(selected.id, selected.name, selected.kind);
+                }
+                ref.read(reviewDraftProvider.notifier).loadFrom(saved);
+                if (context.mounted) context.push('/home/review');
+              },
+              child: Text(l10n.draftResume),
+            ),
+        ],
       ),
     );
   }

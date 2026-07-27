@@ -34,27 +34,36 @@ class TicketLinksRepository {
 
   // ── Vista del dueño ───────────────────────────────────────────────────
 
-  /// Enlace vivo de un ticket. Rules restringe este `list` al dueño de la
-  /// sesión, así que el token no es enumerable por nadie más.
-  Stream<TicketJoinLink?> watchActiveLink(String sessionId, String ticketId) =>
-      _links
-          .where('sessionId', isEqualTo: sessionId)
-          .where('ticketId', isEqualTo: ticketId)
-          .where('status', isEqualTo: 'active')
-          .snapshots()
-          .map((snap) {
-            final now = DateTime.now().toUtc();
-            final links = [
-              for (final d in snap.docs)
-                if (_linkFrom(d).usableAt(now)) _linkFrom(d),
-            ];
-            links.sort(
-              (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-                a.createdAt ?? DateTime(0),
-              ),
-            );
-            return links.isEmpty ? null : links.first;
-          });
+  /// Enlace vivo de un ticket PARA UN DESTINATARIO concreto. Rules restringe
+  /// este `list` al dueño de la sesión, así que el token no es enumerable por
+  /// nadie más.
+  ///
+  /// La consulta lleva `targetManualId` porque ahora hay un enlace por
+  /// persona: reutilizar el de otro destinatario sería volver al enlace
+  /// genérico que este bug corrige.
+  Stream<TicketJoinLink?> watchActiveLink(
+    String sessionId,
+    String ticketId, {
+    required String manualId,
+  }) => _links
+      .where('sessionId', isEqualTo: sessionId)
+      .where('ticketId', isEqualTo: ticketId)
+      .where('targetManualId', isEqualTo: manualId)
+      .where('status', isEqualTo: 'active')
+      .snapshots()
+      .map((snap) {
+        final now = DateTime.now().toUtc();
+        final links = [
+          for (final d in snap.docs)
+            if (_linkFrom(d).usableAt(now)) _linkFrom(d),
+        ];
+        links.sort(
+          (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+            a.createdAt ?? DateTime(0),
+          ),
+        );
+        return links.isEmpty ? null : links.first;
+      });
 
   /// ¿Está lista la proyección autoritativa de este ticket?
   ///
@@ -91,10 +100,13 @@ class TicketLinksRepository {
     }
   }
 
-  /// Crea el enlace. [manuals] son los participantes MANUAL de ESE ticket,
-  /// que el dueño calcula al crearlo: es la única forma de pintar «¿Quién
-  /// eres?» a alguien que todavía no tiene acceso a nada — pero NO autoriza
-  /// nada: Rules valida contra la proyección autoritativa.
+  /// Crea el enlace PARA [target], el participante MANUAL al que va dirigido.
+  ///
+  /// El destinatario viaja denormalizado porque quien recibe el enlace no
+  /// puede leer los participantes de la sesión — y para leerlos necesitaría
+  /// el acceso que intenta obtener. Pero no autoriza nada por sí mismo:
+  /// Rules revalida `targetPid → targetManualId → activo` contra la sesión y
+  /// contra la proyección autoritativa, y solo admite identificarse COMO ESE.
   ///
   /// Lanza [TicketLinkNotReady] si la proyección aún no está lista, en vez
   /// de crear un enlace que después fallaría por consistencia eventual.
@@ -103,7 +115,7 @@ class TicketLinksRepository {
     required String accountId,
     required String ticketId,
     required String merchantName,
-    required List<EligibleManual> manuals,
+    required EligibleManual target,
     String spaceId = '',
     JoinLinkLifetime lifetime = JoinLinkLifetime.never,
   }) async {
@@ -120,13 +132,18 @@ class TicketLinksRepository {
       'ticketId': ticketId,
       'merchantName': merchantName.trim(),
       if (spaceId.isNotEmpty) 'spaceId': spaceId,
-      'manuals': [for (final manual in manuals) manual.toJson()],
+      // El destino: inmutable una vez creado (Rules lo impone en el update).
+      'targetPid': target.pid,
+      'targetManualId': target.manualId,
+      'targetName': target.displayName,
       'createdByUid': uid(),
       'status': 'active',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt),
-      'schemaVersion': 1,
+      // 2 = enlace dirigido. El 1 (lista de manuales elegibles) ya no se
+      // acepta al crear ni sirve para identificarse.
+      'schemaVersion': 2,
     });
     return TicketJoinLink(
       token: token,
@@ -137,7 +154,7 @@ class TicketLinksRepository {
       createdByUid: uid(),
       revoked: false,
       spaceId: spaceId,
-      manuals: manuals,
+      target: target,
       expiresAt: expiresAt,
     );
   }
@@ -197,16 +214,21 @@ class TicketLinksRepository {
             'schemaVersion': 1,
           });
 
-  /// Paso 2: identificarse como un MANUAL concreto.
+  /// Paso 2: confirmar que se es el DESTINATARIO del enlace.
+  ///
+  /// No admite un manual arbitrario: el que vale es el del token. Aunque un
+  /// cliente modificado llamara con otro, Rules rechaza la escritura porque
+  /// compara `manualId` y `pid` con `targetManualId`/`targetPid` del enlace.
   ///
   /// El cerrojo `ticketClaims/{ticketId}_{manualId}` va en el MISMO batch y
   /// su `create` solo prospera si no existe: eso es la exclusión mutua entre
   /// dispositivos, sin transacción extra. El segundo en llegar recibe
   /// permission-denied, que la app traduce a «ya no está disponible».
-  Future<TicketLinkOutcome> identifyAsManual(
-    TicketJoinLink link,
-    EligibleManual manual,
-  ) async {
+  Future<TicketLinkOutcome> identifyAsTarget(TicketJoinLink link) async {
+    final manual = link.target;
+    // Un enlace del esquema antiguo no dice a quién representa: no hay nada
+    // que confirmar y no se concede identificación.
+    if (manual == null) return TicketLinkOutcome.invalid;
     final claim = firestore.doc(
       'sessions/${link.sessionId}/ticketClaims/'
       '${link.ticketId}_${manual.manualId}',
@@ -312,10 +334,15 @@ class TicketLinksRepository {
       createdByUid: (data['createdByUid'] as String?) ?? '',
       revoked: data['status'] != 'active',
       spaceId: (data['spaceId'] as String?) ?? '',
-      manuals: [
-        for (final raw in (data['manuals'] as List?) ?? const [])
-          ?EligibleManual.fromJson(raw),
-      ],
+      // Esquema 1 (lista `manuals`): se lee como enlace SIN destinatario. No
+      // se degrada a «elige tú»: eso era justamente el agujero.
+      target: ((data['targetManualId'] as String?) ?? '').isEmpty
+          ? null
+          : EligibleManual(
+              pid: (data['targetPid'] as String?) ?? '',
+              manualId: data['targetManualId'] as String,
+              displayName: (data['targetName'] as String?) ?? '',
+            ),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       expiresAt: (data['expiresAt'] as Timestamp?)?.toDate().toUtc(),
     );
@@ -351,9 +378,14 @@ class PendingTicketLink extends Notifier<String?> {
   void clear() => state = null;
 }
 
+/// Enlace vivo de un ticket para un destinatario concreto. La clave lleva el
+/// `manualId` porque ahora hay uno por persona.
 final ticketLinkProvider = StreamProvider.autoDispose
-    .family<TicketJoinLink?, ({String sessionId, String ticketId})>(
-      (ref, ref2) => ref
+    .family<
+      TicketJoinLink?,
+      ({String sessionId, String ticketId, String manualId})
+    >(
+      (ref, key) => ref
           .watch(ticketLinksRepositoryProvider)
-          .watchActiveLink(ref2.sessionId, ref2.ticketId),
+          .watchActiveLink(key.sessionId, key.ticketId, manualId: key.manualId),
     );

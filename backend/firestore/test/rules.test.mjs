@@ -2195,15 +2195,34 @@ describe('enlaces de grupo', () => {
 describe('enlaces de ticket', () => {
   // La sesión s1 la posee OWNER. p1=Edgar (owner), p2/p3 reclamados por
   // GUEST/OTHER (cuenta e invitado), p4 sin reclamar. Añadimos manuales.
-  const T = 'AAAAAAAAAAAAAAAAAAAAAA'; // token del ticket t1
+  const T = 'AAAAAAAAAAAAAAAAAAAAAA'; // t1, DIRIGIDO a Marta (p5/m1)
   const T_OTRO = 'BBBBBBBBBBBBBBBBBBBBBB'; // token de OTRO ticket (t2)
   const T_MUERTO = 'CCCCCCCCCCCCCCCCCCCCCC'; // revocado
   const T_CADUCADO = 'DDDDDDDDDDDDDDDDDDDDDD';
+  const T_LUIS = 'EEEEEEEEEEEEEEEEEEEEEE'; // t1, DIRIGIDO a Luis (p6/m2)
+  const T_LEGADO = 'FFFFFFFFFFFFFFFFFFFFFF'; // esquema 1, sin destinatario
 
+  // El enlace va DIRIGIDO: el destinatario es parte del token y Rules solo
+  // admite identificarse como él. Antes viajaba la lista `manuals` de todo
+  // el ticket y cualquiera de ellos era reclamable con cualquier enlace.
   const linkDoc = (overrides = {}) => ({
     sessionId: 's1', accountId: 'a1', ticketId: 't1',
     merchantName: 'Mercadona',
-    manuals: [{ pid: 'p5', manualId: 'm1', displayName: 'Marta' }],
+    targetPid: 'p5', targetManualId: 'm1', targetName: 'Marta',
+    createdByUid: OWNER, status: 'active',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    schemaVersion: 2,
+    ...overrides,
+  });
+
+  /** Enlace del esquema 1, tal y como quedaron los ya emitidos. */
+  const legacyLinkDoc = (overrides = {}) => ({
+    sessionId: 's1', accountId: 'a1', ticketId: 't1',
+    merchantName: 'Mercadona',
+    manuals: [
+      { pid: 'p5', manualId: 'm1', displayName: 'Marta' },
+      { pid: 'p6', manualId: 'm2', displayName: 'Tío Luis' },
+    ],
     createdByUid: OWNER, status: 'active',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     schemaVersion: 1,
@@ -2273,6 +2292,10 @@ describe('enlaces de ticket', () => {
         linkDoc({ status: 'revoked' }));
       await setDoc(doc(f, `ticketLinks/${T_CADUCADO}`),
         linkDoc({ expiresAt: new Date(Date.now() - 60000) }));
+      await setDoc(doc(f, `ticketLinks/${T_LUIS}`),
+        linkDoc({ targetPid: 'p6', targetManualId: 'm2',
+          targetName: 'Tío Luis' }));
+      await setDoc(doc(f, `ticketLinks/${T_LEGADO}`), legacyLinkDoc());
       await setDoc(doc(f, `guestIdentities/${GUEST}`), {
         uid: GUEST, displayName: 'Alba invitada',
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
@@ -2437,8 +2460,74 @@ describe('enlaces de ticket', () => {
     await assertSucceeds(identify(db(FOURTH), FOURTH, T));
     // El segundo choca con el cerrojo determinista: primero en llegar gana.
     await assertFails(identify(db(THIRD), THIRD, T));
-    // Y sigue pudiendo coger OTRO manual libre.
-    await assertSucceeds(identify(db(THIRD), THIRD, T,
+    // Y sigue pudiendo identificarse con SU PROPIO enlace, el de Luis.
+    await assertSucceeds(identify(db(THIRD), THIRD, T_LUIS,
+      { pid: 'p6', manualId: 'm2' }));
+  });
+
+  // ── El enlace está LIMITADO a su destinatario (ADR-036 rev. 2) ───────
+  it('un enlace dirigido a Marta NO sirve para reclamar a Luis', async () => {
+    // Luis participa en el ticket y su manual está libre: lo único que lo
+    // impide es que el token no va dirigido a él.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p6', manualId: 'm2' }));
+    // Y al revés, para que quede claro que no es una casualidad del orden.
+    await assertFails(identify(db(FOURTH), FOURTH, T_LUIS,
+      { pid: 'p5', manualId: 'm1' }));
+  });
+
+  it('manipular el pid conservando el manualId del token tampoco cuela',
+      async () => {
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p6', manualId: 'm1' }));
+  });
+
+  it('cada destinatario entra con SU enlace, y a la vez', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    await assertSucceeds(identify(db(THIRD), THIRD, T_LUIS,
+      { pid: 'p6', manualId: 'm2' }));
+  });
+
+  it('un enlace del esquema 1 ya no identifica a nadie', async () => {
+    // Los emitidos antes publicaban la lista entera. Dejan de autorizar
+    // identificaciones en vez de seguir abiertos hasta que caduquen.
+    await assertFails(identify(db(FOURTH), FOURTH, T_LEGADO));
+    await assertFails(identify(db(FOURTH), FOURTH, T_LEGADO,
+      { pid: 'p6', manualId: 'm2' }));
+    // Pero el dueño SÍ puede revocarlo: si no, quedaría vivo para siempre.
+    await assertSucceeds(updateDoc(doc(db(OWNER), `ticketLinks/${T_LEGADO}`),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+  });
+
+  it('no se crea un enlace hacia quien no participa o no es ese manual',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${S}/participants/p8`), {
+        name: 'Ajena', isOwner: false, order: 7, active: true,
+        claimedByDevice: '', manualId: 'm8',
+      });
+    });
+    // p8 no está en la proyección del ticket.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/NOPARTICIPAAAAAAAAAAA'),
+      linkDoc({ targetPid: 'p8', targetManualId: 'm8' })));
+    // p5 participa, pero su manual es m1, no m2.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/DESPAREJADOAAAAAAAAAA'),
+      linkDoc({ targetPid: 'p5', targetManualId: 'm2' })));
+  });
+
+  it('reapuntar el enlace a OTRA persona es un secuestro: denegado', async () => {
+    await assertFails(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { targetManualId: 'm2', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { targetPid: 'p6', updatedAt: serverTimestamp() }));
+  });
+
+  it('el enlace ya usado por otra cuenta se cierra para las demás', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    // Segunda cuenta con el MISMO enlace: el cerrojo ya es de otro.
+    await assertFails(identify(db(THIRD), THIRD, T));
+    // Y no le queda ninguna alternativa: el enlace representaba a UNA.
+    await assertFails(identify(db(THIRD), THIRD, T,
       { pid: 'p6', manualId: 'm2' }));
   });
 
@@ -2509,8 +2598,11 @@ describe('enlaces de ticket', () => {
       linkDoc({ ticketId: 't9', merchantName: 'Recien' })));
 
     await env.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(
-        doc(ctx.firestore(), `${S}/ticketParticipantProjections/t9`),
+      const f = ctx.firestore();
+      // recompute termina: escribe las entradas Y la señal en el mismo batch.
+      await setDoc(doc(f, `${S}/ticketParticipants/t9_p5`),
+        { ticketId: 't9', pid: 'p5', schemaVersion: 1 });
+      await setDoc(doc(f, `${S}/ticketParticipantProjections/t9`),
         { ticketId: 't9', ready: true, fingerprint: 'y',
           updatedAt: serverTimestamp(), schemaVersion: 1 });
     });

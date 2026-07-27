@@ -10,18 +10,20 @@ import '../../auth/data/guest_identity_repository.dart';
 import '../data/ticket_links_repository.dart';
 import '../domain/ticket_link_models.dart';
 
-/// Acceso a un ticket por enlace (Sprint 5, ADR-036).
+/// Acceso a un ticket por enlace (ADR-036 rev. 2).
 ///
 /// Orden del flujo, sin pantallas intermedias innecesarias:
 ///  1. se resuelve el enlace (solo se ve el comercio);
 ///  2. quien no tenga identidad elige: invitado, entrar o crear cuenta;
 ///  3. un invitado sin nombre solo pone su nombre;
-///  4. con identidad, se abre el acceso de LECTURA sin preguntar nada;
-///  5. si además resulta ser alguien conocido de la sesión, entra directo;
-///  6. si no, y el ticket tiene participantes MANUAL, «¿Quién eres?».
+///  4. con identidad, si ya es participante conocido del ticket, entra;
+///  5. si no, se le ofrece confirmar que es EL DESTINATARIO del enlace.
 ///
-/// El paso 4 es lo que permite el 5: sin acceso de lectura no se pueden leer
-/// los participantes, y sin leerlos no se sabe si hay que preguntar.
+/// El paso 5 ya no es un «¿Quién eres?» con una lista: el enlace se generó
+/// para una persona concreta y solo se puede confirmar a esa. Elegir entre
+/// varios permitía que un enlace hecho para Pedro sirviera para reclamar a
+/// Ana, y ocultar la lista en la interfaz no habría bastado: Rules compara
+/// ahora lo que se escribe con el destinatario grabado en el token.
 class JoinTicketScreen extends ConsumerStatefulWidget {
   const JoinTicketScreen({super.key, required this.token});
 
@@ -35,10 +37,18 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
   final _guestName = TextEditingController();
 
   TicketJoinLink? _link;
-  List<EligibleManual>? _choices;
+
+  /// Destinatario pendiente de confirmar. NUNCA una lista: el enlace ya dice
+  /// a quién representa.
+  EligibleManual? _confirming;
   var _busy = false;
   var _resolved = false;
   var _working = false;
+
+  /// La entrada automática se hace UNA vez. Sin esto, tras un desenlace
+  /// terminal —«otra persona ya usó este enlace»— el rebuild volvía a
+  /// lanzarla y borraba el mensaje que se acababa de mostrar.
+  var _entered = false;
   String? _error;
 
   @override
@@ -128,14 +138,16 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
         _goToTicket(link);
         return;
       }
-      if (link.manuals.isEmpty) {
-        // Ni participante conocido ni MANUAL elegible: no hay a quién
-        // representar, así que no se concede lectura.
+      final target = link.target;
+      if (target == null) {
+        // Enlace sin destinatario (esquema antiguo): no hay a quién
+        // representar y no se concede lectura. Antes se caía en la lista de
+        // todos los manuales del ticket, que es el bug.
         setState(() => _error = l10n.ticketLinkNoManuals);
         return;
       }
       if (!mounted) return;
-      setState(() => _choices = link.manuals);
+      setState(() => _confirming = target);
     } on FirebaseException catch (error) {
       if (mounted) {
         setState(
@@ -152,7 +164,10 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
     }
   }
 
-  Future<void> _pick(EligibleManual manual) async {
+  /// Confirmar que se es el destinatario del enlace. No recibe a quién: lo
+  /// dice el token. Doble pulsación cubierta por `_working`, y el reintento
+  /// es idempotente porque el cerrojo es determinista y a nombre propio.
+  Future<void> _confirm() async {
     final l10n = AppLocalizations.of(context);
     final link = _link;
     if (link == null || _working) return;
@@ -164,23 +179,21 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
     try {
       final outcome = await ref
           .read(ticketLinksRepositoryProvider)
-          .identifyAsManual(link, manual);
+          .identifyAsTarget(link);
       if (!mounted) return;
       switch (outcome) {
         case TicketLinkOutcome.opened:
           _goToTicket(link);
         case TicketLinkOutcome.manualTaken:
-          // Otro dispositivo llegó antes entre la lectura y la selección.
+          // Otra cuenta se identificó antes con este mismo enlace. No hay
+          // alternativa que ofrecer: el enlace representaba a UNA persona.
           setState(() {
             _error = l10n.ticketLinkManualTaken;
-            _choices = [
-              for (final candidate in link.manuals)
-                if (candidate.manualId != manual.manualId) candidate,
-            ];
+            _confirming = null;
           });
         case TicketLinkOutcome.invalid:
         case TicketLinkOutcome.needsIdentity:
-        case TicketLinkOutcome.needsManualChoice:
+        case TicketLinkOutcome.needsManualConfirmation:
           setState(() => _error = l10n.ticketLinkInvalid);
       }
     } on Object {
@@ -208,11 +221,15 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
     final link = _link;
 
     // Entrada automática: identidad conocida y enlace válido ⇒ adelante.
+    // Una sola vez (`_entered`): repetirla en cada rebuild pisaba el
+    // resultado, incluidos los mensajes de error.
     if (link != null &&
+        !_entered &&
         !_busy &&
         !_working &&
-        _choices == null &&
+        _confirming == null &&
         _hasIdentity()) {
+      _entered = true;
       Future.microtask(() {
         if (mounted) _enter();
       });
@@ -231,7 +248,7 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
                 const Icon(Icons.receipt_long_outlined, size: 64),
                 const SizedBox(height: TokenSpacing.lg),
 
-                if (link != null && _choices == null) ...[
+                if (link != null && _confirming == null) ...[
                   Text(
                     l10n.ticketLinkSharedWithYou,
                     textAlign: TextAlign.center,
@@ -246,7 +263,7 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
                   const SizedBox(height: TokenSpacing.lg),
                 ],
 
-                if (link != null && _choices == null && !signedIn) ...[
+                if (link != null && _confirming == null && !signedIn) ...[
                   Text(l10n.joinIdentifyHint, textAlign: TextAlign.center),
                   const SizedBox(height: TokenSpacing.md),
                   FilledButton(
@@ -264,7 +281,7 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
                     child: Text(l10n.joinCreateAccount),
                   ),
                 ] else if (link != null &&
-                    _choices == null &&
+                    _confirming == null &&
                     needsGuestName) ...[
                   Text(l10n.joinGuestNameHint, textAlign: TextAlign.center),
                   const SizedBox(height: TokenSpacing.md),
@@ -284,36 +301,40 @@ class _JoinTicketScreenState extends ConsumerState<JoinTicketScreen> {
                   ),
                 ],
 
-                // «¿Quién eres?» — SOLO participantes MANUAL de este ticket.
-                // Ni cuentas, ni invitados, ni miembros del grupo: la lista
-                // viene denormalizada en el enlace y no hay nada más que ver.
-                if (_choices case final choices?) ...[
+                // Confirmación del DESTINATARIO. No hay lista ni selector:
+                // el enlace se generó para esta persona y solo para ella.
+                if (_confirming case final target?) ...[
                   Text(
-                    l10n.ticketLinkWhoAreYou,
+                    l10n.ticketLinkAreYou(target.displayName),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium,
                   ),
                   const SizedBox(height: TokenSpacing.sm),
                   Text(
-                    l10n.ticketLinkWhoAreYouHelp,
+                    l10n.ticketLinkAreYouHelp,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: TokenSpacing.md),
-                  if (choices.isEmpty)
-                    Text(l10n.ticketLinkNoManuals, textAlign: TextAlign.center)
-                  else
-                    // Incluso con UNO solo se confirma: autoseleccionar
-                    // convertiría un enlace reenviado por error en una
-                    // suplantación silenciosa, y confirmar cuesta un toque.
-                    for (final manual in choices)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: TokenSpacing.sm),
-                        child: FilledButton.tonal(
-                          onPressed: _busy ? null : () => _pick(manual),
-                          child: Text(manual.displayName),
-                        ),
-                      ),
+                  // Se confirma aunque solo haya uno: autoentrar convertiría
+                  // un enlace reenviado por error en una suplantación
+                  // silenciosa, y confirmar cuesta un toque.
+                  FilledButton(
+                    onPressed: _busy ? null : _confirm,
+                    child: Text(l10n.ticketLinkIAm(target.displayName)),
+                  ),
+                  const SizedBox(height: TokenSpacing.sm),
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () {
+                            ref
+                                .read(pendingTicketLinkProvider.notifier)
+                                .clear();
+                            context.go('/home');
+                          },
+                    child: Text(l10n.ticketLinkNotMe),
+                  ),
                 ],
 
                 if (_busy) ...[
