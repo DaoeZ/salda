@@ -11,7 +11,8 @@ import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../sessions/presentation/ticket_navigation.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../../profile/data/profile_repository.dart';
+import 'economic_names.dart';
+import '../application/identity_names.dart';
 import '../data/economic_repository.dart';
 import '../domain/economic_models.dart';
 
@@ -23,8 +24,7 @@ class EconomicRelationScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final profile = ref.watch(publicProfileProvider(otherUid)).value;
-    final name = profile?.displayName ?? _shortUid(otherUid);
+    final name = economicNameText(ref, l10n, otherUid);
     final overview = ref.watch(economicOverviewProvider);
     return Scaffold(
       appBar: AppBar(
@@ -82,7 +82,11 @@ class _RelationBody extends ConsumerWidget {
         // centrado que no dice de quien es la deuda.
         Row(
           children: [
-            SaldaAvatar(seed: otherUid, label: otherName, radius: 22),
+            SaldaAvatar(
+              seed: economicAvatarSeed(otherUid),
+              label: otherName,
+              radius: 22,
+            ),
             const SizedBox(width: TokenSpacing.lg),
             Expanded(
               child: Text(
@@ -480,6 +484,3 @@ String _economicErrorText(AppLocalizations l10n, Object error) {
 }
 
 int _millis(DateTime? date) => date?.millisecondsSinceEpoch ?? 0;
-
-String _shortUid(String uid) =>
-    uid.length <= 10 ? uid : '${uid.substring(0, 8)}…';

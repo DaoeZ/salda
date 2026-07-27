@@ -52,12 +52,19 @@ class StatusBadge extends StatelessWidget {
             Icon(icon, size: 12, color: fg),
             const SizedBox(width: 4),
           ],
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
+          // Flexible porque hay rótulos largos ("Pendiente de confirmar") en
+          // filas que además llevan un importe: sin esto la etiqueta empuja
+          // y desborda.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
             ),
           ),
         ],

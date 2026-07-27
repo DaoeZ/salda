@@ -10,8 +10,9 @@ import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../../profile/data/profile_repository.dart';
 import '../../spaces/data/spaces_repository.dart';
+import '../application/identity_names.dart';
+import 'economic_names.dart';
 import '../data/economic_repository.dart';
 
 /// Situación económica del espacio.
@@ -165,12 +166,17 @@ class _SpaceBalanceTile extends ConsumerWidget {
     final otherUid = balance.firstUid == viewerUid
         ? balance.secondUid
         : balance.firstUid;
-    final profile = ref.watch(publicProfileProvider(otherUid)).value;
-    final name = profile?.displayName ?? otherUid;
+    // Antes caia al actor crudo: para un MANUAL eso es `manual:{id}`, que
+    // es justo lo que se veia en los saldos.
+    final name = economicNameText(ref, l10n, otherUid);
     final iOwe = balance.debtorUid == viewerUid;
     return ListTile(
       onTap: () => context.push('/home/economy/$otherUid'),
-      leading: SaldaAvatar(seed: otherUid, label: name, radius: 17),
+      leading: SaldaAvatar(
+        seed: economicAvatarSeed(otherUid),
+        label: name,
+        radius: 17,
+      ),
       title: Text(
         iOwe ? l10n.economyYouOwe(name) : l10n.economyOwesYou(name),
         maxLines: 2,

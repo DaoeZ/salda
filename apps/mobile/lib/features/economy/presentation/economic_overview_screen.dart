@@ -11,7 +11,8 @@ import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../../profile/data/profile_repository.dart';
+import '../application/identity_names.dart';
+import 'economic_names.dart';
 import '../data/economic_repository.dart';
 import '../domain/economic_models.dart';
 
@@ -210,12 +211,15 @@ class _RelationshipTile extends ConsumerWidget {
     final otherUid = balance.firstUid == viewerUid
         ? balance.secondUid
         : balance.firstUid;
-    final profile = ref.watch(publicProfileProvider(otherUid)).value;
-    final name = profile?.displayName ?? _shortUid(otherUid);
+    final name = economicNameText(ref, l10n, otherUid);
     final iOwe = balance.debtorUid == viewerUid;
     return ListTile(
       onTap: () => context.push('/home/economy/$otherUid'),
-      leading: SaldaAvatar(seed: otherUid, label: name, radius: 18),
+      leading: SaldaAvatar(
+        seed: economicAvatarSeed(otherUid),
+        label: name,
+        radius: 18,
+      ),
       title: Text(
         iOwe ? l10n.economyYouOwe(name) : l10n.economyOwesYou(name),
         maxLines: 2,
@@ -247,10 +251,7 @@ class _PendingConfirmationState extends ConsumerState<_PendingConfirmation> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final profile = ref
-        .watch(publicProfileProvider(widget.payment.payerUid))
-        .value;
-    final name = profile?.displayName ?? _shortUid(widget.payment.payerUid);
+    final name = economicNameText(ref, l10n, widget.payment.payerUid);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(TokenSpacing.md),
@@ -339,6 +340,3 @@ class _EconomicSkeleton extends StatelessWidget {
   Widget build(BuildContext context) =>
       const ScreenBody(children: [SkeletonList(rows: 4)]);
 }
-
-String _shortUid(String uid) =>
-    uid.length <= 10 ? uid : '${uid.substring(0, 8)}…';
