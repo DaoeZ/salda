@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:domain/domain.dart' show ShareCode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/diagnostics/social_log.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/data/guest_identity_repository.dart';
 import '../domain/space_models.dart';
@@ -419,6 +420,7 @@ class SpacesRepository {
   Future<RelationshipResult> createRelationshipWithManual({
     required String name,
     required String manualName,
+    String flow = '-',
   }) async {
     _requireAccount();
     final personName = manualName.trim();
@@ -461,9 +463,20 @@ class SpacesRepository {
     // documentos no se escribe ninguno, así que no puede quedar un manual
     // huérfano ni un espacio sin membresía. Lo que faltaba era TRADUCIR el
     // fallo: `permission-denied` llegaba a la UI como un error genérico.
+    SocialLog.log(flow, 'batchRelacionManual', {
+      'fase': 'commit',
+      'docs': 'space,members,manualParticipants',
+      'schemaVersion': 3,
+      'espacio': SocialLog.fingerprint(space.id),
+    });
     try {
       await batch.commit();
+      SocialLog.log(flow, 'batchRelacionManual', {'fase': 'ok'});
     } on Object catch (error) {
+      SocialLog.log(flow, 'batchRelacionManual', {
+        'fase': 'error',
+        ...SocialLog.errorFields(error),
+      });
       _rethrowAsSpaceFailure('createRelationshipWithManual', error);
     }
     return (id: space.id, outcome: RelationshipOutcome.created);

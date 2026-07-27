@@ -1,7 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/diagnostics/social_log.dart';
 import '../../profile/data/profile_repository.dart';
 import '../data/auth_repository.dart';
 
@@ -63,12 +62,16 @@ class SocialAccountService {
   final AuthRepository auth;
   final ProfileRepository profiles;
 
-  Future<SocialAccountStatus> prepare() async {
+  Future<SocialAccountStatus> prepare({String flow = '-'}) async {
+    final reloj = Stopwatch()..start();
+    SocialLog.log(flow, 'prepare', {'fase': 'entra'});
     final user = auth.currentUser;
     if (user == null) {
+      SocialLog.log(flow, 'prepare', {'fase': 'sale', 'motivo': 'sin-sesion'});
       return const SocialAccountStatus(SocialReadiness.notSignedIn);
     }
     if (user.isAnonymous) {
+      SocialLog.log(flow, 'prepare', {'fase': 'sale', 'motivo': 'anonimo'});
       return const SocialAccountStatus(SocialReadiness.anonymous);
     }
 
@@ -78,8 +81,16 @@ class SocialAccountService {
     // `refreshEmailVerification` recarga el usuario Y renueva el ID token,
     // que es lo que leen las Rules.
     var verified = user.emailVerified;
+    SocialLog.log(flow, 'prepare', {
+      'fase': 'verificacion',
+      'verificadoLocal': verified,
+    });
     if (!verified) {
       verified = await auth.refreshEmailVerification();
+      SocialLog.log(flow, 'prepare', {
+        'fase': 'verificacion-refrescada',
+        'verificado': verified,
+      });
       if (!verified) {
         return const SocialAccountStatus(SocialReadiness.emailNotVerified);
       }
@@ -89,12 +100,30 @@ class SocialAccountService {
     //    lo que Ajustes nunca comprobó. Entrar con Google no lo crea: sin
     //    pasar por la pantalla de perfil, `profiles/{uid}` no existe.
     try {
+      SocialLog.log(flow, 'prepare', {
+        'fase': 'lee-perfil-publico',
+        'uid': SocialLog.fingerprint(user.uid),
+      });
       final existing = await profiles.fetchProfile(user.uid);
+      SocialLog.log(flow, 'prepare', {
+        'fase': 'perfil-publico',
+        'existe': existing != null,
+        'tieneUsername': (existing?.username ?? '').isNotEmpty,
+        'tieneNombre': (existing?.displayName ?? '').isNotEmpty,
+      });
       if (existing != null) {
+        SocialLog.log(flow, 'prepare', {
+          'fase': 'sale',
+          'motivo': 'listo',
+          'ms': reloj.elapsedMilliseconds,
+        });
         return const SocialAccountStatus(SocialReadiness.ready);
       }
     } on Object catch (error) {
-      debugPrint('social: no se pudo leer el perfil (${_code(error)})');
+      SocialLog.log(flow, 'prepare', {
+        'fase': 'perfil-publico-error',
+        ...SocialLog.errorFields(error),
+      });
       return const SocialAccountStatus(
         SocialReadiness.publicProfileUnavailable,
       );
@@ -103,13 +132,27 @@ class SocialAccountService {
     // 3) Reparación IDEMPOTENTE: se crea el perfil que falta a partir de lo
     //    que ya se sabe de la cuenta. Si otra ejecución lo creó mientras
     //    tanto, el segundo intento encuentra el documento y no escribe nada.
-    return _repair(user);
+    final resultado = await _repair(user, flow);
+    SocialLog.log(flow, 'prepare', {
+      'fase': 'sale',
+      'motivo': resultado.readiness.name,
+      'reparado': resultado.repaired,
+      'ms': reloj.elapsedMilliseconds,
+    });
+    return resultado;
   }
 
-  Future<SocialAccountStatus> _repair(AppUser user) async {
+  Future<SocialAccountStatus> _repair(AppUser user, String flow) async {
     final nombre = (user.displayName ?? '').trim().isNotEmpty
         ? user.displayName!.trim()
         : (user.email ?? '').split('@').first;
+    SocialLog.log(flow, 'repair', {
+      'fase': 'entra',
+      'origenNombre': (user.displayName ?? '').trim().isNotEmpty
+          ? 'displayName'
+          : 'email',
+      'nombreVacio': nombre.isEmpty,
+    });
     if (nombre.isEmpty) {
       return const SocialAccountStatus(SocialReadiness.publicProfileMissing);
     }
@@ -118,23 +161,35 @@ class SocialAccountService {
       // pisar el username de otra persona; y si aun así se perdiera la
       // carrera, Rules rechazan el batch y no se escribe nada a medias.
       final username = await profiles.suggestUsername(nombre);
-      await profiles.createProfile(displayName: nombre, username: username);
+      SocialLog.log(flow, 'repair', {
+        'fase': 'username-sugerido',
+        'longitud': username.length,
+        'huella': SocialLog.fingerprint(username),
+      });
+      await profiles.createProfile(
+        displayName: nombre,
+        username: username,
+        flow: flow,
+      );
+      SocialLog.log(flow, 'repair', {'fase': 'perfil-creado'});
       return const SocialAccountStatus(SocialReadiness.ready, repaired: true);
     } on Object catch (error) {
+      SocialLog.log(flow, 'repair', {
+        'fase': 'error',
+        ...SocialLog.errorFields(error),
+      });
       // Puede haberlo creado otra pantalla entre medias: eso NO es un fallo.
       final ahora = await profiles.fetchProfile(user.uid);
+      SocialLog.log(flow, 'repair', {
+        'fase': 'reintento-lectura',
+        'existeAhora': ahora != null,
+      });
       if (ahora != null) {
         return const SocialAccountStatus(SocialReadiness.ready);
       }
-      debugPrint('social: reparación del perfil falló (${_code(error)})');
       return const SocialAccountStatus(SocialReadiness.publicProfileMissing);
     }
   }
-
-  /// Código para el rastro de consola. Nunca el mensaje completo: puede
-  /// llevar rutas de documentos.
-  static String _code(Object error) =>
-      error is FirebaseException ? error.code : error.runtimeType.toString();
 }
 
 final socialAccountServiceProvider = Provider<SocialAccountService>((ref) {

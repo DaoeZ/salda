@@ -11,8 +11,23 @@ import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../spaces/data/spaces_repository.dart';
 import '../data/economic_repository.dart';
 
+/// Situación económica del espacio.
+///
+/// Antes lo decidía TODO a partir de las obligaciones abiertas: si no había
+/// ninguna, anunciaba «todavía no tienes movimientos económicos». Eso es
+/// falso en cuanto hay un ticket cuyo reparto deja a todo el mundo a cero
+/// —por ejemplo uno que pagó y consumió la misma persona—, que es justo lo
+/// que ocurría en el dispositivo: un gasto real y una portada afirmando que
+/// no había pasado nada.
+///
+/// Ahora hay cuatro estados y ninguno se confunde con otro: cargando, error,
+/// sin actividad, y con actividad (en paz o con saldos abiertos). La
+/// actividad se deduce de los TICKETS del espacio —el mismo stream que ya
+/// alimenta la lista de tickets— y los saldos siguen saliendo del ledger:
+/// aquí no se recalcula economía.
 class SpaceEconomicSummary extends ConsumerWidget {
   const SpaceEconomicSummary({required this.spaceId, super.key});
 
@@ -22,38 +37,63 @@ class SpaceEconomicSummary extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final overview = ref.watch(economicOverviewProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(title: l10n.spaceEconomicTitle),
-        overview.when(
-          loading: () => const SkeletonList(rows: 2, leading: false),
-          error: (_, _) => ErrorStateView(message: l10n.economyLoadError),
-          data: (global) {
-            final scoped = global.withinSpace(spaceId);
-            final open = scoped.balances
-                .where((balance) => balance.signedOutstandingCents != 0)
-                .toList();
-            // Cero deudas abiertas es una BUENA noticia, no un vacío: se
-            // dice con el mismo tono verde que el resto de lo saldado.
-            if (open.isEmpty) {
-              return SaldaCard(
-                color: context.salda.positiveMuted,
-                borderColor: context.salda.positive.withValues(alpha: 0.25),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check_rounded,
-                      size: 18,
-                      color: context.salda.positive,
-                    ),
-                    const SizedBox(width: TokenSpacing.md),
-                    Expanded(child: Text(l10n.spaceEconomicEmpty)),
-                  ],
-                ),
-              );
-            }
-            return SaldaCardList(
+    final tickets = ref.watch(spaceTicketsProvider(spaceId));
+
+    Widget cuerpo() {
+      // 1) CARGANDO — nunca se afirma que no hay nada mientras falten datos.
+      if (overview.isLoading || tickets.isLoading) {
+        return const SkeletonList(rows: 2, leading: false);
+      }
+      // 2) ERROR — tampoco se disfraza de vacío.
+      if (overview.hasError || tickets.hasError) {
+        return ErrorStateView(message: l10n.economyLoadError);
+      }
+
+      final scoped = overview.value!.withinSpace(spaceId);
+      final open = scoped.balances
+          .where((balance) => balance.signedOutstandingCents != 0)
+          .toList();
+      final lista = tickets.value!;
+      final gastado = lista.fold<int>(
+        0,
+        (total, ticket) => total + ticket.grandTotalCents,
+      );
+
+      // 3) SIN ACTIVIDAD — ni tickets ni saldos: aquí sí es cierto.
+      if (open.isEmpty && lista.isEmpty) {
+        return EmptyState(
+          icon: Icons.account_balance_wallet_outlined,
+          title: l10n.spaceEconomicEmptyTitle,
+          body: l10n.spaceEconomicEmpty,
+        );
+      }
+
+      // 4) CON ACTIVIDAD.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _GastoTotal(cents: gastado, tickets: lista.length),
+          const SizedBox(height: TokenSpacing.md),
+          if (open.isEmpty)
+            // Saldo cero CON gasto: estáis en paz. Es una buena noticia, y
+            // una información distinta de «no ha pasado nada».
+            SaldaCard(
+              color: context.salda.positiveMuted,
+              borderColor: context.salda.positive.withValues(alpha: 0.25),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: context.salda.positive,
+                  ),
+                  const SizedBox(width: TokenSpacing.md),
+                  Expanded(child: Text(l10n.spaceEconomicSettled)),
+                ],
+              ),
+            )
+          else
+            SaldaCardList(
               children: [
                 for (final balance in open)
                   _SpaceBalanceTile(
@@ -61,10 +101,54 @@ class SpaceEconomicSummary extends ConsumerWidget {
                     viewerUid: scoped.viewerUid,
                   ),
               ],
-            );
-          },
-        ),
+            ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeader(title: l10n.spaceEconomicTitle),
+        cuerpo(),
       ],
+    );
+  }
+}
+
+/// Cuánto se ha gastado en el espacio. Es el dato que demuestra que «aquí ha
+/// pasado algo» aunque el saldo entre las personas sea cero.
+class _GastoTotal extends StatelessWidget {
+  const _GastoTotal({required this.cents, required this.tickets});
+
+  final int cents;
+  final int tickets;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.salda;
+    final l10n = AppLocalizations.of(context);
+    return SaldaCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.spaceEconomicSpent,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: c.textMuted),
+                ),
+                const SizedBox(height: 2),
+                MoneyText(Money(cents), size: MoneySize.medium),
+              ],
+            ),
+          ),
+          StatusBadge(l10n.spaceTicketsCount(tickets)),
+        ],
+      ),
     );
   }
 }

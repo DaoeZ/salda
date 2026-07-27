@@ -1478,6 +1478,27 @@ class AppLocalizationsEs extends AppLocalizations {
   String get spaceEconomicTitle => 'Tu balance en este espacio';
 
   @override
+  String get spaceEconomicEmptyTitle => 'Sin movimientos todavía';
+
+  @override
+  String get spaceEconomicSettled =>
+      'Estáis en paz: nadie debe nada en este espacio.';
+
+  @override
+  String get spaceEconomicSpent => 'Gastado aquí';
+
+  @override
+  String spaceTicketsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gastos',
+      one: '1 gasto',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get spaceEconomicEmpty =>
       'Todavía no tienes movimientos económicos identificados en este espacio.';
 

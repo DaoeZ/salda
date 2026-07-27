@@ -297,7 +297,15 @@ void main() {
       // app ni reconstruir el espacio.
       contenedor.invalidate(spaceTicketsProvider('g1'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('45,00'), findsOneWidget);
+      // Aparece en la fila del ticket y también en «Gastado aquí»: lo que
+      // importa es que la portada refleje el importe nuevo.
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'GURUGU'),
+          matching: find.textContaining('45,00'),
+        ),
+        findsOneWidget,
+      );
       expect(find.byType(SpaceDetailScreen), findsOneWidget);
       await cerrar(tester);
     });

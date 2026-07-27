@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/diagnostics/social_log.dart';
+import '../../../core/diagnostics/social_probe.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/application/social_account.dart';
 import '../../auth/data/auth_repository.dart';
@@ -181,9 +183,14 @@ class _CreateRelationshipScreenState
   /// gastos, balances y liquidaciones. Si más adelante se registra, se
   /// vincula por el Sprint 6 sin tocar el histórico.
   Future<void> _createWithManual() async {
+    final flow = SocialLog.startFlow();
+    SocialLog.log(flow, 'crearRelacionManual', {'fase': 'pulsacion'});
     // Guarda de reentrada: sin ella, dos toques rápidos lanzaban dos batches
     // y creaban DOS relaciones con el mismo nombre.
-    if (creatingUid != null) return;
+    if (creatingUid != null) {
+      SocialLog.log(flow, 'crearRelacionManual', {'fase': 'reentrada'});
+      return;
+    }
     final l10n = AppLocalizations.of(context);
     final name = await showDialog<String>(
       context: context,
@@ -211,6 +218,11 @@ class _CreateRelationshipScreenState
         );
       },
     );
+    SocialLog.log(flow, 'crearRelacionManual', {
+      'fase': 'nombre',
+      'longitud': name?.trim().length ?? -1,
+      'cancelado': name == null,
+    });
     if (name == null || name.isEmpty || !mounted) return;
 
     setState(() => creatingUid = '');
@@ -218,20 +230,46 @@ class _CreateRelationshipScreenState
       // La cuenta puede estar bien y aun así no cumplir lo que exigen las
       // Rules: entrar con Google no crea el perfil público, y sin él toda
       // escritura social se deniega. Se comprueba y se repara ANTES.
-      final estado = await ref.read(socialAccountServiceProvider).prepare();
+      await SocialProbe.dumpAuth(flow, 'crearRelacionManual');
+      SocialProbe.dumpFirestore(flow, 'crearRelacionManual');
+      final estado = await ref
+          .read(socialAccountServiceProvider)
+          .prepare(flow: flow);
+      SocialLog.log(flow, 'crearRelacionManual', {
+        'fase': 'prepare-resultado',
+        'estado': estado.readiness.name,
+        'reparado': estado.repaired,
+      });
       if (!estado.isReady) {
         if (!mounted) return;
+        SocialLog.log(flow, 'mapper', {
+          'entrada': 'SocialReadiness.${estado.readiness.name}',
+          'mensaje': _idMensaje(
+            l10n,
+            socialReadinessText(l10n, estado.readiness),
+          ),
+        });
         _avisar(socialReadinessText(l10n, estado.readiness));
         return;
       }
       final repo = ref.read(spacesRepositoryProvider);
       RelationshipResult result;
       try {
+        SocialLog.log(flow, 'createRelationship', {'fase': 'inicio'});
         result = await repo.createRelationshipWithManual(
           name: name,
           manualName: name,
+          flow: flow,
         );
+        SocialLog.log(flow, 'createRelationship', {'fase': 'exito'});
       } on SpaceFailure catch (failure) {
+        SocialLog.log(flow, 'createRelationship', {
+          'fase': 'fallo',
+          'codigo': failure.code.name,
+          'reintentara':
+              failure.code == SpaceFailureCode.permissionDenied &&
+              estado.repaired,
+        });
         // UN solo reintento, y solo si la reparación acaba de cambiar algo:
         // el token puede seguir sin reflejar el perfil recién creado.
         if (failure.code != SpaceFailureCode.permissionDenied ||
@@ -239,24 +277,57 @@ class _CreateRelationshipScreenState
           rethrow;
         }
         await ref.read(authRepositoryProvider).refreshEmailVerification();
+        await SocialProbe.dumpToken(flow, 'createRelationship');
+        SocialLog.log(flow, 'createRelationship', {'fase': 'reintento'});
         result = await repo.createRelationshipWithManual(
           name: name,
           manualName: name,
+          flow: flow,
         );
+        SocialLog.log(flow, 'createRelationship', {
+          'fase': 'exito-tras-reintento',
+        });
       }
       if (mounted) context.go('/home/spaces/${result.id}');
     } on SpaceFailure catch (failure) {
       // Antes TODO caía en «No se pudo completar la acción», que no dice ni
       // qué pasó ni qué hacer. Cada causa real tiene ahora su salida.
       if (!mounted) return;
+      // AQUÍ es donde un `permission-denied` se convierte en el texto que ve
+      // el usuario. La traza deja constancia de la conversión exacta.
+      SocialLog.log(flow, 'mapper', {
+        'entrada': 'SpaceFailure.${failure.code.name}',
+        'mensaje': _idMensaje(l10n, spaceFailureText(l10n, failure.code)),
+      });
       _avisar(spaceFailureText(l10n, failure.code));
     } on Object catch (error) {
       if (!mounted) return;
-      debugPrint('crear relación con manual falló: ${error.runtimeType}');
+      SocialLog.log(flow, 'mapper', {
+        'entrada': 'no-tipado',
+        ...SocialLog.errorFields(error),
+        'mensaje': 'spaceActionError',
+      });
       _avisar(l10n.spaceActionError);
     } finally {
       if (mounted) setState(() => creatingUid = null);
     }
+  }
+
+  /// Nombre del mensaje mostrado, no su texto: así la traza dice cuál se
+  /// eligió sin depender del idioma ni volcar frases enteras.
+  String _idMensaje(AppLocalizations l10n, String mensaje) {
+    if (mensaje == l10n.spaceSessionNotReady) return 'spaceSessionNotReady';
+    if (mensaje == l10n.socialProfileNotReady) return 'socialProfileNotReady';
+    if (mensaje == l10n.socialEmailNotVerified) return 'socialEmailNotVerified';
+    if (mensaje == l10n.contextAccountRequired) return 'contextAccountRequired';
+    if (mensaje == l10n.relationshipNotAllowed) return 'relationshipNotAllowed';
+    if (mensaje == l10n.relationshipIncompatible) {
+      return 'relationshipIncompatible';
+    }
+    if (mensaje == l10n.relationshipInvitedByOther) {
+      return 'relationshipInvitedByOther';
+    }
+    return 'spaceActionError';
   }
 
   void _avisar(String mensaje) => ScaffoldMessenger.of(

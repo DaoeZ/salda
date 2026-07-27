@@ -288,5 +288,6 @@ class _RepositorioDenegado extends SpacesRepository {
   Future<RelationshipResult> createRelationshipWithManual({
     required String name,
     required String manualName,
+    String flow = '-',
   }) async => throw const SpaceFailure(SpaceFailureCode.permissionDenied);
 }

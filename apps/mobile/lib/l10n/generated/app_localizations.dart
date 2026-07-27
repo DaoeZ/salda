@@ -2686,6 +2686,30 @@ abstract class AppLocalizations {
   /// **'Tu balance en este espacio'**
   String get spaceEconomicTitle;
 
+  /// No description provided for @spaceEconomicEmptyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin movimientos todavía'**
+  String get spaceEconomicEmptyTitle;
+
+  /// No description provided for @spaceEconomicSettled.
+  ///
+  /// In es, this message translates to:
+  /// **'Estáis en paz: nadie debe nada en este espacio.'**
+  String get spaceEconomicSettled;
+
+  /// No description provided for @spaceEconomicSpent.
+  ///
+  /// In es, this message translates to:
+  /// **'Gastado aquí'**
+  String get spaceEconomicSpent;
+
+  /// No description provided for @spaceTicketsCount.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{1 gasto} other{{count} gastos}}'**
+  String spaceTicketsCount(int count);
+
   /// No description provided for @spaceEconomicEmpty.
   ///
   /// In es, this message translates to:
