@@ -20,6 +20,16 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- CAUSA RAIZ de los enlaces rotos (grupo Y ticket). En Android
+                 el deep linking de Flutter es OPT-IN: sin esta bandera, el
+                 intent VIEW abre la app pero su URL NUNCA llega al router,
+                 asi que /g/{token} y /t/{token} aterrizaban en Inicio y el
+                 token se perdia. Los intent-filter y assetlinks.json estaban
+                 bien; lo que faltaba era que Flutter entregase la ruta. -->
+            <meta-data
+              android:name="flutter_deeplinking_enabled"
+              android:value="true"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

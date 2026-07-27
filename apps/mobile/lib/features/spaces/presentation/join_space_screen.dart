@@ -1,4 +1,6 @@
 import 'package:design_tokens/design_tokens.dart';
+
+import '../../../core/routing/incoming_link.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -72,6 +74,11 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
 
   Future<void> _resolve(String raw) async {
     if (raw.trim().isEmpty) return;
+    // Lo que se pega es la URL COMPLETA del chat, no el token suelto: sin
+    // extraerlo, la búsqueda iba contra `spaceLinks/https://…` y siempre
+    // respondía que la invitación no existe.
+    final parsed = IncomingLinkParser.parse(raw);
+    final token = parsed is GroupInvitationLink ? parsed.token : raw.trim();
     setState(() {
       _busy = true;
       _error = null;
@@ -79,7 +86,7 @@ class _JoinSpaceScreenState extends ConsumerState<JoinSpaceScreen> {
     try {
       final link = await ref
           .read(spacesRepositoryProvider)
-          .previewJoinLink(raw);
+          .previewJoinLink(token);
       if (!mounted) return;
       setState(() {
         _link = link;
