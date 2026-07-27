@@ -2,7 +2,9 @@
 
 on:
   push:
-    branches: [main]
+    # La rama de trabajo actual no es `main`, así que sin esto la CI solo
+    # corría al abrir un PR y los push quedaban sin verificar.
+    branches: [main, 'codex/**', 'claude/**']
   pull_request:
 
 jobs:
@@ -13,6 +15,9 @@ jobs:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with:
+          # Version FIJA, no "stable": el canal se mueve y un dia el build
+          # dejaria de reproducir lo verificado. Debe coincidir con `.fvmrc`.
+          flutter-version: 3.44.8
           channel: stable
           cache: true
       - name: Resolver workspace
@@ -33,33 +38,45 @@ jobs:
         run: |
           if [ -d test ]; then flutter test; fi
 
+  # Compila para demostrar que el proyecto ENSAMBLA en un entorno limpio.
+  # El artefacto NO es instalable sobre la app existente y no sirve para
+  # probar Google Sign-In ni los App Links: la CI no tiene —ni debe tener—
+  # la clave de desarrollo compartida, así que Gradle firma con la keystore
+  # local del runner y el certificado es otro. Se pide explícitamente con
+  # `-PallowLocalDebugKeystore=true` para que quede claro que es una
+  # excepción consciente y no un descuido; sin esa bandera el build se
+  # detiene a propósito (ver app/build.gradle.kts).
+  #
+  # Los APK que se instalan y se validan se generan en local, con la clave
+  # real: docs/SETUP_NUEVO_ORDENADOR.md §7. Subir la keystore a la CI —como
+  # secret o como artifact— convertiría cualquier acceso al repositorio en
+  # acceso al certificado, así que no se hace.
   apk:
-    name: APK debug salda-dev
+    name: Compila el APK (firma del runner, NO instalable)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with:
+          # Version FIJA, no "stable": el canal se mueve y un dia el build
+          # dejaria de reproducir lo verificado. Debe coincidir con `.fvmrc`.
+          flutter-version: 3.44.8
           channel: stable
           cache: true
       - name: Resolver workspace
         run: flutter pub get
       - name: Compilar APK de desarrollo
         working-directory: apps/mobile
-        run: flutter build apk --debug --dart-define=SALDA_ENV=development
-      - name: Preparar artefacto verificable
+        run: >
+          flutter build apk --debug --dart-define=SALDA_ENV=development
+          -PallowLocalDebugKeystore=true
+      - name: Dejar constancia de con qué certificado ha salido
         run: |
-          cp apps/mobile/build/app/outputs/flutter-apk/app-debug.apk salda-p7-dev-debug.apk
-          sha256sum salda-p7-dev-debug.apk | tee salda-p7-dev-debug.apk.sha256
-      - name: Publicar APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: salda-p7-dev-debug
-          path: |
-            salda-p7-dev-debug.apk
-            salda-p7-dev-debug.apk.sha256
-          if-no-files-found: error
-          retention-days: 30
+          APK=apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          sha256sum "$APK"
+          SIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$SIGNER" verify --print-certs "$APK" | grep -i 'SHA-256 digest' || true
+          echo "Recordatorio: este certificado NO es el de desarrollo compartido."
 
   guest-web:
     name: Web de invitados

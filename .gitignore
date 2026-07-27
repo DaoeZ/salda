@@ -64,3 +64,12 @@ serviceAccount*.json
 
 # Firma de desarrollo compartida (BUG-1): nunca en Git.
 dev-keystore.properties
+# Almacenes de claves en cualquier formato, por si alguno cae aquí dentro.
+*.p12
+*.pfx
+*.pem
+*.der
+# Respaldo privado de traslado (keystore + secretos locales). Vive FUERA del
+# repositorio a propósito; esta línea es un cinturón por si se copia dentro.
+salda-private-backup/
+*.private-backup.zip

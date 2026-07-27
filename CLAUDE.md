@@ -534,12 +534,22 @@ firebase CLI → keyring del SO del desarrollador.
   si un cambio lo dispara, replantear (lazy import de Firebase, etc.).
 - **El smoke test de la app** usa `Brand.appName`/`Brand.tagline`: si cambias el branding,
   sincroniza también el ARB (`homeTagline`).
-- **Entorno Windows de esta máquina**: Flutter en `C:\dev\flutter` y JDK Temurin 21 en
-  `C:\dev\jdk-21.0.11+10` (ambos en PATH de usuario; JAVA_HOME persistido — lo necesita
-  el emulador de Firestore). Node 26, Firebase CLI y gh (cuenta DaoeZ) globales.
+- **Montar el proyecto en otra máquina**: la guía completa es
+  `docs/SETUP_NUEVO_ORDENADOR.md`, y `scripts/bootstrap-windows.ps1` /
+  `scripts/bootstrap.sh` lo automatizan. Lo único que NO viaja por Git es la
+  keystore de desarrollo y sus contraseñas: sin ellas el proyecto compila y los
+  tests pasan, pero los APK salen con otro certificado y eso rompe Google
+  Sign-In, los App Links y la actualización sobre la app instalada.
+  `scripts/verify-signing-key.ps1` lo comprueba y falla si no coincide.
+  Versiones fijadas en `.fvmrc` (Flutter 3.44.8), `.nvmrc` (Node 22),
+  `.java-version` (JDK 17 — Gradle usa JAVA_HOME, no el `java` del PATH) y
+  `.tool-versions`.
+- **Entorno Windows de esta máquina**: Flutter en `C:\dev\flutter`; JDK Temurin 17
+  en `%JAVA_HOME%` (Program Files\Eclipse Adoptium) y un 21 en el PATH para el
+  emulador de Firestore. Android SDK en `%LOCALAPPDATA%\Android\Sdk`. Node 24,
+  Firebase CLI y gh (cuenta DaoeZ) globales. Keystore de desarrollo en
+  `C:\Users\Edgar\.salda\salda-dev.jks`, FUERA del repo.
   PowerShell 5.1: sin `&&`; primeras ejecuciones de flutter lentas (compila su tool).
-  En otra máquina: clonar, instalar Flutter estable, `dart pub get` en la raíz,
-  `npm install` en apps/guest_web y backend/functions, y listo.
 - **Comandos de verificación por fase** (ejecutarlos TODOS antes de dar una fase por
   cerrada): `dart analyze --fatal-infos` (raíz) · `dart test` en packages/domain y
   packages/ocr_parser · `flutter test` en apps/mobile · `npm run build` en
