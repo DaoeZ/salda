@@ -24,7 +24,7 @@ jobs:
         run: flutter pub get
       - name: Tokens generados al día
         run: |
-          dart run design_tokens:generate
+          dart run design_tokens:generate --check
           git diff --exit-code -- packages/design_tokens/lib apps/guest_web/src/styles
       - name: Análisis estático
         run: dart analyze --fatal-infos
