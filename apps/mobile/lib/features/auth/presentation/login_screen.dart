@@ -10,20 +10,35 @@ import '../../../core/ui/wordmark.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/auth_repository.dart';
 
-String authErrorText(AppLocalizations l10n, AuthFailureCode code) =>
-    switch (code) {
-      AuthFailureCode.invalidCredential => l10n.authErrorInvalidCredential,
-      AuthFailureCode.emailAlreadyInUse => l10n.authErrorEmailInUse,
-      AuthFailureCode.weakPassword => l10n.authErrorWeakPassword,
-      AuthFailureCode.network => l10n.authErrorNetwork,
-      AuthFailureCode.tooManyRequests => l10n.authErrorTooManyRequests,
-      AuthFailureCode.userDisabled => l10n.authErrorUserDisabled,
-      AuthFailureCode.operationNotAllowed => l10n.authErrorOperationNotAllowed,
-      AuthFailureCode.credentialAlreadyInUse =>
-        l10n.authErrorCredentialAlreadyInUse,
-      AuthFailureCode.cancelled => l10n.authErrorCancelled,
-      AuthFailureCode.unknown => l10n.authErrorUnknown,
-    };
+String authErrorText(
+  AppLocalizations l10n,
+  AuthFailureCode code, {
+  AuthFailureStage stage = AuthFailureStage.unknown,
+}) {
+  if (code == AuthFailureCode.invalidCredential &&
+      (stage == AuthFailureStage.firebaseAuthentication ||
+          stage == AuthFailureStage.firebaseLink)) {
+    return l10n.authErrorGoogleInvalidCredential;
+  }
+  return switch (code) {
+    AuthFailureCode.invalidCredential => l10n.authErrorInvalidCredential,
+    AuthFailureCode.emailAlreadyInUse => l10n.authErrorEmailInUse,
+    AuthFailureCode.weakPassword => l10n.authErrorWeakPassword,
+    AuthFailureCode.network => l10n.authErrorNetwork,
+    AuthFailureCode.tooManyRequests => l10n.authErrorTooManyRequests,
+    AuthFailureCode.userDisabled => l10n.authErrorUserDisabled,
+    AuthFailureCode.operationNotAllowed => l10n.authErrorOperationNotAllowed,
+    AuthFailureCode.credentialAlreadyInUse =>
+      l10n.authErrorCredentialAlreadyInUse,
+    AuthFailureCode.accountMismatch => l10n.authErrorAccountMismatch,
+    AuthFailureCode.configuration => l10n.authErrorConfiguration,
+    AuthFailureCode.googleUnavailable => l10n.authErrorGoogleUnavailable,
+    AuthFailureCode.temporary => l10n.authErrorTemporary,
+    // La cancelación es una salida normal del selector y permanece silenciosa.
+    AuthFailureCode.cancelled => '',
+    AuthFailureCode.unknown => l10n.authErrorUnknown,
+  };
+}
 
 String? validateEmail(AppLocalizations l10n, String? value) {
   final email = value?.trim() ?? '';
@@ -90,6 +105,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           () => _error = authErrorText(
             AppLocalizations.of(context),
             failure.code,
+            stage: failure.stage,
           ),
         );
       }
@@ -270,6 +286,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           () => _error = authErrorText(
             AppLocalizations.of(context),
             failure.code,
+            stage: failure.stage,
           ),
         );
       }
@@ -460,7 +477,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           .sendPasswordReset(_email.text.trim());
       if (mounted) setState(() => _sent = true);
     } on AuthFailure catch (failure) {
-      if (mounted) setState(() => _error = authErrorText(l10n, failure.code));
+      if (mounted) {
+        setState(
+          () =>
+              _error = authErrorText(l10n, failure.code, stage: failure.stage),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -564,7 +586,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     } on AuthFailure catch (failure) {
       if (mounted) {
         setState(() {
-          _message = authErrorText(l10n, failure.code);
+          _message = authErrorText(l10n, failure.code, stage: failure.stage);
           _messageIsError = true;
         });
       }
@@ -599,7 +621,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     } on AuthFailure catch (failure) {
       if (mounted) {
         setState(() {
-          _message = authErrorText(l10n, failure.code);
+          _message = authErrorText(l10n, failure.code, stage: failure.stage);
           _messageIsError = true;
         });
       }
@@ -619,7 +641,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     } on AuthFailure catch (failure) {
       if (mounted) {
         setState(() {
-          _message = authErrorText(l10n, failure.code);
+          _message = authErrorText(l10n, failure.code, stage: failure.stage);
           _messageIsError = true;
         });
       }

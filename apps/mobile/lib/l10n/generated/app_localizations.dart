@@ -598,6 +598,12 @@ abstract class AppLocalizations {
   /// **'Email o contraseña incorrectos'**
   String get authErrorInvalidCredential;
 
+  /// No description provided for @authErrorGoogleInvalidCredential.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo validar el acceso con Google. Vuelve a intentarlo.'**
+  String get authErrorGoogleInvalidCredential;
+
   /// No description provided for @authErrorEmailInUse.
   ///
   /// In es, this message translates to:
@@ -613,7 +619,7 @@ abstract class AppLocalizations {
   /// No description provided for @authErrorNetwork.
   ///
   /// In es, this message translates to:
-  /// **'Sin conexión. Inténtalo de nuevo.'**
+  /// **'No se pudo conectar con el servicio. Inténtalo de nuevo.'**
   String get authErrorNetwork;
 
   /// No description provided for @authErrorTooManyRequests.
@@ -639,6 +645,30 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Ese acceso ya pertenece a otra cuenta. Cierra esta sesión y entra con la cuenta existente; no hemos movido tus datos.'**
   String get authErrorCredentialAlreadyInUse;
+
+  /// No description provided for @authErrorAccountMismatch.
+  ///
+  /// In es, this message translates to:
+  /// **'La cuenta de Google seleccionada no coincide. Prueba con la cuenta correcta.'**
+  String get authErrorAccountMismatch;
+
+  /// No description provided for @authErrorConfiguration.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo iniciar sesión. La aplicación necesita una revisión de configuración.'**
+  String get authErrorConfiguration;
+
+  /// No description provided for @authErrorGoogleUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'El acceso con Google no está disponible ahora. Inténtalo de nuevo.'**
+  String get authErrorGoogleUnavailable;
+
+  /// No description provided for @authErrorTemporary.
+  ///
+  /// In es, this message translates to:
+  /// **'El servicio no está disponible ahora. Inténtalo de nuevo.'**
+  String get authErrorTemporary;
 
   /// No description provided for @authErrorCancelled.
   ///

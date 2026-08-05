@@ -277,13 +277,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authErrorInvalidCredential => 'Email o contraseña incorrectos';
 
   @override
+  String get authErrorGoogleInvalidCredential =>
+      'No se pudo validar el acceso con Google. Vuelve a intentarlo.';
+
+  @override
   String get authErrorEmailInUse => 'Ya existe una cuenta con ese email';
 
   @override
   String get authErrorWeakPassword => 'La contraseña es demasiado corta';
 
   @override
-  String get authErrorNetwork => 'Sin conexión. Inténtalo de nuevo.';
+  String get authErrorNetwork =>
+      'No se pudo conectar con el servicio. Inténtalo de nuevo.';
 
   @override
   String get authErrorTooManyRequests =>
@@ -299,6 +304,22 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get authErrorCredentialAlreadyInUse =>
       'Ese acceso ya pertenece a otra cuenta. Cierra esta sesión y entra con la cuenta existente; no hemos movido tus datos.';
+
+  @override
+  String get authErrorAccountMismatch =>
+      'La cuenta de Google seleccionada no coincide. Prueba con la cuenta correcta.';
+
+  @override
+  String get authErrorConfiguration =>
+      'No se pudo iniciar sesión. La aplicación necesita una revisión de configuración.';
+
+  @override
+  String get authErrorGoogleUnavailable =>
+      'El acceso con Google no está disponible ahora. Inténtalo de nuevo.';
+
+  @override
+  String get authErrorTemporary =>
+      'El servicio no está disponible ahora. Inténtalo de nuevo.';
 
   @override
   String get authErrorCancelled => 'Has cancelado el acceso.';

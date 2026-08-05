@@ -114,6 +114,32 @@ void main() {
       expect(repository.currentUser?.isFullAccount, isTrue);
     });
 
+    test(
+      'un fallo al refrescar tras vincular Google conserva su etapa Firebase',
+      () async {
+        const refreshFailure = AuthFailure(
+          AuthFailureCode.temporary,
+          provider: AuthFailureProvider.firebase,
+          stage: AuthFailureStage.tokenRefresh,
+          technicalCode: 'internal-error',
+        );
+        final gateway = _FakeAuthGateway(
+          user: const AppUser(
+            uid: 'guest-stable-uid',
+            isAnonymous: true,
+            emailVerified: false,
+          ),
+        )..reloadFailure = refreshFailure;
+        final repository = DefaultAuthRepository(gateway);
+
+        await expectLater(
+          repository.signInWithGoogle(),
+          throwsA(same(refreshFailure)),
+        );
+        expect(gateway.calls, ['googleLink', 'reload:true']);
+      },
+    );
+
     test('envía recuperación de contraseña', () async {
       final gateway = _FakeAuthGateway();
       final repository = DefaultAuthRepository(gateway);
@@ -207,6 +233,7 @@ class _FakeAuthGateway implements AuthGateway {
   AppUser? user;
   bool verifiedOnReload = false;
   AuthFailure? resetFailure;
+  AuthFailure? reloadFailure;
   final calls = <String>[];
   final _changes = StreamController<AppUser?>.broadcast();
 
@@ -304,6 +331,7 @@ class _FakeAuthGateway implements AuthGateway {
   @override
   Future<AppUser?> reloadUser({required bool refreshToken}) async {
     calls.add('reload:$refreshToken');
+    if (reloadFailure case final failure?) throw failure;
     if (user != null && verifiedOnReload) {
       user = AppUser(
         uid: user!.uid,
