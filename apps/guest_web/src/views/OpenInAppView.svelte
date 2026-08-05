@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { buildAppLinkUrls } from '../lib/app-link';
   import { BRAND } from '../lib/brand.g';
 
   /** `g` = invitación a un grupo · `t` = ticket compartido. */
@@ -9,16 +10,20 @@
   // desde un WebView. Los navegadores dentro de WhatsApp o Instagram no
   // resuelven App Links —nunca ceden el enlace al sistema—, así que sin esto
   // el enlace muere aquí por muy verificado que esté el dominio.
-  const intentUrl =
-    `intent://${location.host}/${kind}/${token}` +
-    '#Intent;scheme=https;package=dev.salda.salda_mobile;' +
-    `S.browser_fallback_url=${encodeURIComponent(location.href + '?web=1')};end`;
+  const currentUrl = new URL(location.href);
+  const appLinkUrls = buildAppLinkUrls(currentUrl);
+  const intentUrl = appLinkUrls?.intentUrl ?? currentUrl.href;
 
   // `?web=1` corta el bucle: si el fallback nos devuelve aquí, ya no se
   // vuelve a intentar abrir la app.
-  const yaIntentado = new URLSearchParams(location.search).has('web');
+  const yaIntentado = appLinkUrls?.hasWebMarker ?? true;
 
-  if (!yaIntentado) {
+  if (
+    appLinkUrls &&
+    appLinkUrls.kind === kind &&
+    appLinkUrls.token === token &&
+    !yaIntentado
+  ) {
     // Reemplaza la entrada del historial para que «atrás» no repita el salto.
     location.replace(intentUrl);
   }
