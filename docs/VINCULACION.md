@@ -29,9 +29,11 @@ se **añade** una identidad: la persona pasa a ser LECTORA de lo suyo.
 spaces/{spaceId}/manualParticipants/{manualId}
   linkedUid: null → uid        ← lo escribe la aprobación
   linkStatus: ausente → processing → active|failed
-              failed → processing (entrada de reintento existente)
+              failed → processing (callable de reintento seguro)
   linkError · linkBlockedSessions                 ← solo fallo terminal
   linkPropagatedSessions · linkPropagatedAt       ← solo active
+  linkClaimId · linkProcessingAt                  ← claim Admin vigente
+  linkRetryCount · linkRetryRequestedAt/By        ← trazabilidad Admin
 
 spaces/{spaceId}/manualLinkRequests/{manualId}_{uid}
   manualId · uid · displayName? · status: pending|accepted|rejected
@@ -66,6 +68,28 @@ editaba un ticket por otro motivo. **Corregido con reproyección explícita.**
   `linkPropagatedAt` solo acompañan a `active`; `linkBlockedSessions` solo al
   fallo legacy `legacy-sessions-without-context`.
 
+### Reintento seguro de la propagación
+
+`retryManualLinkPropagation` es un callable autenticado que recibe únicamente
+`{spaceId, manualId}`. El servidor deriva el propietario y el `linkedUid` del
+documento; autoriza al propietario actual o al UID vinculado exacto. No acepta
+UIDs de autoridad ni tiempos del cliente.
+
+- `failed` adquiere un nuevo claim y reutiliza la misma propagación.
+- `active` es un no-op; un `processing` con lease fresco responde en curso.
+- Un lease Admin caducado puede reclamarse de forma segura. Si falta la
+  metadata de lease, la respuesta es conservadora y no muta nada: no se
+  adivina antigüedad a partir de `updatedAt`.
+- Un manual ya vinculado sin `linkStatus` puede adquirir el claim inicial en
+  carrera transaccional con el trigger. La escritura de processing del
+  callable no vuelve a lanzar el trigger porque el vínculo ya existía.
+- Cada claim tiene ID opaco y lease escrito por servidor; el terminal exige el
+  mismo claim. Así, un worker antiguo no puede publicar después de una
+  recuperación. Hay cooldown breve para acotar reintentos repetidos.
+
+El trigger conserva la ruta de alta inicial; no se crea una colección adicional
+de solicitudes de retry ni un campo de retry escribible por el cliente.
+
 **Por qué reproyectar y no resolver al leer.** Resolver el alias en la
 consulta obligaría al cliente a buscar además por `debtorUid`/`creditorUid`,
 a que Rules autorizasen cada documento con un `get()` por página, y sobre
@@ -91,8 +115,9 @@ Conviene decirlo sin rodeos:
 - `accepted` **no equivale todavía a acceso**. Significa que el anfitrión
   aprobó, no que la reproyección haya terminado.
 - El acceso solo es efectivo en **`active`**.
-- Una propagación puede **fallar** y se reintenta devolviendo el estado a
-  `processing`; el trigger reconoce esa transición además del alta.
+- Una propagación puede **fallar** y se reintenta mediante el callable,
+  devolviendo el estado a `processing`; el trigger solo conserva la ruta de
+  alta y no duplica el worker del callable.
 - El histórico no se reescribe, pero **la materialización de documentos
   derivados sí puede cambiar** (ver más abajo).
 
@@ -117,9 +142,9 @@ Un GUEST **no puede solicitar** la vinculación. Su UID vive en una sesión
 anónima ligada al dispositivo: atarle un historial económico lo condenaría a
 desaparecer con el móvil, y como vincular es irreversible no habría rescate.
 Debe convertir su acceso en cuenta primero — la conversión **conserva el
-UID** (ADR-023), así que no pierde nada. Decisión deliberada frente a
-implementar una recuperación auditada: menos superficie y ningún estado
-irrecuperable.
+UID** (ADR-023), así que no pierde nada. Una vez aprobado el vínculo, el
+callable autoriza al `linkedUid` exacto sin aceptar UIDs aportados por el
+cliente.
 
 ## Seguridad: aprobación del anfitrión
 
@@ -152,9 +177,11 @@ Invariantes que Rules impone:
 - `linkedUid` se puede consultar por `get` únicamente en el manual propio del
   UID vinculado; esa persona no puede listar la colección. Los miembros y el
   anfitrión conservan la lectura social de sus manuales.
-- `linkStatus`, `linkError`, `linkBlockedSessions`, `linkPropagatedSessions` y
-  `linkPropagatedAt` son metadatos de Admin: el cliente no puede escribirlos,
-  aunque un renombrado siga permitido cuando ya existen.
+- `linkStatus`, `linkError`, `linkBlockedSessions`, `linkPropagatedSessions`,
+  `linkPropagatedAt`, `linkProcessingAt`, `linkClaimId`, `linkRetryCount`,
+  `linkRetryRequestedAt` y `linkRetryRequestedBy` son metadatos de Admin: el
+  cliente no puede escribirlos, aunque un renombrado siga permitido cuando ya
+  existen.
 
 ## Migración
 
@@ -213,6 +240,7 @@ del espacio y lo hace inmutable. Sin él, un collection group necesitaría un
 ```
 (nada) --crear--> pending --anfitrión acepta--> accepted   [TERMINAL]
                      |                              `-> linkStatus ausente -> processing -> active | failed
+                     |                                                           `-- callable seguro --> processing
                      |--anfitrión rechaza--------> rejected
                      |--el solicitante retira----> rejected
                                                       |
@@ -238,15 +266,18 @@ del espacio y lo hace inmutable. Sin él, un collection group necesitaría un
 
 - **Quien lo pide**: en el ticket abierto por enlace, tras identificarse como
   un MANUAL, aparece «Soy yo». La tarjeta muestra después el estado
-  (pendiente, rechazada, aprobada/vinculando, activa o fallida). «Identidad
-  vinculada» solo aparece con `manualParticipants.linkStatus == 'active'`.
+  (pendiente, rechazada, aprobada/vinculando, activa o fallida). En `failed`
+  ofrece **Reintentar**; en `processing` ofrece comprobar de forma segura.
+  «Identidad vinculada» solo aparece con
+  `manualParticipants.linkStatus == 'active'`.
   La lectura del manual para esta tarjeta es un `get`/watch del documento
   exacto, nunca una lista.
 - **El anfitrión**: en el detalle del grupo, sobre las invitaciones, ve
   «Solicitudes de identidad» con quién dice ser quién y dos botones,
   **Aceptar** y **Rechazar**. El texto avisa de lo que implica aceptar: esa
   persona pasará a ver sus gastos y su saldo, y no cambia nada de lo ya
-  registrado.
+  registrado. Los manuales vinculados muestran su estado real y permiten
+  reintentar una propagación fallida o comprobar una que quedó procesando.
 
 Fuera de alcance por decisión del sprint: consolidar en una sola fila los
 saldos de alguien que tuviera obligaciones propias *y* heredadas en el mismo

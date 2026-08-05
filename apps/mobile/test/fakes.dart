@@ -12,6 +12,7 @@ import 'package:salda_mobile/features/sessions/data/session_repository.dart';
 import 'package:salda_mobile/features/economy/data/economic_repository.dart';
 import 'package:salda_mobile/features/spaces/data/manual_link_repository.dart';
 import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
+import 'package:salda_mobile/features/spaces/domain/space_models.dart';
 
 class FakeAuthRepository implements AuthRepository {
   FakeAuthRepository({this.user});
@@ -100,6 +101,7 @@ List<Override> loggedInOverrides({
   // que poder sentarse en la otra silla.
   String uid = 'owner',
   String displayName = 'Edgar',
+  ManualLinkFunctionsGateway? manualLinkFunctionsGateway,
 }) {
   final fake = firestore ?? FakeFirebaseFirestore();
   return [
@@ -140,7 +142,11 @@ List<Override> loggedInOverrides({
     // Igual que el economico: sin override apuntaba a la instancia REAL, asi
     // que la bandeja de solicitudes de identidad quedaba sin probar.
     manualLinkRepositoryProvider.overrideWithValue(
-      ManualLinkRepository(firestore: fake, uid: () => uid),
+      ManualLinkRepository(
+        firestore: fake,
+        uid: () => uid,
+        functions: manualLinkFunctionsGateway ?? _NoopManualLinkGateway(),
+      ),
     ),
     // Sin esto el repositorio economico apuntaba a la instancia REAL de
     // Firestore, asi que en pruebas el balance nunca cargaba y las
@@ -154,6 +160,17 @@ List<Override> loggedInOverrides({
       ),
     ),
   ];
+}
+
+class _NoopManualLinkGateway implements ManualLinkFunctionsGateway {
+  @override
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  ) async => const ManualLinkRetryResult(
+    status: ManualLinkPropagationStatus.processing,
+    action: ManualLinkRetryAction.inProgress,
+  );
 }
 
 /// Las Functions no se ejercitan desde un widget test: las escrituras

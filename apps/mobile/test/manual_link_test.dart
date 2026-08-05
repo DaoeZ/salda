@@ -13,7 +13,11 @@ void main() {
   late FakeFirebaseFirestore firestore;
 
   ManualLinkRepository repoFor(String uid) =>
-      ManualLinkRepository(firestore: firestore, uid: () => uid);
+      ManualLinkRepository(
+        firestore: firestore,
+        uid: () => uid,
+        functions: _NoopManualLinkGateway(),
+      );
 
   setUp(() async {
     firestore = FakeFirebaseFirestore();
@@ -234,4 +238,49 @@ void main() {
     expect(manual?.linkStatus, isNull);
     expect(manual?.effectiveLinkStatus, isNull);
   });
+
+  test('retryPropagation delega solo la ruta al gateway de Functions', () async {
+    final gateway = _RecordingManualLinkGateway();
+    final repo = ManualLinkRepository(
+      firestore: firestore,
+      uid: () => 'uid-marta',
+      functions: gateway,
+    );
+
+    final result = await repo.retryPropagation('sp1', 'm1');
+
+    expect(gateway.spaceId, 'sp1');
+    expect(gateway.manualId, 'm1');
+    expect(result.action, ManualLinkRetryAction.claimed);
+    expect(result.status, ManualLinkPropagationStatus.active);
+  });
+}
+
+class _NoopManualLinkGateway implements ManualLinkFunctionsGateway {
+  @override
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  ) async => const ManualLinkRetryResult(
+    status: ManualLinkPropagationStatus.processing,
+    action: ManualLinkRetryAction.inProgress,
+  );
+}
+
+class _RecordingManualLinkGateway implements ManualLinkFunctionsGateway {
+  String? spaceId;
+  String? manualId;
+
+  @override
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  ) async {
+    this.spaceId = spaceId;
+    this.manualId = manualId;
+    return const ManualLinkRetryResult(
+      status: ManualLinkPropagationStatus.active,
+      action: ManualLinkRetryAction.claimed,
+    );
+  }
 }

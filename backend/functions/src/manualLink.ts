@@ -16,25 +16,48 @@
  * dejaría justo el modelo híbrido que hay que evitar.
  *
  * ESTADO EXPLÍCITO. La aprobación publica `accepted + linkedUid`; el trigger
- * reclama con `processing`. Solo pasa a `active` cuando TODAS las
- * sesiones del espacio se han reproyectado. Si algo falla, queda `failed` con
- * el motivo.
+ * o el callable reclaman con `processing`. Solo pasa a `active` cuando TODAS
+ * las sesiones del espacio se han reproyectado. Si algo falla, queda `failed`
+ * con el motivo. Cada worker conserva un claim opaco y el terminal se publica
+ * con compare-and-set para que una recuperación no pueda ser pisada por un
+ * worker antiguo.
  */
 import {
   getFirestore,
   FieldValue,
+  Timestamp,
+  type DocumentReference,
   type DocumentSnapshot,
+  type Transaction,
 } from 'firebase-admin/firestore';
+import { randomUUID } from 'node:crypto';
 import { logger } from 'firebase-functions/v2';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 
 import { recomputeSession } from './recompute.js';
 
 export type LinkStatus = 'processing' | 'active' | 'failed';
 
+const PROCESSING_LEASE_MS = 5 * 60 * 1000;
+const RETRY_COOLDOWN_MS = 30 * 1000;
+const SAFE_DOCUMENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.~-]{0,127}$/;
+
+type ManualLinkRetryAction =
+  | 'claimed'
+  | 'active'
+  | 'in-progress'
+  | 'unclassifiable'
+  | 'cooldown';
+
 type ManualLinkClaim =
   | { kind: 'initial'; linkedUid: string }
   | { kind: 'retry'; linkedUid: string; linkError: string };
+
+type ManualLinkClaimHandle = {
+  linkedUid: string;
+  claimId: string;
+};
 
 const manualLinkRef = (spaceId: string, manualId: string) =>
   getFirestore().doc(`spaces/${spaceId}/manualParticipants/${manualId}`);
@@ -47,7 +70,9 @@ const statusOf = (data: Record<string, unknown> | undefined): LinkStatus =>
 const claimForDocument = (
   data: Record<string, unknown> | undefined,
 ): ManualLinkClaim | null => {
-  if (typeof data?.linkedUid !== 'string') return null;
+  if (typeof data?.linkedUid !== 'string' || data.linkedUid.length === 0) {
+    return null;
+  }
   if (data.linkStatus === undefined) {
     return { kind: 'initial', linkedUid: data.linkedUid };
   }
@@ -72,12 +97,58 @@ const claimForTransition = (
     : null;
 };
 
+const timestampOf = (value: unknown): Timestamp | null =>
+  value && typeof (value as Timestamp).toMillis === 'function'
+    ? value as Timestamp
+    : null;
+
+const validDocumentId = (value: unknown): value is string =>
+  typeof value === 'string'
+  && value !== '.'
+  && value !== '..'
+  && SAFE_DOCUMENT_ID.test(value);
+
+const claimUpdate = (
+  transaction: Transaction,
+  manualRef: DocumentReference,
+  data: Record<string, unknown>,
+  kind: ManualLinkClaim['kind'],
+  requestedBy?: string,
+): ManualLinkClaimHandle => {
+  const linkedUid = data.linkedUid as string;
+  const claimId = randomUUID();
+  const currentRetryCount =
+    typeof data.linkRetryCount === 'number'
+    && Number.isInteger(data.linkRetryCount)
+      ? data.linkRetryCount
+      : 0;
+  transaction.update(manualRef, {
+    linkStatus: 'processing',
+    linkClaimId: claimId,
+    linkProcessingAt: FieldValue.serverTimestamp(),
+    linkError: FieldValue.delete(),
+    linkBlockedSessions: FieldValue.delete(),
+    linkPropagatedSessions: FieldValue.delete(),
+    linkPropagatedAt: FieldValue.delete(),
+    ...(kind === 'retry'
+      ? { linkRetryCount: currentRetryCount + 1 }
+      : {}),
+    ...(requestedBy
+      ? {
+        linkRetryRequestedAt: FieldValue.serverTimestamp(),
+        linkRetryRequestedBy: requestedBy,
+      }
+      : {}),
+  });
+  return { linkedUid, claimId };
+};
+
 /** Reclama una versión concreta: una misma entrega solo puede ganar una vez. */
-export async function claimManualLinkPropagation(
+async function acquireManualLinkPropagation(
   spaceId: string,
   manualId: string,
   expected: ManualLinkClaim,
-): Promise<boolean> {
+): Promise<ManualLinkClaimHandle | null> {
   const db = getFirestore();
   const manualRef = manualLinkRef(spaceId, manualId);
   return db.runTransaction(async (transaction) => {
@@ -91,17 +162,19 @@ export async function claimManualLinkPropagation(
         : data?.linkStatus !== 'processing' ||
           data?.linkError !== expected.linkError)
     ) {
-      return false;
+      return null;
     }
-    transaction.update(manualRef, {
-      linkStatus: 'processing',
-      linkError: FieldValue.delete(),
-      linkBlockedSessions: FieldValue.delete(),
-      linkPropagatedSessions: FieldValue.delete(),
-      linkPropagatedAt: FieldValue.delete(),
-    });
-    return true;
+    if (!data) return null;
+    return claimUpdate(transaction, manualRef, data, expected.kind);
   });
+}
+
+export async function claimManualLinkPropagation(
+  spaceId: string,
+  manualId: string,
+  expected: ManualLinkClaim,
+): Promise<boolean> {
+  return Boolean(await acquireManualLinkPropagation(spaceId, manualId, expected));
 }
 
 /** Publica un terminal solo para la reclamación que sigue en curso. */
@@ -109,6 +182,7 @@ export async function publishManualLinkTerminal(
   spaceId: string,
   manualId: string,
   linkedUid: string,
+  claimId: string,
   status: Extract<LinkStatus, 'active' | 'failed'>,
   fields: Record<string, unknown>,
 ): Promise<boolean> {
@@ -120,11 +194,17 @@ export async function publishManualLinkTerminal(
     if (
       !current.exists ||
       data?.linkedUid !== linkedUid ||
-      data?.linkStatus !== 'processing'
+      data?.linkStatus !== 'processing' ||
+      data?.linkClaimId !== claimId
     ) {
       return false;
     }
-    transaction.update(manualRef, { linkStatus: status, ...fields });
+    transaction.update(manualRef, {
+      ...fields,
+      linkStatus: status,
+      linkClaimId: FieldValue.delete(),
+      linkProcessingAt: FieldValue.delete(),
+    });
     return true;
   });
 }
@@ -143,20 +223,24 @@ export async function propagateManualLink(
   const manualRef = manualLinkRef(spaceId, manualId);
   const after = await manualRef.get();
   const claim = claimForDocument(after.data());
-  if (
-    !after.exists ||
-    !claim ||
-    !await claimManualLinkPropagation(spaceId, manualId, claim)
-  ) {
+  if (!after.exists || !claim) {
     return { sessions: 0, status: statusOf(after.data()) };
   }
-  return propagateClaimedManualLink(spaceId, manualId, claim.linkedUid);
+  const acquired = await acquireManualLinkPropagation(spaceId, manualId, claim);
+  if (!acquired) return { sessions: 0, status: statusOf(after.data()) };
+  return propagateClaimedManualLink(
+    spaceId,
+    manualId,
+    acquired.linkedUid,
+    acquired.claimId,
+  );
 }
 
 async function propagateClaimedManualLink(
   spaceId: string,
   manualId: string,
   linkedUid: string,
+  claimId: string,
 ): Promise<{ sessions: number; status: LinkStatus; reason?: string }> {
   const db = getFirestore();
 
@@ -190,17 +274,25 @@ async function propagateClaimedManualLink(
       if (!session.data()?.spaceId) orphans.push(sid);
     }
     if (orphans.length > 0) {
-      await publishManualLinkTerminal(spaceId, manualId, linkedUid, 'failed', {
-        // Motivo estable y sin datos sensibles: la app lo traduce a un texto
-        // comprensible. El detalle completo vive solo en logs.
-        linkError: 'legacy-sessions-without-context',
-        linkBlockedSessions: orphans.length,
-        linkPropagatedSessions: FieldValue.delete(),
-        linkPropagatedAt: FieldValue.delete(),
-      });
+      const published = await publishManualLinkTerminal(
+        spaceId,
+        manualId,
+        linkedUid,
+        claimId,
+        'failed',
+        {
+          // Motivo estable y sin datos sensibles: la app lo traduce a un texto
+          // comprensible. El detalle completo vive solo en logs.
+          linkError: 'legacy-sessions-without-context',
+          linkBlockedSessions: orphans.length,
+          linkPropagatedSessions: FieldValue.delete(),
+          linkPropagatedAt: FieldValue.delete(),
+        },
+      );
       logger.warn('propagateManualLink: sesiones sin contexto', {
         spaceId, manualId, orphans,
       });
+      if (!published) return currentClaimResult(spaceId, manualId, sessionIds.size);
       return {
         sessions: sessionIds.size,
         status: 'failed',
@@ -214,26 +306,42 @@ async function propagateClaimedManualLink(
     for (const sid of sessionIds) {
       await recomputeSession(sid);
     }
-    await publishManualLinkTerminal(spaceId, manualId, linkedUid, 'active', {
-      linkPropagatedSessions: sessionIds.size,
-      linkPropagatedAt: FieldValue.serverTimestamp(),
-      linkError: FieldValue.delete(),
-      linkBlockedSessions: FieldValue.delete(),
-    });
+    const published = await publishManualLinkTerminal(
+      spaceId,
+      manualId,
+      linkedUid,
+      claimId,
+      'active',
+      {
+        linkPropagatedSessions: sessionIds.size,
+        linkPropagatedAt: FieldValue.serverTimestamp(),
+        linkError: FieldValue.delete(),
+        linkBlockedSessions: FieldValue.delete(),
+      },
+    );
+    if (!published) return currentClaimResult(spaceId, manualId, sessionIds.size);
     return { sessions: sessionIds.size, status: 'active' };
   } catch (error) {
     // No se marca `active`: el sistema no puede afirmar que la vinculación
     // está viva mientras queden sesiones sin reproyectar. `failed` es
     // reintentable: recomputeSession converge y solo escribe si algo cambió.
     logger.error('propagateManualLink falló', { spaceId, manualId, error });
-    await publishManualLinkTerminal(spaceId, manualId, linkedUid, 'failed', {
-      // Código estable, NO el error crudo: un mensaje de Firestore puede
-      // llevar rutas o ids ajenos y este documento lo leen los miembros.
-      linkError: 'propagation-error',
-      linkBlockedSessions: FieldValue.delete(),
-      linkPropagatedSessions: FieldValue.delete(),
-      linkPropagatedAt: FieldValue.delete(),
-    });
+    const published = await publishManualLinkTerminal(
+      spaceId,
+      manualId,
+      linkedUid,
+      claimId,
+      'failed',
+      {
+        // Código estable, NO el error crudo: un mensaje de Firestore puede
+        // llevar rutas o ids ajenos y este documento lo leen los miembros.
+        linkError: 'propagation-error',
+        linkBlockedSessions: FieldValue.delete(),
+        linkPropagatedSessions: FieldValue.delete(),
+        linkPropagatedAt: FieldValue.delete(),
+      },
+    );
+    if (!published) return currentClaimResult(spaceId, manualId, sessionIds.size);
     return {
       sessions: sessionIds.size,
       status: 'failed',
@@ -242,12 +350,161 @@ async function propagateClaimedManualLink(
   }
 }
 
+const currentClaimResult = async (
+  spaceId: string,
+  manualId: string,
+  sessions: number,
+): Promise<{ sessions: number; status: LinkStatus; reason?: string }> => {
+  const current = await manualLinkRef(spaceId, manualId).get();
+  return {
+    sessions,
+    status: statusOf(current.data()),
+    reason: 'claim-lost',
+  };
+};
+
+const parseRetryInput = (data: unknown): { spaceId: string; manualId: string } => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new HttpsError('invalid-argument', 'MANUAL_LINK_DATA_INVALID');
+  }
+  const input = data as Record<string, unknown>;
+  const keys = Object.keys(input).sort();
+  if (
+    keys.length !== 2 ||
+    keys[0] !== 'manualId' ||
+    keys[1] !== 'spaceId' ||
+    !validDocumentId(input.spaceId) ||
+    !validDocumentId(input.manualId)
+  ) {
+    throw new HttpsError('invalid-argument', 'MANUAL_LINK_DATA_INVALID');
+  }
+  return { spaceId: input.spaceId, manualId: input.manualId };
+};
+
+const retryCooldownActive = (data: Record<string, unknown>, now: Timestamp) => {
+  const requestedAt = timestampOf(data.linkRetryRequestedAt);
+  return requestedAt !== null
+    && now.toMillis() - requestedAt.toMillis() < RETRY_COOLDOWN_MS;
+};
+
+const retryResult = (
+  status: LinkStatus,
+  action: ManualLinkRetryAction,
+): { status: LinkStatus; action: ManualLinkRetryAction } => ({ status, action });
+
+/**
+ * Solicita/repara la propagación de un vínculo ya aprobado.
+ *
+ * La Function adquiere directamente la reclamación para que su escritura de
+ * `processing` no dispare una segunda propagación desde el trigger. El trigger
+ * sigue siendo la ruta de alta inicial y conserva su protocolo de carrera.
+ */
+export const retryManualLinkPropagation = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+  }
+  const { spaceId, manualId } = parseRetryInput(request.data);
+  const requesterUid = request.auth.uid;
+  const db = getFirestore();
+  const spaceRef = db.doc(`spaces/${spaceId}`);
+  const manualRef = manualLinkRef(spaceId, manualId);
+  const now = Timestamp.now();
+
+  const decision = await db.runTransaction(async (transaction) => {
+    const [space, manual] = await transaction.getAll(spaceRef, manualRef);
+    if (!space.exists) {
+      throw new HttpsError('not-found', 'MANUAL_LINK_SPACE_NOT_FOUND');
+    }
+    if (!manual.exists) {
+      throw new HttpsError('not-found', 'MANUAL_LINK_NOT_FOUND');
+    }
+    const spaceData = space.data() ?? {};
+    const data = manual.data() ?? {};
+    const linkedUid = data.linkedUid;
+    if (typeof linkedUid !== 'string' || linkedUid.length === 0) {
+      throw new HttpsError('failed-precondition', 'MANUAL_LINK_NOT_LINKED');
+    }
+    if (spaceData.ownerUid !== requesterUid && linkedUid !== requesterUid) {
+      throw new HttpsError('permission-denied', 'MANUAL_LINK_NOT_AUTHORIZED');
+    }
+
+    const status = data.linkStatus as LinkStatus | undefined;
+    if (status === 'active') return retryResult('active', 'active');
+
+    if (status === 'processing') {
+      const processingAt = timestampOf(data.linkProcessingAt);
+      const claimId = data.linkClaimId;
+      if (!processingAt || typeof claimId !== 'string' || claimId.length === 0) {
+        return retryResult('processing', 'unclassifiable');
+      }
+      const age = now.toMillis() - processingAt.toMillis();
+      if (age < PROCESSING_LEASE_MS) {
+        return retryResult('processing', 'in-progress');
+      }
+      if (retryCooldownActive(data, now)) {
+        return retryResult('processing', 'cooldown');
+      }
+      const acquired = claimUpdate(
+        transaction,
+        manualRef,
+        data,
+        'retry',
+        requesterUid,
+      );
+      return { ...retryResult('processing', 'claimed'), claim: acquired };
+    }
+
+    if (status === 'failed') {
+      if (retryCooldownActive(data, now)) {
+        return retryResult('failed', 'cooldown');
+      }
+      const acquired = claimUpdate(
+        transaction,
+        manualRef,
+        data,
+        'retry',
+        requesterUid,
+      );
+      return { ...retryResult('processing', 'claimed'), claim: acquired };
+    }
+
+    if (status === undefined) {
+      const acquired = claimUpdate(
+        transaction,
+        manualRef,
+        data,
+        'initial',
+        requesterUid,
+      );
+      return { ...retryResult('processing', 'claimed'), claim: acquired };
+    }
+
+    throw new HttpsError('failed-precondition', 'MANUAL_LINK_STATUS_INVALID');
+  });
+
+  if (!('claim' in decision) || !decision.claim) return decision;
+  const result = await propagateClaimedManualLink(
+    spaceId,
+    manualId,
+    decision.claim.linkedUid,
+    decision.claim.claimId,
+  );
+  return {
+    status: result.status,
+    action: 'claimed' as const,
+    sessions: result.sessions,
+    ...(result.reason ? { reason: result.reason } : {}),
+  };
+});
+
 /**
  * Dispara la propagación cuando `linkedUid` pasa de ausente a presente.
  *
- * Solo esa transición y el reintento `failed -> processing`: renombrar el
- * manual, o cualquier escritura posterior del propio propagador (linkStatus,
- * marcas de tiempo), no vuelve a entrar.
+ * Solo esa transición y el camino legado `failed -> processing` conservan
+ * entrada para el trigger. La escritura `processing` del callable no lleva
+ * `linkError` y el vínculo ya existía, así que se filtra y no duplica el
+ * worker. Renombrar el manual, o cualquier escritura terminal posterior,
+ * tampoco vuelve a entrar.
  */
 export function shouldPropagateManualLink(
   before: Record<string, unknown> | undefined,
@@ -266,8 +523,14 @@ export async function handleManualLinkWrite(
   const afterData = after?.data();
   const claim = claimForTransition(before, afterData);
   if (!claim) return;
-  if (!await claimManualLinkPropagation(spaceId, manualId, claim)) return;
-  await propagateClaimedManualLink(spaceId, manualId, claim.linkedUid);
+  const acquired = await acquireManualLinkPropagation(spaceId, manualId, claim);
+  if (!acquired) return;
+  await propagateClaimedManualLink(
+    spaceId,
+    manualId,
+    acquired.linkedUid,
+    acquired.claimId,
+  );
 }
 
 export const propagateOnManualLink = onDocumentWritten(

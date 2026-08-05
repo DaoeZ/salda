@@ -31,6 +31,13 @@ test('las escrituras terminales y sus metadatos no realimentan el trigger', () =
   );
   assert.equal(
     shouldPropagateManualLink(
+      { ...linked, linkStatus: 'failed', linkError: 'propagation-error' },
+      { ...linked, linkStatus: 'processing', linkClaimId: 'callable-claim' },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldPropagateManualLink(
       { ...linked, linkStatus: 'processing' },
       { ...linked, linkStatus: 'failed', linkError: 'propagation-error' },
     ),

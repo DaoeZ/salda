@@ -514,7 +514,9 @@ service cloud.firestore {
       return data.keys().hasOnly([
         'manualId', 'displayName', 'linkedUid', 'createdByUid',
           'createdAt', 'updatedAt', 'schemaVersion', 'linkStatus', 'linkError',
-          'linkBlockedSessions', 'linkPropagatedSessions', 'linkPropagatedAt'
+          'linkBlockedSessions', 'linkPropagatedSessions', 'linkPropagatedAt',
+          'linkProcessingAt', 'linkClaimId', 'linkRetryCount',
+          'linkRetryRequestedAt', 'linkRetryRequestedBy'
         ])
         && data.keys().hasAll([
           'manualId', 'displayName', 'createdByUid', 'createdAt',
@@ -547,6 +549,19 @@ service cloud.firestore {
             && data.linkPropagatedSessions >= 0))
         && (!('linkPropagatedAt' in data)
           || data.linkPropagatedAt is timestamp)
+        && (!('linkProcessingAt' in data)
+          || data.linkProcessingAt is timestamp)
+        && (!('linkClaimId' in data)
+          || (data.linkClaimId is string && data.linkClaimId.size() > 0
+            && data.linkClaimId.size() <= 128))
+        && (!('linkRetryCount' in data)
+          || (data.linkRetryCount is int && data.linkRetryCount >= 0))
+        && (!('linkRetryRequestedAt' in data)
+          || data.linkRetryRequestedAt is timestamp)
+        && (!('linkRetryRequestedBy' in data)
+          || (data.linkRetryRequestedBy is string
+            && data.linkRetryRequestedBy.size() > 0
+            && data.linkRetryRequestedBy.size() <= 128))
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
     }

@@ -311,16 +311,29 @@ class _ManualLinkRequestCardState
             ? l10n.manualLinkFailedLegacy
             : l10n.manualLinkFailed;
         return Card(
-          child: ListTile(
-            leading: const Icon(Icons.error_outline),
+          child: ActionBanner(
+            icon: Icons.error_outline,
             title: Text(message),
+            actions: [
+              FilledButton(
+                onPressed: _busy ? null : _retryPropagation,
+                child: Text(l10n.commonRetry),
+              ),
+            ],
           ),
         );
       }
       return Card(
-        child: ListTile(
-          leading: const Icon(Icons.hourglass_empty),
+        child: ActionBanner(
+          icon: Icons.hourglass_empty,
           title: Text(l10n.manualLinkProcessing),
+          actions: [
+            if (manual?.linkedUid != null)
+              OutlinedButton(
+                onPressed: _busy ? null : _retryPropagation,
+                child: Text(l10n.commonRetry),
+              ),
+          ],
         ),
       );
     }
@@ -383,6 +396,37 @@ class _ManualLinkRequestCardState
       messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkAskSent)));
     } on Object {
       messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _retryPropagation() async {
+    if (_busy) return;
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      final result = await ref
+          .read(manualLinkRepositoryProvider)
+          .retryPropagation(widget.spaceId, widget.manualId);
+      final message = switch (result.action) {
+        ManualLinkRetryAction.claimed => switch (result.status) {
+          ManualLinkPropagationStatus.active => l10n.manualLinkRetrySuccess,
+          ManualLinkPropagationStatus.failed => l10n.manualLinkFailed,
+          ManualLinkPropagationStatus.processing =>
+            l10n.manualLinkRetryStarted,
+        },
+        ManualLinkRetryAction.active => l10n.manualLinkLinked,
+        ManualLinkRetryAction.inProgress => l10n.manualLinkRetryInProgress,
+        ManualLinkRetryAction.cooldown => l10n.manualLinkRetryCooldown,
+        ManualLinkRetryAction.unclassifiable => l10n.manualLinkRetryCheck,
+      };
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(message)));
+    } on Object {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

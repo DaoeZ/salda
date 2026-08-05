@@ -8,13 +8,14 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 import {
   claimManualLinkPropagation,
   handleManualLinkWrite,
   propagateManualLink,
   publishManualLinkTerminal,
+  retryManualLinkPropagation,
 } from '../../manualLink.js';
 import { recomputeSession } from '../../recompute.js';
 import {
@@ -27,6 +28,26 @@ import {
 
 const OWNER = 'uid-anfitrion';
 const MARTA = 'uid-marta';
+
+const callRetry = (data: unknown, uid?: string) =>
+  retryManualLinkPropagation.run({
+    data,
+    auth: uid
+      ? { uid, token: { uid } as never, rawToken: 'test-token' }
+      : undefined,
+    rawRequest: {} as never,
+    acceptsStreaming: false,
+  });
+
+async function expectCallableCode(
+  call: Promise<unknown>,
+  code: string,
+): Promise<void> {
+  await assert.rejects(call, (error: unknown) => {
+    assert.equal((error as { code?: string }).code, code);
+    return true;
+  });
+}
 
 describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () => {
   before(() => {
@@ -78,6 +99,21 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     });
     // Identidad registrada del anfitrión, para que resuelva a UID.
     await f.doc(`profiles/${OWNER}`).set({ displayName: 'Edgar' });
+  }
+
+  async function seedRetryManual(
+    fields: Record<string, unknown> = {},
+  ): Promise<void> {
+    const f = db();
+    await f.doc('spaces/sp1').set({
+      name: 'Piso', ownerUid: OWNER, status: 'active',
+      kind: 'group', schemaVersion: 2,
+    });
+    await f.doc('spaces/sp1/manualParticipants/m1').set({
+      manualId: 'm1', displayName: 'Marta', linkedUid: MARTA,
+      createdByUid: OWNER, schemaVersion: 1, updatedAt: Timestamp.now(),
+      ...fields,
+    });
   }
 
   const entriesOf = async (): Promise<
@@ -182,6 +218,8 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     }), true);
     const claimed = await ref.get();
     assert.equal(claimed.data()?.linkStatus, 'processing');
+    assert.equal(typeof claimed.data()?.linkClaimId, 'string');
+    assert.ok(claimed.data()?.linkProcessingAt);
     assert.equal(claimed.data()?.linkError, undefined);
     assert.equal(claimed.data()?.linkBlockedSessions, undefined);
   });
@@ -214,11 +252,13 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
       kind: 'initial', linkedUid: MARTA,
     });
     const processing = await ref.get();
+    const claimId = processing.data()?.linkClaimId;
 
     await handleManualLinkWrite(
       'sp1', 'm1', initial.data(), processing,
     );
     assert.equal((await ref.get()).data()?.linkStatus, 'processing');
+    assert.equal((await ref.get()).data()?.linkClaimId, claimId);
   });
 
   it('un terminal tardío no sobrescribe otro terminal', async () => {
@@ -230,24 +270,338 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
       kind: 'initial',
       linkedUid: MARTA,
     });
+    const firstClaimId = (await ref.get()).data()?.linkClaimId as string;
     assert.equal(await publishManualLinkTerminal(
-      'sp1', 'm1', MARTA, 'active', { linkPropagatedSessions: 1 },
+      'sp1', 'm1', MARTA, firstClaimId, 'active',
+      { linkPropagatedSessions: 1 },
     ), true);
     assert.equal(await publishManualLinkTerminal(
-      'sp1', 'm1', MARTA, 'failed', { linkError: 'propagation-error' },
+      'sp1', 'm1', MARTA, firstClaimId, 'failed',
+      { linkError: 'propagation-error' },
     ), false);
     assert.equal((await ref.get()).data()?.linkStatus, 'active');
 
-    await ref.update({ linkStatus: 'processing' });
+    await ref.update({
+      linkStatus: 'processing',
+      linkClaimId: 'claim-2',
+      linkProcessingAt: FieldValue.serverTimestamp(),
+    });
     after = await ref.get();
     assert.equal(after.data()?.linkStatus, 'processing');
     assert.equal(await publishManualLinkTerminal(
-      'sp1', 'm1', MARTA, 'failed', { linkError: 'propagation-error' },
+      'sp1', 'm1', MARTA, 'claim-2', 'failed',
+      { linkError: 'propagation-error' },
     ), true);
     assert.equal(await publishManualLinkTerminal(
-      'sp1', 'm1', MARTA, 'active', { linkPropagatedSessions: 1 },
+      'sp1', 'm1', MARTA, 'claim-2', 'active',
+      { linkPropagatedSessions: 1 },
     ), false);
     assert.equal((await ref.get()).data()?.linkStatus, 'failed');
+  });
+
+  describe('reintento callable', () => {
+    it('autoriza al propietario y al linkedUid exacto, y deja traza',
+        async () => {
+      await seedRetryManual({
+        linkStatus: 'failed',
+        linkError: 'propagation-error',
+        linkRetryCount: 2,
+      });
+      const ownerResult = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, OWNER,
+      ) as { status: string; action: string };
+      assert.deepEqual(ownerResult, {
+        status: 'active', action: 'claimed', sessions: 0,
+      });
+      let data = (await db().doc('spaces/sp1/manualParticipants/m1').get())
+        .data()!;
+      assert.equal(data.linkedUid, MARTA);
+      assert.equal(data.linkRetryCount, 3);
+      assert.equal(data.linkRetryRequestedBy, OWNER);
+      assert.ok(data.linkRetryRequestedAt);
+      assert.equal(data.linkClaimId, undefined);
+      assert.equal(data.linkProcessingAt, undefined);
+
+      await seedRetryManual({
+        linkStatus: 'failed', linkError: 'propagation-error',
+      });
+      const linkedResult = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, MARTA,
+      ) as { status: string; action: string };
+      assert.equal(linkedResult.status, 'active');
+      data = (await db().doc('spaces/sp1/manualParticipants/m1').get())
+        .data()!;
+      assert.equal(data.linkRetryRequestedBy, MARTA);
+      assert.equal(data.linkedUid, MARTA);
+    });
+
+    it('rechaza llamadas no autenticadas, ajenas, con UID forjado o datos extra',
+        async () => {
+      await seedRetryManual({
+        linkStatus: 'failed', linkError: 'propagation-error',
+      });
+      await expectCallableCode(
+        callRetry({ spaceId: 'sp1', manualId: 'm1' }),
+        'unauthenticated',
+      );
+      await expectCallableCode(
+        callRetry({ spaceId: 'sp1', manualId: 'm1' }, 'uid-tercero'),
+        'permission-denied',
+      );
+      await expectCallableCode(
+        callRetry({
+          spaceId: 'sp1', manualId: 'm1', linkedUid: OWNER,
+        }, OWNER),
+        'invalid-argument',
+      );
+      await expectCallableCode(
+        callRetry({ spaceId: 'sp/1', manualId: 'm1' }, OWNER),
+        'invalid-argument',
+      );
+    });
+
+    it('rechaza espacio/manual inexistente y manual sin vínculo', async () => {
+      await seedRetryManual();
+      await expectCallableCode(
+        callRetry({ spaceId: 'sp1', manualId: 'missing' }, OWNER),
+        'not-found',
+      );
+      await expectCallableCode(
+        callRetry({ spaceId: 'missing', manualId: 'm1' }, OWNER),
+        'not-found',
+      );
+      await db().doc('spaces/sp1/manualParticipants/m1').update({
+        linkedUid: null,
+      });
+      await expectCallableCode(
+        callRetry({ spaceId: 'sp1', manualId: 'm1' }, OWNER),
+        'failed-precondition',
+      );
+    });
+
+    it('active es no-op y processing fresco responde en curso', async () => {
+      const requestedAt = Timestamp.now();
+      await seedRetryManual({
+        linkStatus: 'active', linkPropagatedSessions: 2,
+        linkRetryCount: 4, linkRetryRequestedAt: requestedAt,
+        linkRetryRequestedBy: OWNER,
+      });
+      const activeBefore = (await db().doc(
+        'spaces/sp1/manualParticipants/m1',
+      ).get()).data()!;
+      const activeResult = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, OWNER,
+      ) as { status: string; action: string };
+      assert.deepEqual(activeResult, { status: 'active', action: 'active' });
+      assert.deepEqual(
+        (await db().doc('spaces/sp1/manualParticipants/m1').get()).data(),
+        activeBefore,
+      );
+
+      await seedRetryManual({
+        linkStatus: 'processing', linkClaimId: 'fresh-claim',
+        linkProcessingAt: Timestamp.now(), linkRetryCount: 1,
+      });
+      const processingResult = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, MARTA,
+      ) as { status: string; action: string };
+      assert.deepEqual(processingResult, {
+        status: 'processing', action: 'in-progress',
+      });
+      const processing = (await db().doc(
+        'spaces/sp1/manualParticipants/m1',
+      ).get()).data()!;
+      assert.equal(processing.linkClaimId, 'fresh-claim');
+      assert.equal(processing.linkRetryCount, 1);
+    });
+
+    it('reclama lease servidor caducado y conserva el linkedUid', async () => {
+      await seedRetryManual({
+        linkStatus: 'processing', linkClaimId: 'expired-claim',
+        linkProcessingAt: Timestamp.fromMillis(Date.now() - 10 * 60 * 1000),
+      });
+      const result = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, MARTA,
+      ) as { status: string; action: string };
+      assert.deepEqual(result, {
+        status: 'active', action: 'claimed', sessions: 0,
+      });
+      const data = (await db().doc('spaces/sp1/manualParticipants/m1').get())
+        .data()!;
+      assert.equal(data.linkedUid, MARTA);
+      assert.equal(data.linkRetryCount, 1);
+      assert.equal(data.linkRetryRequestedBy, MARTA);
+    });
+
+    it('processing sin lease no se recupera ni muta el documento', async () => {
+      await seedRetryManual({
+        linkStatus: 'processing', linkError: 'legacy-marker',
+      });
+      const before = (await db().doc(
+        'spaces/sp1/manualParticipants/m1',
+      ).get()).data()!;
+      const result = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, OWNER,
+      ) as { status: string; action: string };
+      assert.deepEqual(result, {
+        status: 'processing', action: 'unclassifiable',
+      });
+      assert.deepEqual(
+        (await db().doc('spaces/sp1/manualParticipants/m1').get()).data(),
+        before,
+      );
+    });
+
+    it('aplica cooldown después de un fallo real y no reclama otra vez',
+        async () => {
+      await seedRetryManual({
+        linkStatus: 'failed', linkError: 'propagation-error',
+      });
+      await db().doc('sessions/s1/participants/p1').set({
+        manualId: 'm1', active: true,
+      });
+      await db().doc('sessions/s1').set({
+        ownerUid: OWNER, kind: 'single', status: 'open',
+        // Sin spaceId: fuerza el fallo legacy sin tocar economía.
+      });
+      const first = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, OWNER,
+      ) as { status: string; action: string };
+      assert.deepEqual(first, {
+        status: 'failed', action: 'claimed', sessions: 1,
+        reason: 'legacy-sessions-without-context',
+      });
+      const second = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, OWNER,
+      ) as { status: string; action: string };
+      assert.deepEqual(second, { status: 'failed', action: 'cooldown' });
+      assert.equal(
+        (await db().doc('spaces/sp1/manualParticipants/m1').get())
+          .data()?.linkRetryCount,
+        1,
+      );
+    });
+
+    it('sin status adquiere el claim inicial y hace una sola propagación',
+        async () => {
+      await seedRetryManual();
+      const result = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, MARTA,
+      ) as { status: string; action: string };
+      assert.deepEqual(result, {
+        status: 'active', action: 'claimed', sessions: 0,
+      });
+      const data = (await db().doc('spaces/sp1/manualParticipants/m1').get())
+        .data()!;
+      assert.equal(data.linkedUid, MARTA);
+      assert.equal(data.linkRetryRequestedBy, MARTA);
+      assert.equal(data.linkRetryCount, undefined);
+      assert.equal(data.linkClaimId, undefined);
+    });
+
+    it('llamadas repetidas y concurrentes convergen en un claim', async () => {
+      await seedRetryManual({
+        linkStatus: 'failed', linkError: 'propagation-error',
+      });
+      const repeated = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, OWNER,
+      ) as { action: string };
+      const again = await callRetry(
+        { spaceId: 'sp1', manualId: 'm1' }, OWNER,
+      ) as { action: string };
+      assert.equal(repeated.action, 'claimed');
+      assert.equal(again.action, 'active');
+      assert.equal(
+        (await db().doc('spaces/sp1/manualParticipants/m1').get())
+          .data()?.linkRetryCount,
+        1,
+      );
+
+      await seedRetryManual({
+        linkStatus: 'failed', linkError: 'propagation-error',
+      });
+      const concurrent = await Promise.all([
+        callRetry({ spaceId: 'sp1', manualId: 'm1' }, OWNER),
+        callRetry({ spaceId: 'sp1', manualId: 'm1' }, MARTA),
+      ]) as Array<{ action: string }>;
+      const actions = concurrent.map((entry) => entry.action);
+      assert.equal(actions.filter((action) => action === 'claimed').length, 1);
+      assert.ok(actions.some((action) =>
+        action === 'active' || action === 'in-progress'));
+      assert.equal(
+        (await db().doc('spaces/sp1/manualParticipants/m1').get())
+          .data()?.linkRetryCount,
+        1,
+      );
+    });
+
+    it('mantiene actores/importes y el segundo intento es idempotente',
+        async () => {
+      await seedSessionWithManual('s1');
+      await recomputeSession('s1');
+      const before = (await entriesOf()).map((entry) => ({
+        id: entry.id,
+        amount: entry.data.amount,
+        debtorUid: entry.data.debtorUid,
+        creditorUid: entry.data.creditorUid,
+      }));
+      await db().doc('spaces/sp1/manualParticipants/m1').update({
+        linkedUid: MARTA,
+        linkStatus: 'failed',
+        linkError: 'propagation-error',
+      });
+      await callRetry({ spaceId: 'sp1', manualId: 'm1' }, OWNER);
+      const after = (await entriesOf()).map((entry) => ({
+        id: entry.id,
+        amount: entry.data.amount,
+        debtorUid: entry.data.debtorUid,
+        creditorUid: entry.data.creditorUid,
+      }));
+      assert.deepEqual(after, before);
+      assert.equal(
+        (await db().doc('spaces/sp1/manualParticipants/m1').get())
+          .data()?.linkedUid,
+        MARTA,
+      );
+      await callRetry({ spaceId: 'sp1', manualId: 'm1' }, OWNER);
+      assert.deepEqual(
+        (await entriesOf()).map((entry) => ({
+          id: entry.id,
+          amount: entry.data.amount,
+          debtorUid: entry.data.debtorUid,
+          creditorUid: entry.data.creditorUid,
+        })),
+        after,
+      );
+    });
+
+    it('un terminal antiguo no puede publicar tras un claim nuevo', async () => {
+      await seedRetryManual();
+      const ref = db().doc('spaces/sp1/manualParticipants/m1');
+      assert.equal(await claimManualLinkPropagation('sp1', 'm1', {
+        kind: 'initial', linkedUid: MARTA,
+      }), true);
+      const oldClaim = (await ref.get()).data()?.linkClaimId as string;
+      await ref.update({
+        linkStatus: 'failed', linkError: 'propagation-error',
+      });
+      await ref.update({ linkStatus: 'processing' });
+      assert.equal(await claimManualLinkPropagation('sp1', 'm1', {
+        kind: 'retry', linkedUid: MARTA, linkError: 'propagation-error',
+      }), true);
+      const newClaim = (await ref.get()).data()?.linkClaimId as string;
+      assert.notEqual(newClaim, oldClaim);
+      assert.equal(await publishManualLinkTerminal(
+        'sp1', 'm1', MARTA, oldClaim, 'active',
+        { linkPropagatedSessions: 99 },
+      ), false);
+      assert.equal(await publishManualLinkTerminal(
+        'sp1', 'm1', MARTA, newClaim, 'active',
+        { linkPropagatedSessions: 0 },
+      ), true);
+      assert.equal((await ref.get()).data()?.linkStatus, 'active');
+      assert.equal((await ref.get()).data()?.linkPropagatedSessions, 0);
+    });
   });
 
   it('propaga TODAS las sesiones del espacio, no solo una', async () => {

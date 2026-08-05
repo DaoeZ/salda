@@ -2911,6 +2911,11 @@ describe('vinculación de identidad', () => {
       { linkBlockedSessions: 1 },
       { linkPropagatedSessions: 1 },
       { linkPropagatedAt: serverTimestamp() },
+      { linkProcessingAt: serverTimestamp() },
+      { linkClaimId: 'client-claim' },
+      { linkRetryCount: 1 },
+      { linkRetryRequestedAt: serverTimestamp() },
+      { linkRetryRequestedBy: SOCIAL_OUTSIDER },
     ]) {
       await assertFails(updateDoc(
         doc(f, 'spaces/sp1/manualParticipants/m1'),
@@ -2934,6 +2939,9 @@ describe('vinculación de identidad', () => {
         createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(), linkStatus: 'active',
         linkPropagatedSessions: 2, linkPropagatedAt: serverTimestamp(),
+        linkProcessingAt: serverTimestamp(), linkClaimId: 'admin-claim',
+        linkRetryCount: 2, linkRetryRequestedAt: serverTimestamp(),
+        linkRetryRequestedBy: FOURTH,
         schemaVersion: 1,
       });
     });

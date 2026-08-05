@@ -537,7 +537,7 @@ class _MemberTile extends ConsumerWidget {
 /// Personas sin cuenta del contexto (ADR-033). Solo hace falta su nombre:
 /// participan en gastos y balances como cualquier miembro registrado, pero
 /// no reciben invitación ni acceso porque no tienen dispositivo.
-class _ManualParticipants extends ConsumerWidget {
+class _ManualParticipants extends ConsumerStatefulWidget {
   const _ManualParticipants({
     required this.spaceId,
     required this.canAdd,
@@ -551,7 +551,20 @@ class _ManualParticipants extends ConsumerWidget {
   final bool canRename;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ManualParticipants> createState() =>
+      _ManualParticipantsState();
+}
+
+class _ManualParticipantsState extends ConsumerState<_ManualParticipants> {
+  final Set<String> _retrying = <String>{};
+
+  String get spaceId => widget.spaceId;
+  bool get canAdd => widget.canAdd;
+  bool get canRemove => widget.canRemove;
+  bool get canRename => widget.canRename;
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final manuals =
@@ -610,13 +623,25 @@ class _ManualParticipants extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text(l10n.manualParticipantHint),
-                    trailing: canRename || canRemove
+                    subtitle: Text(_manualSubtitle(manual, l10n)),
+                    trailing: canRename || canRemove || _canRetry(manual)
                         ? PopupMenuButton<String>(
-                            onSelected: (action) => action == 'rename'
-                                ? _editName(context, ref, manual: manual)
-                                : _confirmRemove(context, ref, manual),
+                            onSelected: (action) => switch (action) {
+                              'rename' => _editName(
+                                context,
+                                ref,
+                                manual: manual,
+                              ),
+                              'retry' => _retryPropagation(context, manual),
+                              _ => _confirmRemove(context, ref, manual),
+                            },
                             itemBuilder: (_) => [
+                              if (_canRetry(manual))
+                                PopupMenuItem(
+                                  value: 'retry',
+                                  enabled: !_retrying.contains(manual.id),
+                                  child: Text(l10n.commonRetry),
+                                ),
                               if (canRename)
                                 PopupMenuItem(
                                   value: 'rename',
@@ -639,6 +664,26 @@ class _ManualParticipants extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  bool _canRetry(ManualParticipant manual) {
+    final status = manual.effectiveLinkStatus;
+    return canRename &&
+        manual.linkedUid != null &&
+        (status == ManualLinkPropagationStatus.failed ||
+            status == ManualLinkPropagationStatus.processing);
+  }
+
+  String _manualSubtitle(ManualParticipant manual, AppLocalizations l10n) {
+    return switch (manual.effectiveLinkStatus) {
+      ManualLinkPropagationStatus.active => l10n.manualLinkLinked,
+      ManualLinkPropagationStatus.processing => l10n.manualLinkProcessing,
+      ManualLinkPropagationStatus.failed => manual.linkError ==
+              'legacy-sessions-without-context'
+          ? l10n.manualLinkFailedLegacy
+          : l10n.manualLinkFailed,
+      null => l10n.manualParticipantHint,
+    };
   }
 
   Future<void> _editName(
@@ -724,6 +769,41 @@ class _ManualParticipants extends ConsumerWidget {
       await repo.removeManualParticipant(spaceId, manual.id);
     } on Object {
       messenger.showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+    }
+  }
+
+  Future<void> _retryPropagation(
+    BuildContext context,
+    ManualParticipant manual,
+  ) async {
+    if (!_retrying.add(manual.id)) return;
+    setState(() {});
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(manualLinkRepositoryProvider)
+          .retryPropagation(spaceId, manual.id);
+      final message = switch (result.action) {
+        ManualLinkRetryAction.claimed => switch (result.status) {
+          ManualLinkPropagationStatus.active => l10n.manualLinkRetrySuccess,
+          ManualLinkPropagationStatus.failed => l10n.manualLinkFailed,
+          ManualLinkPropagationStatus.processing =>
+            l10n.manualLinkRetryStarted,
+        },
+        ManualLinkRetryAction.active => l10n.manualLinkLinked,
+        ManualLinkRetryAction.inProgress => l10n.manualLinkRetryInProgress,
+        ManualLinkRetryAction.cooldown => l10n.manualLinkRetryCooldown,
+        ManualLinkRetryAction.unclassifiable => l10n.manualLinkRetryCheck,
+      };
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(message)));
+    } on Object {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+      }
+    } finally {
+      _retrying.remove(manual.id);
+      if (mounted) setState(() {});
     }
   }
 }

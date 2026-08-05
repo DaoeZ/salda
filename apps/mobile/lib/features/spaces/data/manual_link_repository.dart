@@ -1,8 +1,78 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/data/auth_repository.dart';
 import '../domain/space_models.dart';
+
+enum ManualLinkRetryAction {
+  claimed,
+  active,
+  inProgress,
+  unclassifiable,
+  cooldown,
+}
+
+class ManualLinkRetryResult {
+  const ManualLinkRetryResult({
+    required this.status,
+    required this.action,
+    this.sessions,
+    this.reason,
+  });
+
+  final ManualLinkPropagationStatus status;
+  final ManualLinkRetryAction action;
+  final int? sessions;
+  final String? reason;
+
+  factory ManualLinkRetryResult.fromData(Map<String, dynamic> data) {
+    return ManualLinkRetryResult(
+      status: switch (data['status']) {
+        'active' => ManualLinkPropagationStatus.active,
+        'failed' => ManualLinkPropagationStatus.failed,
+        _ => ManualLinkPropagationStatus.processing,
+      },
+      action: switch (data['action']) {
+        'claimed' => ManualLinkRetryAction.claimed,
+        'active' => ManualLinkRetryAction.active,
+        'in-progress' => ManualLinkRetryAction.inProgress,
+        'cooldown' => ManualLinkRetryAction.cooldown,
+        _ => ManualLinkRetryAction.unclassifiable,
+      },
+      sessions: data['sessions'] as int?,
+      reason: data['reason'] as String?,
+    );
+  }
+}
+
+abstract interface class ManualLinkFunctionsGateway {
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  );
+}
+
+class FirebaseManualLinkFunctionsGateway
+    implements ManualLinkFunctionsGateway {
+  FirebaseManualLinkFunctionsGateway(this.functions);
+
+  final FirebaseFunctions functions;
+
+  @override
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  ) async {
+    final response = await functions
+        .httpsCallable('retryManualLinkPropagation')
+        .call<Map<String, dynamic>>({
+          'spaceId': spaceId,
+          'manualId': manualId,
+        });
+    return ManualLinkRetryResult.fromData(response.data);
+  }
+}
 
 /// Vinculación de identidad (Sprint 6, ADR-037).
 ///
@@ -14,10 +84,15 @@ import '../domain/space_models.dart';
 /// sigue siendo `manual:{manualId}` y el `participantId` no cambia: vincular
 /// AÑADE identidad, nunca reescribe historia.
 class ManualLinkRepository {
-  ManualLinkRepository({required this.firestore, required this.uid});
+  ManualLinkRepository({
+    required this.firestore,
+    required this.uid,
+    required this.functions,
+  });
 
   final FirebaseFirestore firestore;
   final String Function() uid;
+  final ManualLinkFunctionsGateway functions;
 
   CollectionReference<Map<String, dynamic>> _requests(String spaceId) =>
       firestore.collection('spaces/$spaceId/manualLinkRequests');
@@ -122,6 +197,13 @@ class ManualLinkRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+  /// Solicita la propagación autoritativa del vínculo ya aprobado. La Function
+  /// deriva el propietario y el UID vinculado: el cliente solo aporta la ruta.
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  ) => functions.retryPropagation(spaceId, manualId);
+
   ManualLinkRequest _fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const {};
     return ManualLinkRequest(
@@ -145,8 +227,16 @@ final manualLinkRepositoryProvider = Provider<ManualLinkRepository>((ref) {
   return ManualLinkRepository(
     firestore: FirebaseFirestore.instance,
     uid: () => userId,
+    functions: ref.watch(manualLinkFunctionsGatewayProvider),
   );
 });
+
+final manualLinkFunctionsGatewayProvider =
+    Provider<ManualLinkFunctionsGateway>(
+      (ref) => FirebaseManualLinkFunctionsGateway(
+        FirebaseFunctions.instanceFor(region: 'europe-west1'),
+      ),
+    );
 
 /// Solicitudes pendientes de un espacio (bandeja del anfitrión).
 final pendingManualLinksProvider = StreamProvider.autoDispose

@@ -2014,6 +2014,24 @@ class AppLocalizationsEs extends AppLocalizations {
       'Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.';
 
   @override
+  String get manualLinkRetryStarted =>
+      'Reintento iniciado. La vinculación se actualizará en breve.';
+
+  @override
+  String get manualLinkRetrySuccess => 'Vinculación completada.';
+
+  @override
+  String get manualLinkRetryInProgress => 'La vinculación ya está en curso.';
+
+  @override
+  String get manualLinkRetryCooldown =>
+      'Ya se ha solicitado un reintento. Comprueba el estado en unos segundos.';
+
+  @override
+  String get manualLinkRetryCheck =>
+      'La vinculación está en un estado antiguo. Comprueba el estado más tarde.';
+
+  @override
   String get ticketLinkPreparing => 'Preparando el enlace…';
 
   @override

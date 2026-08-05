@@ -5,11 +5,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/core/theme/app_theme.dart';
 import 'package:salda_mobile/features/sessions/data/ticket_links_repository.dart';
+import 'package:salda_mobile/features/spaces/data/manual_link_repository.dart';
 import 'package:salda_mobile/features/sessions/presentation/linked_ticket_screen.dart';
 import 'package:salda_mobile/features/spaces/presentation/space_detail_screen.dart';
+import 'package:salda_mobile/features/spaces/domain/space_models.dart';
 import 'package:salda_mobile/l10n/generated/app_localizations.dart';
 
 import 'fakes.dart';
+
+class _RetryGateway implements ManualLinkFunctionsGateway {
+  _RetryGateway({this.failure});
+
+  final Object? failure;
+  var calls = 0;
+
+  @override
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  ) async {
+    calls++;
+    if (failure != null) throw failure!;
+    return const ManualLinkRetryResult(
+      status: ManualLinkPropagationStatus.active,
+      action: ManualLinkRetryAction.claimed,
+    );
+  }
+}
 
 void main() {
   const uid = 'uid-marta';
@@ -87,8 +109,9 @@ void main() {
 
   Future<void> pumpTicket(
     WidgetTester tester,
-    FakeFirebaseFirestore firestore,
-  ) async {
+    FakeFirebaseFirestore firestore, {
+    ManualLinkFunctionsGateway? gateway,
+  }) async {
     tester.view.physicalSize = const Size(600, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -99,7 +122,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...loggedInOverrides(firestore: firestore, uid: uid),
+          ...loggedInOverrides(
+            firestore: firestore,
+            uid: uid,
+            manualLinkFunctionsGateway: gateway,
+          ),
           ticketLinksRepositoryProvider.overrideWithValue(links),
         ],
         child: MaterialApp(
@@ -137,7 +164,7 @@ void main() {
       (tester) async {
     final firestore = await seedTicket();
     await pumpTicket(tester, firestore);
-    expect(find.textContaining('Vinculando'), findsOneWidget);
+    expect(find.textContaining('Vinculando'), findsWidgets);
     expect(find.text('Identidad vinculada'), findsNothing);
     await close(tester);
   });
@@ -173,6 +200,40 @@ void main() {
     await pumpTicket(tester, firestore);
     expect(find.textContaining('gastos antiguos sin contexto'), findsOneWidget);
     expect(find.text('Identidad vinculada'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('el claimant puede reintentar y recibe feedback de éxito',
+      (tester) async {
+    final firestore = await seedTicket(
+      linkStatus: 'failed',
+      linkError: 'propagation-error',
+    );
+    final gateway = _RetryGateway();
+    await pumpTicket(tester, firestore, gateway: gateway);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(gateway.calls, 1);
+    expect(find.text('Vinculación completada.'), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('el claimant recibe feedback localizado si falla el reintento',
+      (tester) async {
+    final firestore = await seedTicket(
+      linkStatus: 'failed',
+      linkError: 'propagation-error',
+    );
+    final gateway = _RetryGateway(failure: StateError('network'));
+    await pumpTicket(tester, firestore, gateway: gateway);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(gateway.calls, 1);
+    expect(find.text('No hemos podido completar la operación'), findsOneWidget);
     await close(tester);
   });
 
@@ -224,8 +285,71 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Aceptar'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Vinculando'), findsOneWidget);
+    expect(find.textContaining('Vinculando'), findsWidgets);
     expect(find.text('Identidad vinculada'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('el anfitrión ve el fallo real y el retry enfocado',
+      (tester) async {
+    final firestore = FakeFirebaseFirestore();
+    await firestore.doc('spaces/sp1').set({
+      'name': 'Piso',
+      'ownerUid': 'owner',
+      'kind': 'group',
+      'status': 'active',
+      'schemaVersion': 2,
+    });
+    await firestore.doc('spaces/sp1/members/owner').set({'uid': 'owner'});
+    await firestore.doc('spaces/sp1/manualParticipants/m1').set({
+      'manualId': 'm1',
+      'displayName': 'Marta',
+      'linkedUid': uid,
+      'createdByUid': 'owner',
+      'createdAt': Timestamp.now(),
+      'updatedAt': Timestamp.now(),
+      'linkStatus': 'failed',
+      'linkError': 'propagation-error',
+      'schemaVersion': 1,
+    });
+    final gateway = _RetryGateway();
+    tester.view.physicalSize = const Size(600, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: loggedInOverrides(
+          firestore: firestore,
+          uid: 'owner',
+          manualLinkFunctionsGateway: gateway,
+        ),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SpaceDetailScreen(spaceId: 'sp1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No hemos podido completar la vinculación'),
+        findsOneWidget);
+    final manualTile = find.ancestor(
+      of: find.text('Marta'),
+      matching: find.byType(ListTile),
+    );
+    await tester.tap(
+      find.descendant(
+        of: manualTile,
+        matching: find.byType(PopupMenuButton<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Reintentar'), findsOneWidget);
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+    expect(gateway.calls, 1);
+    expect(find.text('Vinculación completada.'), findsOneWidget);
     await close(tester);
   });
 }

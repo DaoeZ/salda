@@ -3586,6 +3586,36 @@ abstract class AppLocalizations {
   /// **'Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.'**
   String get manualLinkFailedLegacy;
 
+  /// No description provided for @manualLinkRetryStarted.
+  ///
+  /// In es, this message translates to:
+  /// **'Reintento iniciado. La vinculación se actualizará en breve.'**
+  String get manualLinkRetryStarted;
+
+  /// No description provided for @manualLinkRetrySuccess.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculación completada.'**
+  String get manualLinkRetrySuccess;
+
+  /// No description provided for @manualLinkRetryInProgress.
+  ///
+  /// In es, this message translates to:
+  /// **'La vinculación ya está en curso.'**
+  String get manualLinkRetryInProgress;
+
+  /// No description provided for @manualLinkRetryCooldown.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya se ha solicitado un reintento. Comprueba el estado en unos segundos.'**
+  String get manualLinkRetryCooldown;
+
+  /// No description provided for @manualLinkRetryCheck.
+  ///
+  /// In es, this message translates to:
+  /// **'La vinculación está en un estado antiguo. Comprueba el estado más tarde.'**
+  String get manualLinkRetryCheck;
+
   /// No description provided for @ticketLinkPreparing.
   ///
   /// In es, this message translates to:

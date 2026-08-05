@@ -1593,10 +1593,17 @@ en el detalle del grupo, con aceptar y rechazar. Contrato en
 todas las sesiones afectadas —localizadas por `collectionGroup('participants')
 .where('manualId')`, no por `session.spaceId`, que omitía casos—. Una sesión
 afectada sin contexto estable deja el vínculo en `failed` con motivo, nunca
-`active` a medias; reintentar es volver a `processing`. Un GUEST no puede
-solicitar: debe convertirse en cuenta antes (su UID anónimo muere con el
-dispositivo y vincular es irreversible). La bandeja global del anfitrión se
-apoya en `spaceOwnerUid` denormalizado y validado por Rules.
+`active` a medias. `retryManualLinkPropagation` recibe solo `spaceId` y
+`manualId`, autoriza al propietario actual o al `linkedUid` exacto y reintenta
+con claims/leases y timestamps escritos por Admin. `active` es no-op, un lease
+fresco sigue en curso, un lease expirado se puede recuperar y un `processing`
+sin metadata de lease no se adivina como obsoleto. El `linkedUid` exacto puede
+reintentar sin aportar ningún UID al callable; la solicitud original sigue
+exigiendo una cuenta completa, como ya imponía ADR-037. La bandeja global del
+anfitrión se apoya en `spaceOwnerUid` denormalizado y validado por Rules.
+La traza mínima es `linkRetryCount`, `linkRetryRequestedAt`,
+`linkRetryRequestedBy`, `linkProcessingAt` y `linkClaimId`; ningún cliente puede
+escribir esos campos.
 **Revisión:** decidir si la actividad (P6) debe registrar la vinculación como
 un hecho más de la cronología.
 
