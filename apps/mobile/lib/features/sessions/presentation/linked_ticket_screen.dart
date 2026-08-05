@@ -9,8 +9,10 @@ import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../spaces/data/manual_link_repository.dart';
-import '../../spaces/data/spaces_repository.dart' show spaceProvider;
-import '../../spaces/domain/space_models.dart' show ManualLinkStatus;
+import '../../spaces/data/spaces_repository.dart'
+    show spaceManualParticipantProvider, spaceProvider;
+import '../../spaces/domain/space_models.dart'
+    show ManualLinkPropagationStatus, ManualLinkStatus;
 import '../data/ticket_links_repository.dart';
 import '../domain/ticket_link_models.dart';
 
@@ -56,7 +58,7 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
         });
         return;
       }
-      final firestore = FirebaseFirestore.instance;
+      final firestore = repo.firestore;
       final access = await repo.myAccess(link.sessionId, link.ticketId);
       final ticket = await firestore.doc(link.ticketPath).get();
       final lines = await firestore
@@ -281,12 +283,44 @@ class _ManualLinkRequestCardState
           )),
         )
         .value;
+    final manual = mine?.status == ManualLinkStatus.accepted
+        ? ref
+            .watch(
+              spaceManualParticipantProvider((
+                spaceId: widget.spaceId,
+                manualId: widget.manualId,
+              )),
+            )
+            .value
+        : null;
 
     if (mine?.status == ManualLinkStatus.accepted) {
+      if (manual?.effectiveLinkStatus ==
+          ManualLinkPropagationStatus.active) {
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.verified_user_outlined),
+            title: Text(l10n.manualLinkLinked),
+          ),
+        );
+      }
+      if (manual?.effectiveLinkStatus ==
+          ManualLinkPropagationStatus.failed) {
+        final message = manual?.linkError ==
+                'legacy-sessions-without-context'
+            ? l10n.manualLinkFailedLegacy
+            : l10n.manualLinkFailed;
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.error_outline),
+            title: Text(message),
+          ),
+        );
+      }
       return Card(
         child: ListTile(
-          leading: const Icon(Icons.verified_user_outlined),
-          title: Text(l10n.manualLinkLinked),
+          leading: const Icon(Icons.hourglass_empty),
+          title: Text(l10n.manualLinkProcessing),
         ),
       );
     }
@@ -295,6 +329,14 @@ class _ManualLinkRequestCardState
         child: ListTile(
           leading: const Icon(Icons.hourglass_empty),
           title: Text(l10n.manualLinkPending),
+        ),
+      );
+    }
+    if (mine?.status == ManualLinkStatus.rejected) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.cancel_outlined),
+          title: Text(l10n.manualLinkRejected),
         ),
       );
     }

@@ -1969,7 +1969,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get manualLinkReject => 'Rechazar';
 
   @override
-  String get manualLinkAccepted => 'Identidad vinculada';
+  String get manualLinkAccepted => 'Solicitud aceptada; vinculando…';
 
   @override
   String get manualLinkRejected => 'Solicitud rechazada';
@@ -2004,6 +2004,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get manualLinkProcessing =>
       'Vinculando… tendrás acceso en unos segundos';
+
+  @override
+  String get manualLinkFailed =>
+      'No hemos podido completar la vinculación. Avisa al anfitrión.';
 
   @override
   String get manualLinkFailedLegacy =>

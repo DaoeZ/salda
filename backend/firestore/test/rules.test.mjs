@@ -2880,6 +2880,68 @@ describe('vinculación de identidad', () => {
       { displayName: 'Marta G.', updatedAt: serverTimestamp() }));
   });
 
+  it('el UID vinculado solo obtiene su manual por get, nunca por list',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/m2'), {
+        manualId: 'm2', displayName: 'Luis', linkedUid: FOURTH,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), linkStatus: 'processing',
+        schemaVersion: 1,
+      });
+    });
+
+    await assertSucceeds(getDoc(
+      doc(db(FOURTH), 'spaces/sp1/manualParticipants/m2')));
+    await assertFails(getDoc(
+      doc(db(THIRD), 'spaces/sp1/manualParticipants/m2')));
+    await assertFails(getDocs(
+      collection(db(FOURTH), 'spaces/sp1/manualParticipants')));
+    // Los miembros y el anfitrión conservan la lectura social existente.
+    await assertSucceeds(getDocs(
+      collection(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants')));
+  });
+
+  it('el cliente no puede escribir metadatos de propagación', async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    for (const change of [
+      { linkStatus: 'processing' },
+      { linkError: 'propagation-error' },
+      { linkBlockedSessions: 1 },
+      { linkPropagatedSessions: 1 },
+      { linkPropagatedAt: serverTimestamp() },
+    ]) {
+      await assertFails(updateDoc(
+        doc(f, 'spaces/sp1/manualParticipants/m1'),
+        { ...change, updatedAt: serverTimestamp() }));
+    }
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/client-status'),
+      {
+        manualId: 'client-status', displayName: 'Lucía', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), linkStatus: 'processing',
+        schemaVersion: 1,
+      }));
+  });
+
+  it('renombrar acepta un documento con metadatos publicados por Admin',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spaces/sp1/manualParticipants/m1'), {
+        manualId: 'm1', displayName: 'Lucía', linkedUid: FOURTH,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), linkStatus: 'active',
+        linkPropagatedSessions: 2, linkPropagatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+    });
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { displayName: 'Lucía G.', updatedAt: serverTimestamp() }));
+  });
+
   it('las solicitudes NO son enumerables salvo por el anfitrión', async () => {
     await assertFails(getDocs(
       collection(db(STRANGER), 'spaces/sp1/manualLinkRequests')));

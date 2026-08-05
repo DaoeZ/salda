@@ -508,12 +508,13 @@ service cloud.firestore {
         || spaceId.matches('^relationship_.*~' + request.auth.uid + '$');
     }
 
-    // Participante manual (ADR-033): identidad opaca y estable, nombre
-    // editable y `linkedUid` reservado a null hasta la fase de vinculación.
+    // Participante manual (ADR-033/037): identidad opaca y estable, nombre
+    // editable y alias `linkedUid` aprobado por el anfitrión.
     function validManualParticipant(data, manualId) {
       return data.keys().hasOnly([
-          'manualId', 'displayName', 'linkedUid', 'createdByUid',
-          'createdAt', 'updatedAt', 'schemaVersion'
+        'manualId', 'displayName', 'linkedUid', 'createdByUid',
+          'createdAt', 'updatedAt', 'schemaVersion', 'linkStatus', 'linkError',
+          'linkBlockedSessions', 'linkPropagatedSessions', 'linkPropagatedAt'
         ])
         && data.keys().hasAll([
           'manualId', 'displayName', 'createdByUid', 'createdAt',
@@ -530,6 +531,22 @@ service cloud.firestore {
         // anfitrión (ver la regla de update). Aquí solo se valida la forma.
         && (data.get('linkedUid', null) == null
           || (data.linkedUid is string && data.linkedUid.size() > 0))
+        // Estos metadatos los publica Admin al propagar. Se aceptan en la
+        // forma documental para que un propietario pueda renombrar un manual
+        // ya procesado, pero las mutaciones de cliente de abajo no permiten
+        // alterar ninguno.
+        && (!('linkStatus' in data)
+          || data.linkStatus in ['processing', 'active', 'failed'])
+        && (!('linkError' in data)
+          || data.linkError in [
+            'legacy-sessions-without-context', 'propagation-error'])
+        && (!('linkBlockedSessions' in data)
+          || (data.linkBlockedSessions is int && data.linkBlockedSessions >= 0))
+        && (!('linkPropagatedSessions' in data)
+          || (data.linkPropagatedSessions is int
+            && data.linkPropagatedSessions >= 0))
+        && (!('linkPropagatedAt' in data)
+          || data.linkPropagatedAt is timestamp)
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
     }
@@ -822,14 +839,20 @@ service cloud.firestore {
       // Participantes MANUALES (ADR-033): personas sin cuenta que el
       // anfitrión escribe a mano. No tienen UID ni dispositivo: nunca leen
       // ni confirman nada, su identidad la custodia el espacio y su actor
-      // económico es `manual:{manualId}`. `linkedUid` queda reservado (y
-      // fijado a null) para la futura vinculación con una cuenta, que
-      // deberá conservar el historial reescribiendo solo la referencia.
+      // económico es `manual:{manualId}`. `linkedUid` solo lo publica la
+      // aprobación del anfitrión; la propagación posterior añade metadatos
+      // terminales que Admin mantiene fuera de las mutaciones del cliente.
       match /manualParticipants/{manualId} {
         // Los ve cualquier miembro: son participantes del contexto común.
         // Un INVITADO también, porque comparte reparto con ellos; crearlos
         // y editarlos sigue siendo exclusivo del propietario.
-        allow read: if canParticipate() && isSpaceMember(spaceId);
+        // Los miembros conservan el acceso social completo. Quien acaba de
+        // vincularse y aún no es miembro solo puede leer SU manual por get;
+        // nunca puede enumerar los manuales del espacio.
+        allow get: if canParticipate()
+          && (isSpaceMember(spaceId)
+            || resource.data.get('linkedUid', null) == request.auth.uid);
+        allow list: if canParticipate() && isSpaceMember(spaceId);
 
         // En un GRUPO, cualquier numero de manuales. En una RELACION, solo
         // el que ocupa su segunda plaza: uno mas seria un tercer actor
@@ -845,6 +868,9 @@ service cloud.firestore {
           )
           && futureSpaceData(spaceId).status == 'active'
           && validManualParticipant(request.resource.data, manualId)
+          && request.resource.data.keys().hasOnly([
+            'manualId', 'displayName', 'linkedUid', 'createdByUid',
+            'createdAt', 'updatedAt', 'schemaVersion'])
           // Nadie NACE vinculado: la vinculación solo llega por una
           // solicitud que el anfitrión aprueba (ADR-037).
           && request.resource.data.get('linkedUid', null) == null

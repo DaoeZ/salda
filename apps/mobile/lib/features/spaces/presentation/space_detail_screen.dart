@@ -1040,7 +1040,7 @@ class _PendingManualLinks extends ConsumerWidget {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            accept ? l10n.manualLinkAccepted : l10n.manualLinkRejected,
+            accept ? l10n.manualLinkProcessing : l10n.manualLinkRejected,
           ),
         ),
       );

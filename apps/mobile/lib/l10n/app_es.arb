@@ -673,7 +673,7 @@
   "manualLinkRequestHelp": "Si lo aceptas, esa persona pasará a ver sus gastos y su saldo. No cambia nada de lo ya registrado.",
   "manualLinkAccept": "Aceptar",
   "manualLinkReject": "Rechazar",
-  "manualLinkAccepted": "Identidad vinculada",
+  "manualLinkAccepted": "Solicitud aceptada; vinculando…",
   "manualLinkRejected": "Solicitud rechazada",
   "manualLinkError": "No hemos podido completar la operación",
   "manualLinkAsk": "Soy yo",
@@ -685,6 +685,7 @@
     "placeholders": { "count": { "type": "int" } }
   },
   "manualLinkProcessing": "Vinculando… tendrás acceso en unos segundos",
+  "manualLinkFailed": "No hemos podido completar la vinculación. Avisa al anfitrión.",
   "manualLinkFailedLegacy": "Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.",
   "ticketLinkPreparing": "Preparando el enlace…",
   "ticketLinkNotReady": "El ticket todavía se está procesando. Inténtalo de nuevo en unos segundos.",

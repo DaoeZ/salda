@@ -1,6 +1,7 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/features/spaces/data/manual_link_repository.dart';
+import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
 import 'package:salda_mobile/features/spaces/domain/space_models.dart';
 
 /// Vinculación de identidad (Sprint 6, ADR-037) — contrato del repositorio.
@@ -77,6 +78,8 @@ void main() {
               .data()!;
       // Lo ÚNICO que cambia: se añade la identidad.
       expect(manual['linkedUid'], 'uid-marta');
+      expect(manual['linkStatus'], isNull,
+          reason: 'accepted no equivale a active');
       // El identificador manual —el actor económico— no se toca.
       expect(manual['manualId'], 'm1');
       expect(manual['displayName'], 'Marta');
@@ -192,5 +195,43 @@ void main() {
     // Es lo que permite la bandeja global sin un get() por documento. Rules
     // lo valida contra el propietario real, asi que no es una afirmacion.
     expect(raw['spaceOwnerUid'], 'owner');
+  });
+
+  test('el manual expone el estado real y el fallback conservador', () async {
+    final spaces = SpacesRepository(
+      firestore: firestore,
+      uid: () => 'uid-marta',
+      isFullAccount: () => true,
+    );
+
+    await firestore.doc('spaces/sp1/manualParticipants/m1').update({
+      'linkedUid': 'uid-marta',
+    });
+    var manual = await spaces.watchManualParticipant('sp1', 'm1').first;
+    expect(manual?.effectiveLinkStatus,
+        ManualLinkPropagationStatus.processing);
+
+    for (final (raw, expected) in [
+      ('processing', ManualLinkPropagationStatus.processing),
+      ('active', ManualLinkPropagationStatus.active),
+      ('failed', ManualLinkPropagationStatus.failed),
+    ]) {
+      await firestore.doc('spaces/sp1/manualParticipants/m1').update({
+        'linkStatus': raw,
+      });
+      manual = await spaces.watchManualParticipant('sp1', 'm1').first;
+      expect(manual?.effectiveLinkStatus, expected);
+    }
+  });
+
+  test('un manual antiguo sin metadatos no se considera vinculado', () async {
+    final spaces = SpacesRepository(
+      firestore: firestore,
+      uid: () => 'uid-marta',
+      isFullAccount: () => true,
+    );
+    final manual = await spaces.watchManualParticipant('sp1', 'm1').first;
+    expect(manual?.linkStatus, isNull);
+    expect(manual?.effectiveLinkStatus, isNull);
   });
 }

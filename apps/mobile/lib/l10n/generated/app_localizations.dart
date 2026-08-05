@@ -3523,7 +3523,7 @@ abstract class AppLocalizations {
   /// No description provided for @manualLinkAccepted.
   ///
   /// In es, this message translates to:
-  /// **'Identidad vinculada'**
+  /// **'Solicitud aceptada; vinculando…'**
   String get manualLinkAccepted;
 
   /// No description provided for @manualLinkRejected.
@@ -3573,6 +3573,12 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Vinculando… tendrás acceso en unos segundos'**
   String get manualLinkProcessing;
+
+  /// No description provided for @manualLinkFailed.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido completar la vinculación. Avisa al anfitrión.'**
+  String get manualLinkFailed;
 
   /// No description provided for @manualLinkFailedLegacy.
   ///

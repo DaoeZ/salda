@@ -10,7 +10,12 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 
 import { FieldValue } from 'firebase-admin/firestore';
 
-import { propagateManualLink } from '../../manualLink.js';
+import {
+  claimManualLinkPropagation,
+  handleManualLinkWrite,
+  propagateManualLink,
+  publishManualLinkTerminal,
+} from '../../manualLink.js';
 import { recomputeSession } from '../../recompute.js';
 import {
   clearFirestore,
@@ -82,7 +87,7 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     return snap.docs.map((d) => ({ id: d.id, data: d.data() }));
   };
 
-  it('el UID vinculado accede a su histórico SIN editar ningún ticket',
+  it('la aprobación seguida de un rename tardío aún da acceso al histórico',
       async () => {
     await seedSessionWithManual('s1');
     await recomputeSession('s1');
@@ -97,6 +102,7 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
 
     // ── Aprobación: exactamente lo que escribe la app, en un batch.
     const f = db();
+    const beforeApproval = await f.doc('spaces/sp1/manualParticipants/m1').get();
     const batch = f.batch();
     batch.set(f.doc('spaces/sp1/manualLinkRequests/m1_' + MARTA), {
       manualId: 'm1', uid: MARTA, displayName: 'Marta',
@@ -106,9 +112,23 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
       uid: MARTA, manualId: 'm1', schemaVersion: 1,
     });
     batch.update(f.doc('spaces/sp1/manualParticipants/m1'), {
-      linkedUid: MARTA, linkStatus: 'processing',
+      linkedUid: MARTA,
     });
     await batch.commit();
+
+    const acceptedRequest = await f
+      .doc('spaces/sp1/manualLinkRequests/m1_' + MARTA)
+      .get();
+    const approvedManual = await f
+      .doc('spaces/sp1/manualParticipants/m1')
+      .get();
+    assert.equal(acceptedRequest.data()?.status, 'accepted');
+    assert.equal(approvedManual.data()?.linkedUid, MARTA);
+    assert.equal(approvedManual.data()?.linkStatus, undefined,
+      'accepted + linkedUid no publica processing');
+    await f.doc('spaces/sp1/manualParticipants/m1').update({
+      displayName: 'Marta G.',
+    });
 
     // ── C1 EN VIVO: con el vínculo ya escrito, y sin propagar, el acceso
     // NO existe. Esto es exactamente lo que ocurría antes de la corrección.
@@ -119,9 +139,12 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     );
 
     // ── Mecanismo real.
-    const result = await propagateManualLink('sp1', 'm1');
-    assert.equal(result.status, 'active');
-    assert.equal(result.sessions, 1);
+    await handleManualLinkWrite(
+      'sp1',
+      'm1',
+      beforeApproval.data(),
+      approvedManual,
+    );
 
     // ── Efecto: Marta ya es lectora, sin haber tocado ningún ticket.
     const despues = await entriesOf();
@@ -141,6 +164,92 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     assert.equal(manual.data()?.linkStatus, 'active');
   });
 
+  it('la reclamación inicial escribe processing sin sembrarlo a mano',
+      async () => {
+    await seedSessionWithManual('s1');
+    const ref = db().doc('spaces/sp1/manualParticipants/m1');
+    await ref.update({
+      linkedUid: MARTA,
+      linkError: 'stale-error',
+      linkBlockedSessions: 1,
+    });
+    const linked = await ref.get();
+    assert.equal(linked.data()?.linkStatus, undefined);
+
+    assert.equal(await claimManualLinkPropagation('sp1', 'm1', {
+      kind: 'initial',
+      linkedUid: MARTA,
+    }), true);
+    const claimed = await ref.get();
+    assert.equal(claimed.data()?.linkStatus, 'processing');
+    assert.equal(claimed.data()?.linkError, undefined);
+    assert.equal(claimed.data()?.linkBlockedSessions, undefined);
+  });
+
+  it('dos entregas de la misma versión solo reclaman una propagación',
+      async () => {
+    await seedSessionWithManual('s1');
+    const ref = db().doc('spaces/sp1/manualParticipants/m1');
+    await ref.update({ linkedUid: MARTA });
+    const results = await Promise.all([
+      claimManualLinkPropagation('sp1', 'm1', {
+        kind: 'initial',
+        linkedUid: MARTA,
+      }),
+      claimManualLinkPropagation('sp1', 'm1', {
+        kind: 'initial',
+        linkedUid: MARTA,
+      }),
+    ]);
+    assert.deepEqual(results.sort(), [false, true]);
+    assert.equal((await ref.get()).data()?.linkStatus, 'processing');
+  });
+
+  it('la escritura processing no vuelve a entrar', async () => {
+    await seedSessionWithManual('s1');
+    const ref = db().doc('spaces/sp1/manualParticipants/m1');
+    await ref.update({ linkedUid: MARTA });
+    const initial = await ref.get();
+    await claimManualLinkPropagation('sp1', 'm1', {
+      kind: 'initial', linkedUid: MARTA,
+    });
+    const processing = await ref.get();
+
+    await handleManualLinkWrite(
+      'sp1', 'm1', initial.data(), processing,
+    );
+    assert.equal((await ref.get()).data()?.linkStatus, 'processing');
+  });
+
+  it('un terminal tardío no sobrescribe otro terminal', async () => {
+    await seedSessionWithManual('s1');
+    const ref = db().doc('spaces/sp1/manualParticipants/m1');
+    await ref.update({ linkedUid: MARTA });
+    let after = await ref.get();
+    await claimManualLinkPropagation('sp1', 'm1', {
+      kind: 'initial',
+      linkedUid: MARTA,
+    });
+    assert.equal(await publishManualLinkTerminal(
+      'sp1', 'm1', MARTA, 'active', { linkPropagatedSessions: 1 },
+    ), true);
+    assert.equal(await publishManualLinkTerminal(
+      'sp1', 'm1', MARTA, 'failed', { linkError: 'propagation-error' },
+    ), false);
+    assert.equal((await ref.get()).data()?.linkStatus, 'active');
+
+    await ref.update({ linkStatus: 'processing' });
+    after = await ref.get();
+    assert.equal(after.data()?.linkStatus, 'processing');
+    assert.equal(await publishManualLinkTerminal(
+      'sp1', 'm1', MARTA, 'failed', { linkError: 'propagation-error' },
+    ), true);
+    assert.equal(await publishManualLinkTerminal(
+      'sp1', 'm1', MARTA, 'active', { linkPropagatedSessions: 1 },
+    ), false);
+    assert.equal((await ref.get()).data()?.linkStatus, 'failed');
+  });
+
   it('propaga TODAS las sesiones del espacio, no solo una', async () => {
     await seedSessionWithManual('s1');
     await seedSessionWithManual('s2');
@@ -148,7 +257,7 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     await recomputeSession('s2');
 
     await db().doc('spaces/sp1/manualParticipants/m1').update({
-      linkedUid: MARTA, linkStatus: 'processing',
+      linkedUid: MARTA,
     });
     const result = await propagateManualLink('sp1', 'm1');
     assert.equal(result.sessions, 2);
@@ -165,7 +274,7 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     await seedSessionWithManual('s1');
     await recomputeSession('s1');
     await db().doc('spaces/sp1/manualParticipants/m1').update({
-      linkedUid: MARTA, linkStatus: 'processing',
+      linkedUid: MARTA,
     });
 
     await propagateManualLink('sp1', 'm1');
@@ -190,7 +299,7 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     await recomputeSession('s1');
 
     await db().doc('spaces/sp1/manualParticipants/m1').update({
-      linkedUid: MARTA, linkStatus: 'processing',
+      linkedUid: MARTA,
     });
     const result = await propagateManualLink('sp1', 'm1');
 
@@ -210,7 +319,7 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     await seedSessionWithManual('s1');
     await recomputeSession('s1');
     await db().doc('spaces/sp1/manualParticipants/m1').update({
-      linkedUid: MARTA, linkStatus: 'processing',
+      linkedUid: MARTA,
     });
     const result = await propagateManualLink('sp1', 'm1');
     assert.equal(result.sessions, 1, 'la sesión se localiza por participante');
@@ -218,20 +327,27 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
   });
 
   // ── Auditoría C1: fallo, reintento y sesiones borradas ────────────
-  it('C1: desde `failed` se puede reintentar y llegar a `active`', async () => {
+  it('C1: retry seguido de rename tardío llega a `active`', async () => {
     await seedSessionWithManual('s1');
     await seedSessionWithManual('legacy');
     await db().doc('sessions/legacy').update({ spaceId: FieldValue.delete() });
     await recomputeSession('s1');
     await db().doc('spaces/sp1/manualParticipants/m1').update({
-      linkedUid: MARTA, linkStatus: 'processing',
+      linkedUid: MARTA,
     });
     assert.equal((await propagateManualLink('sp1', 'm1')).status, 'failed');
 
     // Resuelto el bloqueo, el reintento converge.
     await db().doc('sessions/legacy/participants/p2').delete();
-    const retry = await propagateManualLink('sp1', 'm1');
-    assert.equal(retry.status, 'active');
+    const failed = await db().doc('spaces/sp1/manualParticipants/m1').get();
+    await db().doc('spaces/sp1/manualParticipants/m1').update({
+      linkStatus: 'processing',
+    });
+    const retry = await db().doc('spaces/sp1/manualParticipants/m1').get();
+    await db().doc('spaces/sp1/manualParticipants/m1').update({
+      displayName: 'Marta G.',
+    });
+    await handleManualLinkWrite('sp1', 'm1', failed.data(), retry);
     const manual = await db().doc('spaces/sp1/manualParticipants/m1').get();
     assert.equal(manual.data()?.linkStatus, 'active');
     assert.equal(manual.data()?.linkError, undefined,
@@ -247,7 +363,7 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     await db().doc('sessions/s2').delete();
 
     await db().doc('spaces/sp1/manualParticipants/m1').update({
-      linkedUid: MARTA, linkStatus: 'processing',
+      linkedUid: MARTA,
     });
     const result = await propagateManualLink('sp1', 'm1');
     assert.equal(result.status, 'active');

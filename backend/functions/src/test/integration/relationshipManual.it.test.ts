@@ -122,7 +122,7 @@ describe('relacion ACCOUNT + MANUAL (BUG-2)', { skip: !emulatorAvailable() }, ()
       uid: PABLO_UID, manualId: MANUAL, schemaVersion: 1,
     });
     batch.update(f.doc(`spaces/${REL}/manualParticipants/${MANUAL}`), {
-      linkedUid: PABLO_UID, linkStatus: 'processing',
+      linkedUid: PABLO_UID,
     });
     await batch.commit();
 
@@ -159,7 +159,7 @@ describe('relacion ACCOUNT + MANUAL (BUG-2)', { skip: !emulatorAvailable() }, ()
       grandTotal: 3500,
     });
     await db().doc(`spaces/${REL}/manualParticipants/${MANUAL}`).update({
-      linkedUid: PABLO_UID, linkStatus: 'processing',
+      linkedUid: PABLO_UID,
     });
     await recomputeSession('s1');
 

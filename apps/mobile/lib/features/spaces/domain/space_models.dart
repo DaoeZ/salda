@@ -126,12 +126,20 @@ enum SpaceMemberKind { account, guest }
 ///
 /// El identificador es opaco y estable, NUNCA el nombre: renombrar no toca
 /// el historial y una futura vinculación con una cuenta real solo tendrá
-/// que reescribir la referencia del actor (`linkedUid`, hoy siempre null).
+/// que conservar la referencia del actor (`linkedUid`) y observar la
+/// propagación por separado (`linkStatus`).
+enum ManualLinkPropagationStatus { processing, active, failed }
+
 class ManualParticipant {
   const ManualParticipant({
     required this.id,
     required this.displayName,
     this.linkedUid,
+    this.linkStatus,
+    this.linkError,
+    this.linkBlockedSessions,
+    this.linkPropagatedSessions,
+    this.linkPropagatedAt,
     this.createdByUid = '',
     this.createdAt,
   });
@@ -139,10 +147,20 @@ class ManualParticipant {
   final String id;
   final String displayName;
 
-  /// Reservado para la fase de vinculación; hoy siempre null.
+  /// Alias aprobado; por sí solo no demuestra que la propagación haya
+  /// terminado.
   final String? linkedUid;
+  final ManualLinkPropagationStatus? linkStatus;
+  final String? linkError;
+  final int? linkBlockedSessions;
+  final int? linkPropagatedSessions;
+  final DateTime? linkPropagatedAt;
   final String createdByUid;
   final DateTime? createdAt;
+
+  ManualLinkPropagationStatus? get effectiveLinkStatus =>
+      linkStatus ??
+      (linkedUid == null ? null : ManualLinkPropagationStatus.processing);
 
   /// Identidad económica canónica de este participante.
   String get actor => manualActor(id);

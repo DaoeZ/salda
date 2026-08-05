@@ -184,7 +184,24 @@ class SpacesRepository {
           .collection('manualParticipants')
           .orderBy('createdAt')
           .snapshots()
-          .map((snap) => [for (final d in snap.docs) _manualFrom(d)]);
+          .map(
+            (snap) => snap.docs
+                .map(_manualFrom)
+                .whereType<ManualParticipant>()
+                .toList(),
+          );
+
+  /// Estado de un manual concreto. La pantalla del solicitante usa este
+  /// documento exacto para no enumerar los manuales del espacio.
+  Stream<ManualParticipant?> watchManualParticipant(
+    String spaceId,
+    String manualId,
+  ) => _spaces
+      .doc(spaceId)
+      .collection('manualParticipants')
+      .doc(manualId)
+      .snapshots()
+      .map(_manualFrom);
 
   /// Crea la identidad manual. El id es opaco y estable (nunca el nombre):
   /// renombrar después no afecta a ninguna obligación ya derivada.
@@ -253,15 +270,29 @@ class SpacesRepository {
           .doc(manualId)
           .delete();
 
-  ManualParticipant _manualFrom(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) => ManualParticipant(
-    id: doc.id,
-    displayName: (doc.data()['displayName'] as String?) ?? '',
-    linkedUid: doc.data()['linkedUid'] as String?,
-    createdByUid: (doc.data()['createdByUid'] as String?) ?? '',
-    createdAt: (doc.data()['createdAt'] as Timestamp?)?.toDate(),
-  );
+  ManualParticipant? _manualFrom(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    if (data == null) return null;
+    return ManualParticipant(
+      id: doc.id,
+      displayName: (data['displayName'] as String?) ?? '',
+      linkedUid: data['linkedUid'] as String?,
+      linkStatus: switch (data['linkStatus']) {
+        'processing' => ManualLinkPropagationStatus.processing,
+        'active' => ManualLinkPropagationStatus.active,
+        'failed' => ManualLinkPropagationStatus.failed,
+        _ => null,
+      },
+      linkError: data['linkError'] as String?,
+      linkBlockedSessions: data['linkBlockedSessions'] as int?,
+      linkPropagatedSessions: data['linkPropagatedSessions'] as int?,
+      linkPropagatedAt: (data['linkPropagatedAt'] as Timestamp?)?.toDate(),
+      createdByUid: (data['createdByUid'] as String?) ?? '',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+    );
+  }
 
   /// Invitaciones que YO he recibido y siguen pendientes. Recibirlas y
   /// responderlas es PARTICIPAR: también las ve un invitado (ADR-034).
@@ -955,6 +986,13 @@ final spaceManualParticipantsProvider = StreamProvider.autoDispose
     .family<List<ManualParticipant>, String>(
       (ref, spaceId) =>
           ref.watch(spacesRepositoryProvider).watchManualParticipants(spaceId),
+    );
+
+final spaceManualParticipantProvider = StreamProvider.autoDispose
+    .family<ManualParticipant?, ({String spaceId, String manualId})>(
+      (ref, key) => ref
+          .watch(spacesRepositoryProvider)
+          .watchManualParticipant(key.spaceId, key.manualId),
     );
 
 final spaceInvitesProvider = StreamProvider.autoDispose

@@ -27,7 +27,11 @@ se **añade** una identidad: la persona pasa a ser LECTORA de lo suyo.
 
 ```text
 spaces/{spaceId}/manualParticipants/{manualId}
-  linkedUid: null → uid        ← lo único que se escribe
+  linkedUid: null → uid        ← lo escribe la aprobación
+  linkStatus: ausente → processing → active|failed
+              failed → processing (entrada de reintento existente)
+  linkError · linkBlockedSessions                 ← solo fallo terminal
+  linkPropagatedSessions · linkPropagatedAt       ← solo active
 
 spaces/{spaceId}/manualLinkRequests/{manualId}_{uid}
   manualId · uid · displayName? · status: pending|accepted|rejected
@@ -51,10 +55,16 @@ editaba un ticket por otro motivo. **Corregido con reproyección explícita.**
   .where('manualId','==',…)`— y no `session.spaceId`: `linkTicket` vincula el
   TICKET a un espacio sin tocar la sesión, así que filtrar por `spaceId`
   omitía sesiones afectadas (M3).
-- El vínculo nace `linkStatus: 'processing'` y solo pasa a `'active'` cuando
-  la propagación termina. **La UI nunca afirma acceso que no exista.** Si
-  falla queda `'failed'` con el motivo; reintentar es seguro porque
-  `recomputeSession` converge y solo escribe si algo cambió.
+- La aprobación escribe `manualLinkRequests.status: 'accepted'` y `linkedUid`
+  en el mismo batch; durante la ventana previa al trigger, `linkStatus` queda
+  ausente.
+- El trigger reclama atómicamente esa versión escribiendo `processing`: esa
+  escritura no se realimenta y una entrega duplicada pierde la reclamación.
+- La Function solo publica `linkStatus: 'active'` después de reproyectar todas
+  las sesiones afectadas, o `linkStatus: 'failed'` con un código estable. **La
+  UI nunca afirma acceso que no exista.** `linkPropagatedSessions` y
+  `linkPropagatedAt` solo acompañan a `active`; `linkBlockedSessions` solo al
+  fallo legacy `legacy-sessions-without-context`.
 
 **Por qué reproyectar y no resolver al leer.** Resolver el alias en la
 consulta obligaría al cliente a buscar además por `debtorUid`/`creditorUid`,
@@ -139,6 +149,12 @@ Invariantes que Rules impone:
 - no se solicita sobre un manual ya vinculado;
 - las solicitudes **no son enumerables** salvo por el anfitrión;
 - las solicitudes **no se borran**: son el rastro de que hubo aprobación.
+- `linkedUid` se puede consultar por `get` únicamente en el manual propio del
+  UID vinculado; esa persona no puede listar la colección. Los miembros y el
+  anfitrión conservan la lectura social de sus manuales.
+- `linkStatus`, `linkError`, `linkBlockedSessions`, `linkPropagatedSessions` y
+  `linkPropagatedAt` son metadatos de Admin: el cliente no puede escribirlos,
+  aunque un renombrado siga permitido cuando ya existen.
 
 ## Migración
 
@@ -196,7 +212,7 @@ del espacio y lo hace inmutable. Sin él, un collection group necesitaría un
 
 ```
 (nada) --crear--> pending --anfitrión acepta--> accepted   [TERMINAL]
-                     |                              `-> linkStatus: processing -> active | failed
+                     |                              `-> linkStatus ausente -> processing -> active | failed
                      |--anfitrión rechaza--------> rejected
                      |--el solicitante retira----> rejected
                                                       |
@@ -222,7 +238,10 @@ del espacio y lo hace inmutable. Sin él, un collection group necesitaría un
 
 - **Quien lo pide**: en el ticket abierto por enlace, tras identificarse como
   un MANUAL, aparece «Soy yo». La tarjeta muestra después el estado
-  (pendiente / vinculada), así que nadie se queda sin saber qué pasó.
+  (pendiente, rechazada, aprobada/vinculando, activa o fallida). «Identidad
+  vinculada» solo aparece con `manualParticipants.linkStatus == 'active'`.
+  La lectura del manual para esta tarjeta es un `get`/watch del documento
+  exacto, nunca una lista.
 - **El anfitrión**: en el detalle del grupo, sobre las invitaciones, ve
   «Solicitudes de identidad» con quién dice ser quién y dos botones,
   **Aceptar** y **Rechazar**. El texto avisa de lo que implica aceptar: esa
