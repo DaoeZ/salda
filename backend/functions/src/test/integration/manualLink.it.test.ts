@@ -437,6 +437,177 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     assert.equal((await ref.get()).data()?.linkStatus, 'failed');
   });
 
+  it('un fallo de adquisicion antes del claim no muta el manual', async () => {
+    await seedRetryManual();
+    const f = db();
+    const manualPath = 'spaces/sp1/manualParticipants/m1';
+    const before = (await f.doc(manualPath).get()).data()!;
+    type RunTransaction = (
+      updateFunction: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>,
+      ...rest: unknown[]
+    ) => Promise<unknown>;
+    const originalRunTransaction = f.runTransaction.bind(f) as unknown as RunTransaction;
+    const patchedFirestore = f as unknown as { runTransaction: RunTransaction };
+    patchedFirestore.runTransaction = async () => {
+      throw new Error('forced-acquisition-outage');
+    };
+
+    try {
+      await assert.rejects(
+        propagateManualLink('sp1', 'm1'),
+        /forced-acquisition-outage/,
+      );
+    } finally {
+      patchedFirestore.runTransaction = originalRunTransaction;
+    }
+
+    const after = (await f.doc(manualPath).get()).data()!;
+    assert.deepEqual(after, before);
+    assert.equal(after.linkedUid, MARTA);
+    assert.equal(after.linkStatus, undefined);
+    assert.equal(after.linkClaimId, undefined);
+  });
+
+  it('un fallo de consulta afectada tras el claim publica failed por CAS', async () => {
+    await seedRetryManual();
+    const f = db();
+    const manualPath = 'spaces/sp1/manualParticipants/m1';
+    type CollectionGroup = (collectionId: string) => unknown;
+    const originalCollectionGroup = f.collectionGroup.bind(f) as unknown as CollectionGroup;
+    const patchedFirestore = f as unknown as { collectionGroup: CollectionGroup };
+    patchedFirestore.collectionGroup = (collectionId) =>
+      collectionId === 'participants'
+        ? {
+          where: () => ({
+            get: async () => { throw new Error('forced-affected-query-outage'); },
+          }),
+        }
+        : originalCollectionGroup(collectionId);
+
+    try {
+      const result = await propagateManualLink('sp1', 'm1');
+      assert.deepEqual(result, {
+        sessions: 0, status: 'failed', reason: 'propagation-error',
+      });
+    } finally {
+      patchedFirestore.collectionGroup = originalCollectionGroup;
+    }
+
+    const manual = (await f.doc(manualPath).get()).data()!;
+    assert.equal(manual.linkedUid, MARTA);
+    assert.equal(manual.linkStatus, 'failed');
+    assert.equal(manual.linkError, 'propagation-error');
+    assert.equal(manual.linkClaimId, undefined);
+    assert.equal(manual.linkProcessingAt, undefined);
+  });
+
+  it('un fallo de recompute tras el claim publica failed y conserva economia',
+      async () => {
+    await seedSessionWithManual('s1');
+    await recomputeSession('s1');
+    const f = db();
+    const manualPath = 'spaces/sp1/manualParticipants/m1';
+    const beforeEntries = (await entriesOf()).map((entry) => ({
+      id: entry.id,
+      amount: entry.data.amount,
+      debtorUid: entry.data.debtorUid,
+      creditorUid: entry.data.creditorUid,
+    }));
+    await f.doc(manualPath).update({ linkedUid: MARTA });
+
+    type Document = (path: string) => FirebaseFirestore.DocumentReference;
+    const originalDoc = f.doc.bind(f) as unknown as Document;
+    const patchedFirestore = f as unknown as { doc: Document };
+    let sessionReads = 0;
+    patchedFirestore.doc = (path) => {
+      const ref = originalDoc(path);
+      if (path !== 'sessions/s1') return ref;
+      return new Proxy(ref, {
+        get(target, property, receiver) {
+          if (property === 'get') {
+            return () => {
+              if (++sessionReads === 2) {
+                throw new Error('forced-recompute-outage');
+              }
+              return target.get();
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }) as FirebaseFirestore.DocumentReference;
+    };
+
+    try {
+      const result = await propagateManualLink('sp1', 'm1');
+      assert.deepEqual(result, {
+        sessions: 1, status: 'failed', reason: 'propagation-error',
+      });
+    } finally {
+      patchedFirestore.doc = originalDoc;
+    }
+
+    const manual = (await f.doc(manualPath).get()).data()!;
+    assert.equal(manual.linkedUid, MARTA);
+    assert.equal(manual.linkStatus, 'failed');
+    assert.equal(manual.linkError, 'propagation-error');
+    assert.equal(manual.linkClaimId, undefined);
+    assert.equal(manual.linkProcessingAt, undefined);
+    assert.deepEqual((await entriesOf()).map((entry) => ({
+      id: entry.id,
+      amount: entry.data.amount,
+      debtorUid: entry.data.debtorUid,
+      creditorUid: entry.data.creditorUid,
+    })), beforeEntries);
+  });
+
+  it('un fallo al publicar active conserva processing recuperable', async () => {
+    await seedRetryManual();
+    const f = db();
+    const manualPath = 'spaces/sp1/manualParticipants/m1';
+    type RunTransaction = (
+      updateFunction: (transaction: FirebaseFirestore.Transaction) => Promise<unknown>,
+      ...rest: unknown[]
+    ) => Promise<unknown>;
+    const originalRunTransaction = f.runTransaction.bind(f) as unknown as RunTransaction;
+    const patchedFirestore = f as unknown as { runTransaction: RunTransaction };
+    let manualTransactionReads = 0;
+
+    patchedFirestore.runTransaction = (updateFunction, ...rest) =>
+      originalRunTransaction(async (transaction) => {
+        const guardedTransaction = new Proxy(transaction, {
+          get(target, property, receiver) {
+            if (property === 'get') {
+              return (ref: FirebaseFirestore.DocumentReference) => {
+                if (ref.path === manualPath && ++manualTransactionReads === 2) {
+                  throw new Error('forced-terminal-write-outage');
+                }
+                return target.get(ref);
+              };
+            }
+            const value = Reflect.get(target, property, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }) as FirebaseFirestore.Transaction;
+        return updateFunction(guardedTransaction);
+      }, ...rest);
+
+    try {
+      await assert.rejects(
+        propagateManualLink('sp1', 'm1'),
+        /forced-terminal-write-outage/,
+      );
+    } finally {
+      patchedFirestore.runTransaction = originalRunTransaction;
+    }
+
+    const manual = (await f.doc(manualPath).get()).data()!;
+    assert.equal(manual.linkStatus, 'processing');
+    assert.equal(typeof manual.linkClaimId, 'string');
+    assert.ok(manual.linkProcessingAt);
+    assert.equal(manual.linkError, undefined);
+  });
+
   describe('reintento callable', () => {
     it('autoriza al propietario y al linkedUid exacto, y deja traza',
         async () => {

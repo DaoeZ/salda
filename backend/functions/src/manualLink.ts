@@ -250,6 +250,7 @@ async function propagateClaimedManualLink(
   // afectada podía quedar fuera de la consulta y el vínculo se marcaba
   // `active` habiendo omitido economía (M3).
   const sessionIds = new Set<string>();
+  let publishingTerminal = false;
 
   try {
     // Mantener la consulta dentro del bloque controlado permite publicar
@@ -274,6 +275,7 @@ async function propagateClaimedManualLink(
       if (!session.data()?.spaceId) orphans.push(sid);
     }
     if (orphans.length > 0) {
+      publishingTerminal = true;
       const published = await publishManualLinkTerminal(
         spaceId,
         manualId,
@@ -289,6 +291,7 @@ async function propagateClaimedManualLink(
           linkPropagatedAt: FieldValue.delete(),
         },
       );
+      publishingTerminal = false;
       logger.warn('propagateManualLink: sesiones sin contexto', {
         spaceId, manualId, orphans,
       });
@@ -306,6 +309,7 @@ async function propagateClaimedManualLink(
     for (const sid of sessionIds) {
       await recomputeSession(sid);
     }
+    publishingTerminal = true;
     const published = await publishManualLinkTerminal(
       spaceId,
       manualId,
@@ -319,13 +323,18 @@ async function propagateClaimedManualLink(
         linkBlockedSessions: FieldValue.delete(),
       },
     );
+    publishingTerminal = false;
     if (!published) return currentClaimResult(spaceId, manualId, sessionIds.size);
     return { sessions: sessionIds.size, status: 'active' };
   } catch (error) {
+    // A terminal-publication outage must retain the claimed, recoverable
+    // processing lease rather than be reclassified as a propagation failure.
+    if (publishingTerminal) throw error;
     // No se marca `active`: el sistema no puede afirmar que la vinculación
     // está viva mientras queden sesiones sin reproyectar. `failed` es
     // reintentable: recomputeSession converge y solo escribe si algo cambió.
     logger.error('propagateManualLink falló', { spaceId, manualId, error });
+    publishingTerminal = true;
     const published = await publishManualLinkTerminal(
       spaceId,
       manualId,
@@ -341,6 +350,7 @@ async function propagateClaimedManualLink(
         linkPropagatedAt: FieldValue.delete(),
       },
     );
+    publishingTerminal = false;
     if (!published) return currentClaimResult(spaceId, manualId, sessionIds.size);
     return {
       sessions: sessionIds.size,
