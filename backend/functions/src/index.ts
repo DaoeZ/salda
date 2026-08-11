@@ -46,5 +46,6 @@ export {
 // Propagación de vinculaciones MANUAL↔identidad (ADR-037, C1).
 export {
   propagateOnManualLink,
+  requestManualLink,
   retryManualLinkPropagation,
 } from './manualLink.js';

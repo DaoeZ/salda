@@ -12,12 +12,11 @@ import 'package:salda_mobile/features/spaces/domain/space_models.dart';
 void main() {
   late FakeFirebaseFirestore firestore;
 
-  ManualLinkRepository repoFor(String uid) =>
-      ManualLinkRepository(
-        firestore: firestore,
-        uid: () => uid,
-        functions: _NoopManualLinkGateway(),
-      );
+  ManualLinkRepository repoFor(String uid) => ManualLinkRepository(
+    firestore: firestore,
+    uid: () => uid,
+    functions: _CallableBackedManualLinkGateway(firestore, uid),
+  );
 
   setUp(() async {
     firestore = FakeFirebaseFirestore();
@@ -33,9 +32,7 @@ void main() {
   test(
     'pedir la vinculación crea una solicitud PENDIENTE para uno mismo',
     () async {
-      await repoFor(
-        'uid-marta',
-      ).request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
+      await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta');
 
       final raw =
           (await firestore
@@ -54,9 +51,7 @@ void main() {
   );
 
   test('el anfitrión ve las pendientes de su espacio', () async {
-    await repoFor(
-      'uid-marta',
-    ).request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
+    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta');
 
     final pending = await repoFor('owner').watchPending('sp1').first;
     expect(pending, hasLength(1));
@@ -68,9 +63,7 @@ void main() {
   test(
     'aceptar escribe el vínculo y resuelve la solicitud, a la vez',
     () async {
-      await repoFor(
-        'uid-marta',
-      ).request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
+      await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta');
       final owner = repoFor('owner');
       await owner.approve(
         'sp1',
@@ -82,8 +75,11 @@ void main() {
               .data()!;
       // Lo ÚNICO que cambia: se añade la identidad.
       expect(manual['linkedUid'], 'uid-marta');
-      expect(manual['linkStatus'], isNull,
-          reason: 'accepted no equivale a active');
+      expect(
+        manual['linkStatus'],
+        isNull,
+        reason: 'accepted no equivale a active',
+      );
       // El identificador manual —el actor económico— no se toca.
       expect(manual['manualId'], 'm1');
       expect(manual['displayName'], 'Marta');
@@ -108,9 +104,7 @@ void main() {
   );
 
   test('rechazar NO vincula y conserva el rastro', () async {
-    await repoFor(
-      'uid-marta',
-    ).request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
+    await repoFor('uid-marta').request('sp1', 'm1', displayName: 'Marta');
     await repoFor('owner').reject('sp1', 'm1_uid-marta');
 
     final manual =
@@ -125,17 +119,15 @@ void main() {
     expect(request['status'], 'rejected');
   });
 
-  test('un INVITADO puede pedirlo igual que una cuenta', () async {
-    await repoFor(
-      'guest-1',
-    ).request('sp1', 'm1', displayName: 'Alba', spaceOwnerUid: 'owner');
+  test('FakeFirestore solo comprueba la mecánica de una solicitud', () async {
+    await repoFor('uid-alba').request('sp1', 'm1', displayName: 'Alba');
     final owner = repoFor('owner');
     await owner.approve('sp1', (await owner.watchPending('sp1').first).single);
 
     expect(
       (await firestore.doc('spaces/sp1/manualParticipants/m1').get())
           .data()!['linkedUid'],
-      'guest-1',
+      'uid-alba',
     );
   });
 
@@ -143,12 +135,7 @@ void main() {
     final marta = repoFor('uid-marta');
     expect(await marta.watchMine('sp1', 'm1').first, isNull);
 
-    await marta.request(
-      'sp1',
-      'm1',
-      displayName: 'Marta',
-      spaceOwnerUid: 'owner',
-    );
+    await marta.request('sp1', 'm1', displayName: 'Marta');
     expect((await marta.watchMine('sp1', 'm1').first)!.isPending, isTrue);
 
     final owner = repoFor('owner');
@@ -163,18 +150,8 @@ void main() {
     'el id de la solicitud es determinista: reintentar no duplica',
     () async {
       final marta = repoFor('uid-marta');
-      await marta.request(
-        'sp1',
-        'm1',
-        displayName: 'Marta',
-        spaceOwnerUid: 'owner',
-      );
-      await marta.request(
-        'sp1',
-        'm1',
-        displayName: 'Marta',
-        spaceOwnerUid: 'owner',
-      );
+      await marta.request('sp1', 'm1', displayName: 'Marta');
+      await marta.request('sp1', 'm1', displayName: 'Marta');
 
       final all = await firestore
           .collection('spaces/sp1/manualLinkRequests')
@@ -187,20 +164,6 @@ void main() {
     },
   );
 
-  test('M4: la solicitud lleva el propietario denormalizado', () async {
-    await repoFor(
-      'uid-marta',
-    ).request('sp1', 'm1', displayName: 'Marta', spaceOwnerUid: 'owner');
-    final raw =
-        (await firestore
-                .doc('spaces/sp1/manualLinkRequests/m1_uid-marta')
-                .get())
-            .data()!;
-    // Es lo que permite la bandeja global sin un get() por documento. Rules
-    // lo valida contra el propietario real, asi que no es una afirmacion.
-    expect(raw['spaceOwnerUid'], 'owner');
-  });
-
   test('el manual expone el estado real y el fallback conservador', () async {
     final spaces = SpacesRepository(
       firestore: firestore,
@@ -212,8 +175,7 @@ void main() {
       'linkedUid': 'uid-marta',
     });
     var manual = await spaces.watchManualParticipant('sp1', 'm1').first;
-    expect(manual?.effectiveLinkStatus,
-        ManualLinkPropagationStatus.processing);
+    expect(manual?.effectiveLinkStatus, ManualLinkPropagationStatus.processing);
 
     for (final (raw, expected) in [
       ('processing', ManualLinkPropagationStatus.processing),
@@ -239,7 +201,7 @@ void main() {
     expect(manual?.effectiveLinkStatus, isNull);
   });
 
-  test('retryPropagation delega solo la ruta al gateway de Functions', () async {
+  test('pedir vinculación delega el callable sin UID ni propietario', () async {
     final gateway = _RecordingManualLinkGateway();
     final repo = ManualLinkRepository(
       firestore: firestore,
@@ -247,29 +209,67 @@ void main() {
       functions: gateway,
     );
 
-    final result = await repo.retryPropagation('sp1', 'm1');
+    await repo.request(
+      'sp1',
+      'm1',
+      displayName: 'Marta',
+      viaSessionId: 's1',
+      viaTicketId: 't1',
+      viaPid: 'p2',
+    );
 
     expect(gateway.spaceId, 'sp1');
     expect(gateway.manualId, 'm1');
-    expect(result.action, ManualLinkRetryAction.claimed);
-    expect(result.status, ManualLinkPropagationStatus.active);
+    expect(gateway.displayName, 'Marta');
+    expect(gateway.viaSessionId, 's1');
+    expect(gateway.viaTicketId, 't1');
+    expect(gateway.viaPid, 'p2');
   });
-}
 
-class _NoopManualLinkGateway implements ManualLinkFunctionsGateway {
-  @override
-  Future<ManualLinkRetryResult> retryPropagation(
-    String spaceId,
-    String manualId,
-  ) async => const ManualLinkRetryResult(
-    status: ManualLinkPropagationStatus.processing,
-    action: ManualLinkRetryAction.inProgress,
+  test(
+    'retryPropagation delega solo la ruta al gateway de Functions',
+    () async {
+      final gateway = _RecordingManualLinkGateway();
+      final repo = ManualLinkRepository(
+        firestore: firestore,
+        uid: () => 'uid-marta',
+        functions: gateway,
+      );
+
+      final result = await repo.retryPropagation('sp1', 'm1');
+
+      expect(gateway.spaceId, 'sp1');
+      expect(gateway.manualId, 'm1');
+      expect(result.action, ManualLinkRetryAction.claimed);
+      expect(result.status, ManualLinkPropagationStatus.active);
+    },
   );
 }
 
 class _RecordingManualLinkGateway implements ManualLinkFunctionsGateway {
   String? spaceId;
   String? manualId;
+  String? displayName;
+  String? viaSessionId;
+  String? viaTicketId;
+  String? viaPid;
+
+  @override
+  Future<void> request(
+    String spaceId,
+    String manualId, {
+    required String displayName,
+    String viaSessionId = '',
+    String viaTicketId = '',
+    String viaPid = '',
+  }) async {
+    this.spaceId = spaceId;
+    this.manualId = manualId;
+    this.displayName = displayName;
+    this.viaSessionId = viaSessionId;
+    this.viaTicketId = viaTicketId;
+    this.viaPid = viaPid;
+  }
 
   @override
   Future<ManualLinkRetryResult> retryPropagation(
@@ -283,4 +283,46 @@ class _RecordingManualLinkGateway implements ManualLinkFunctionsGateway {
       action: ManualLinkRetryAction.claimed,
     );
   }
+}
+
+class _CallableBackedManualLinkGateway implements ManualLinkFunctionsGateway {
+  _CallableBackedManualLinkGateway(this.firestore, this.uid);
+
+  final FakeFirebaseFirestore firestore;
+  final String uid;
+
+  @override
+  Future<void> request(
+    String spaceId,
+    String manualId, {
+    required String displayName,
+    String viaSessionId = '',
+    String viaTicketId = '',
+    String viaPid = '',
+  }) async {
+    final ref = firestore.doc(
+      'spaces/$spaceId/manualLinkRequests/${manualId}_$uid',
+    );
+    if ((await ref.get()).exists) return;
+    final owner = (await firestore.doc('spaces/$spaceId').get())
+        .data()?['ownerUid'];
+    await ref.set({
+      'manualId': manualId,
+      'uid': uid,
+      'displayName': displayName,
+      'spaceOwnerUid': owner,
+      'status': 'pending',
+      'attempt': 1,
+      'schemaVersion': 1,
+    });
+  }
+
+  @override
+  Future<ManualLinkRetryResult> retryPropagation(
+    String spaceId,
+    String manualId,
+  ) async => const ManualLinkRetryResult(
+    status: ManualLinkPropagationStatus.processing,
+    action: ManualLinkRetryAction.inProgress,
+  );
 }

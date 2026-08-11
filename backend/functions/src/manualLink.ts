@@ -381,6 +381,200 @@ const parseRetryInput = (data: unknown): { spaceId: string; manualId: string } =
   return { spaceId: input.spaceId, manualId: input.manualId };
 };
 
+type ManualLinkRequestInput = {
+  spaceId: string;
+  manualId: string;
+  displayName: string;
+  viaSessionId: string;
+  viaTicketId: string;
+  viaPid: string;
+};
+
+const parseManualLinkRequestInput = (data: unknown): ManualLinkRequestInput => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new HttpsError('invalid-argument', 'MANUAL_LINK_DATA_INVALID');
+  }
+  const input = data as Record<string, unknown>;
+  const allowedKeys = new Set([
+    'spaceId', 'manualId', 'displayName',
+    'viaSessionId', 'viaTicketId', 'viaPid',
+  ]);
+  if (Object.keys(input).some((key) => !allowedKeys.has(key))) {
+    throw new HttpsError('invalid-argument', 'MANUAL_LINK_DATA_INVALID');
+  }
+  const optional = (key: 'viaSessionId' | 'viaTicketId' | 'viaPid') => {
+    const value = input[key] ?? '';
+    if (
+      typeof value !== 'string'
+      || value.length > 128
+      || (value.length > 0 && !validDocumentId(value))
+    ) {
+      throw new HttpsError('invalid-argument', 'MANUAL_LINK_DATA_INVALID');
+    }
+    return value;
+  };
+  const displayName = typeof input.displayName === 'string'
+    ? input.displayName.trim()
+    : '';
+  if (
+    !validDocumentId(input.spaceId)
+    || !validDocumentId(input.manualId)
+    || displayName.length === 0
+    || displayName.length > 40
+  ) {
+    throw new HttpsError('invalid-argument', 'MANUAL_LINK_DATA_INVALID');
+  }
+  return {
+    spaceId: input.spaceId,
+    manualId: input.manualId,
+    displayName,
+    viaSessionId: optional('viaSessionId'),
+    viaTicketId: optional('viaTicketId'),
+    viaPid: optional('viaPid'),
+  };
+};
+
+const requireFullAccount = (
+  auth: { uid: string; token: Record<string, unknown> } | undefined,
+): string => {
+  if (!auth) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
+  const firebase = auth.token.firebase as Record<string, unknown> | undefined;
+  if (
+    auth.token.email_verified !== true
+    || firebase?.sign_in_provider === 'anonymous'
+  ) {
+    throw new HttpsError('permission-denied', 'FULL_ACCOUNT_REQUIRED');
+  }
+  return auth.uid;
+};
+
+type ManualLinkRequestDecision = {
+  action: 'created' | 'pending' | 'accepted' | 'rejected' | 'terminal';
+};
+
+/**
+ * Solicitud autoritativa de vinculación. El cliente no aporta ni UID ni
+ * propietario: ambos se fijan desde el estado actual dentro de la transacción.
+ */
+export const requestManualLink = onCall(async (request) => {
+  const uid = requireFullAccount(request.auth);
+  const input = parseManualLinkRequestInput(request.data);
+  const db = getFirestore();
+  const spaceRef = db.doc(`spaces/${input.spaceId}`);
+  const manualRef = manualLinkRef(input.spaceId, input.manualId);
+  const profileRef = db.doc(`profiles/${uid}`);
+  const identityRef = db.doc(`spaces/${input.spaceId}/linkedIdentities/${uid}`);
+  const requestRef = db.doc(
+    `spaces/${input.spaceId}/manualLinkRequests/${input.manualId}_${uid}`,
+  );
+  const memberRef = db.doc(`spaces/${input.spaceId}/members/${uid}`);
+
+  const decision = await db.runTransaction<ManualLinkRequestDecision>(
+    async (transaction) => {
+      const [profile, space, manual, identity, existing, member] =
+        await transaction.getAll(
+          profileRef, spaceRef, manualRef, identityRef, requestRef, memberRef,
+        );
+      if (!profile.exists) {
+        throw new HttpsError('permission-denied', 'PROFILE_REQUIRED');
+      }
+      if (!space.exists) {
+        throw new HttpsError('not-found', 'MANUAL_LINK_SPACE_NOT_FOUND');
+      }
+      const ownerUid = space.data()?.ownerUid;
+      if (typeof ownerUid !== 'string' || ownerUid.length === 0) {
+        throw new HttpsError('failed-precondition', 'MANUAL_LINK_OWNER_INVALID');
+      }
+      if (!manual.exists) {
+        throw new HttpsError('not-found', 'MANUAL_LINK_NOT_FOUND');
+      }
+      let mayClaim = member.exists;
+      if (!mayClaim) {
+        if (
+          input.viaSessionId.length === 0
+          || input.viaTicketId.length === 0
+          || input.viaPid.length === 0
+        ) {
+          throw new HttpsError('permission-denied', 'MANUAL_LINK_NOT_AUTHORIZED');
+        }
+        const accessRef = db.doc(
+          `sessions/${input.viaSessionId}/ticketAccess/${input.viaTicketId}_${uid}`,
+        );
+        const participantRef = db.doc(
+          `sessions/${input.viaSessionId}/ticketParticipants/`
+          + `${input.viaTicketId}_${input.viaPid}`,
+        );
+        const [access, participant] = await transaction.getAll(
+          accessRef, participantRef,
+        );
+        const accessData = access.data() ?? {};
+        const token = accessData.token;
+        if (
+          !access.exists
+          || accessData.uid !== uid
+          || accessData.ticketId !== input.viaTicketId
+          || accessData.pid !== input.viaPid
+          || accessData.manualId !== input.manualId
+          || typeof token !== 'string'
+          || token.length === 0
+          || !participant.exists
+          || participant.data()?.ticketId !== input.viaTicketId
+          || participant.data()?.pid !== input.viaPid
+        ) {
+          throw new HttpsError('permission-denied', 'MANUAL_LINK_NOT_AUTHORIZED');
+        }
+        const ticketLink = await transaction.get(db.doc(`ticketLinks/${token}`));
+        const linkData = ticketLink.data() ?? {};
+        const rawExpiresAt = linkData.expiresAt;
+        const expiresAt = timestampOf(rawExpiresAt);
+        mayClaim = ticketLink.exists
+          && linkData.status === 'active'
+          && (rawExpiresAt == null
+            || (expiresAt !== null && expiresAt.toMillis() > Date.now()))
+          && linkData.sessionId === input.viaSessionId
+          && linkData.ticketId === input.viaTicketId
+          && linkData.targetPid === input.viaPid
+          && linkData.targetManualId === input.manualId;
+      }
+      if (!mayClaim) {
+        throw new HttpsError('permission-denied', 'MANUAL_LINK_NOT_AUTHORIZED');
+      }
+
+      const current = existing.data();
+      if (existing.exists) {
+        switch (current?.status) {
+          case 'pending': return { action: 'pending' };
+          case 'accepted': return { action: 'accepted' };
+          case 'rejected': return { action: 'rejected' };
+          default: return { action: 'terminal' };
+        }
+      }
+      if (manual.data()?.linkedUid != null) {
+        throw new HttpsError('failed-precondition', 'MANUAL_LINK_ALREADY_LINKED');
+      }
+      if (identity.exists) {
+        throw new HttpsError('failed-precondition', 'MANUAL_LINK_IDENTITY_USED');
+      }
+      transaction.create(requestRef, {
+        manualId: input.manualId,
+        uid,
+        displayName: input.displayName,
+        spaceOwnerUid: ownerUid,
+        ...(input.viaSessionId ? { viaSessionId: input.viaSessionId } : {}),
+        ...(input.viaTicketId ? { viaTicketId: input.viaTicketId } : {}),
+        ...(input.viaPid ? { viaPid: input.viaPid } : {}),
+        status: 'pending',
+        attempt: 1,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        schemaVersion: 1,
+      });
+      return { action: 'created' };
+    },
+  );
+  return decision;
+});
+
 const retryCooldownActive = (data: Record<string, unknown>, now: Timestamp) => {
   const requestedAt = timestampOf(data.linkRetryRequestedAt);
   return requestedAt !== null

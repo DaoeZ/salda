@@ -85,6 +85,13 @@ class FakeAuthRepository implements AuthRepository {
     user = null;
     _controller.add(null);
   }
+
+  /// Simula el cambio de identidad que emite Firebase después de convertir un
+  /// invitado, conservando el mismo UID.
+  void setUser(AppUser? value) {
+    user = value;
+    _controller.add(value);
+  }
 }
 
 /// Overrides estándar para tests de widgets: usuario logueado y Firestore
@@ -102,13 +109,15 @@ List<Override> loggedInOverrides({
   String uid = 'owner',
   String displayName = 'Edgar',
   ManualLinkFunctionsGateway? manualLinkFunctionsGateway,
+  AuthRepository? authRepository,
 }) {
   final fake = firestore ?? FakeFirebaseFirestore();
   return [
     authRepositoryProvider.overrideWithValue(
-      FakeAuthRepository(
-        user: AppUser(uid: uid, displayName: displayName),
-      ),
+      authRepository ??
+          FakeAuthRepository(
+            user: AppUser(uid: uid, displayName: displayName),
+          ),
     ),
     sessionRepositoryProvider.overrideWithValue(
       sessionRepository ??
@@ -163,6 +172,16 @@ List<Override> loggedInOverrides({
 }
 
 class _NoopManualLinkGateway implements ManualLinkFunctionsGateway {
+  @override
+  Future<void> request(
+    String spaceId,
+    String manualId, {
+    required String displayName,
+    String viaSessionId = '',
+    String viaTicketId = '',
+    String viaPid = '',
+  }) async {}
+
   @override
   Future<ManualLinkRetryResult> retryPropagation(
     String spaceId,

@@ -47,17 +47,44 @@ class ManualLinkRetryResult {
 }
 
 abstract interface class ManualLinkFunctionsGateway {
+  Future<void> request(
+    String spaceId,
+    String manualId, {
+    required String displayName,
+    String viaSessionId,
+    String viaTicketId,
+    String viaPid,
+  });
+
   Future<ManualLinkRetryResult> retryPropagation(
     String spaceId,
     String manualId,
   );
 }
 
-class FirebaseManualLinkFunctionsGateway
-    implements ManualLinkFunctionsGateway {
+class FirebaseManualLinkFunctionsGateway implements ManualLinkFunctionsGateway {
   FirebaseManualLinkFunctionsGateway(this.functions);
 
   final FirebaseFunctions functions;
+
+  @override
+  Future<void> request(
+    String spaceId,
+    String manualId, {
+    required String displayName,
+    String viaSessionId = '',
+    String viaTicketId = '',
+    String viaPid = '',
+  }) async {
+    await functions.httpsCallable('requestManualLink').call<void>({
+      'spaceId': spaceId,
+      'manualId': manualId,
+      'displayName': displayName.trim(),
+      if (viaSessionId.isNotEmpty) 'viaSessionId': viaSessionId,
+      if (viaTicketId.isNotEmpty) 'viaTicketId': viaTicketId,
+      if (viaPid.isNotEmpty) 'viaPid': viaPid,
+    });
+  }
 
   @override
   Future<ManualLinkRetryResult> retryPropagation(
@@ -66,10 +93,7 @@ class FirebaseManualLinkFunctionsGateway
   ) async {
     final response = await functions
         .httpsCallable('retryManualLinkPropagation')
-        .call<Map<String, dynamic>>({
-          'spaceId': spaceId,
-          'manualId': manualId,
-        });
+        .call<Map<String, dynamic>>({'spaceId': spaceId, 'manualId': manualId});
     return ManualLinkRetryResult.fromData(response.data);
   }
 }
@@ -116,39 +140,24 @@ class ManualLinkRepository {
 
   /// La persona pide ser reconocida como ese participante manual.
   ///
-  /// Se pide SIEMPRE para uno mismo: Rules exige `uid == auth.uid`, así que
-  /// nadie puede solicitar en nombre de otro.
-  /// [viaSessionId]/[viaTicketId]/[viaPid] declaran POR QUÉ se tiene derecho
-  /// a reclamar: Rules los revalida contra `ticketAccess` y contra la
-  /// proyección autoritativa `ticketParticipants`. Un miembro del espacio no
-  /// los necesita. Nunca se aceptan como afirmación: son punteros a algo que
-  /// el backend comprueba.
+  /// La Function deriva el UID y el propietario actuales. Los punteros de
+  /// ticket solo explican la legitimidad y se revalidan en Admin SDK.
   Future<void> request(
     String spaceId,
     String manualId, {
     required String displayName,
-    required String spaceOwnerUid,
     String viaSessionId = '',
     String viaTicketId = '',
     String viaPid = '',
-  }) => _requests(spaceId).doc(requestId(manualId, uid())).set({
-    'manualId': manualId,
-    'uid': uid(),
-    // Obligatorio y acotado (1..40) por Rules: es el texto que el anfitrión
-    // lee al decidir, así que no puede quedar libre.
-    'displayName': displayName.trim(),
-    // M4: propietario denormalizado para la bandeja global. Rules lo valida
-    // contra el propietario real, así que el cliente no puede falsearlo.
-    'spaceOwnerUid': spaceOwnerUid,
-    if (viaSessionId.isNotEmpty) 'viaSessionId': viaSessionId,
-    if (viaTicketId.isNotEmpty) 'viaTicketId': viaTicketId,
-    if (viaPid.isNotEmpty) 'viaPid': viaPid,
-    'status': 'pending',
-    'attempt': 1,
-    'createdAt': FieldValue.serverTimestamp(),
-    'updatedAt': FieldValue.serverTimestamp(),
-    'schemaVersion': 1,
-  });
+  }) => functions.request(
+    spaceId,
+    manualId,
+    displayName: displayName,
+    // La Function deriva el propietario actual; el cliente no lo aporta.
+    viaSessionId: viaSessionId,
+    viaTicketId: viaTicketId,
+    viaPid: viaPid,
+  );
 
   /// El anfitrión APRUEBA: la solicitud pasa a `accepted` y el `linkedUid`
   /// se escribe en el MISMO batch. Rules valida el emparejamiento con
@@ -231,12 +240,11 @@ final manualLinkRepositoryProvider = Provider<ManualLinkRepository>((ref) {
   );
 });
 
-final manualLinkFunctionsGatewayProvider =
-    Provider<ManualLinkFunctionsGateway>(
-      (ref) => FirebaseManualLinkFunctionsGateway(
-        FirebaseFunctions.instanceFor(region: 'europe-west1'),
-      ),
-    );
+final manualLinkFunctionsGatewayProvider = Provider<ManualLinkFunctionsGateway>(
+  (ref) => FirebaseManualLinkFunctionsGateway(
+    FirebaseFunctions.instanceFor(region: 'europe-west1'),
+  ),
+);
 
 /// Solicitudes pendientes de un espacio (bandeja del anfitrión).
 final pendingManualLinksProvider = StreamProvider.autoDispose

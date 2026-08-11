@@ -151,9 +151,11 @@ cliente.
 Vincular es apropiarse de un historial económico, así que hacen falta **dos
 partes**:
 
-1. **La persona pide** — crea `manualLinkRequests/{manualId}_{uid}` para sí
-   misma. Rules exige `uid == auth.uid`: nadie pide en nombre de otro. Vale
-   tanto para una cuenta como para un invitado.
+1. **La persona pide** — el callable `requestManualLink` crea
+   `manualLinkRequests/{manualId}_{uid}` para sí misma y deriva el UID desde
+   la sesión autenticada: nadie pide en nombre de otro. Vale para una cuenta
+   no anónima, con el correo verificado y perfil público; un invitado debe
+   convertirse antes sin cambiar de UID.
 2. **El anfitrión decide** — solo él pasa la solicitud a `accepted` o
    `rejected`, y **aceptar escribe el `linkedUid` en el MISMO batch**,
    validado con `getAfter`. Sin ese emparejamiento no existe forma de
@@ -219,11 +221,11 @@ Un indicador en Inicio con el total de solicitudes pendientes de **todos** sus
 grupos, agrupadas por espacio y con acceso directo. Antes había que entrar
 grupo por grupo para descubrirlas.
 
-Se apoya en `spaceOwnerUid` denormalizado en la solicitud: lo aporta el
-cliente pero **no lo controla** — Rules lo valida contra el propietario real
-del espacio y lo hace inmutable. Sin él, un collection group necesitaría un
-`get()` por documento y sería inviable. Índice compuesto
-`(spaceOwnerUid, status)`.
+Se apoya en `spaceOwnerUid` denormalizado en la solicitud, pero lo escribe
+exclusivamente el callable `requestManualLink`: deriva el propietario actual
+del espacio dentro de su transacción. Así, una transferencia de propiedad no
+puede dejar una nueva solicitud apuntando al anfitrión anterior. Índice
+compuesto `(spaceOwnerUid, status)`.
 
 ## Vocabulario, para no confundir capas
 

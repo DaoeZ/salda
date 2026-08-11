@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
@@ -8,9 +10,11 @@ import '../../../core/ui/action_banner.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../auth/application/social_account.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../spaces/data/manual_link_repository.dart';
 import '../../spaces/data/spaces_repository.dart'
-    show spaceManualParticipantProvider, spaceProvider;
+    show spaceManualParticipantProvider;
 import '../../spaces/domain/space_models.dart'
     show ManualLinkPropagationStatus, ManualLinkStatus;
 import '../data/ticket_links_repository.dart';
@@ -167,6 +171,7 @@ class _LinkedTicketScreenState extends ConsumerState<LinkedTicketScreen> {
                 sessionId: link.sessionId,
                 ticketId: link.ticketId,
                 pid: _access!.pid,
+                token: link.token,
               ),
           ],
           const SizedBox(height: TokenSpacing.md),
@@ -254,6 +259,7 @@ class _ManualLinkRequestCard extends ConsumerStatefulWidget {
     required this.sessionId,
     required this.ticketId,
     required this.pid,
+    required this.token,
   });
 
   final String spaceId;
@@ -262,6 +268,7 @@ class _ManualLinkRequestCard extends ConsumerStatefulWidget {
   final String sessionId;
   final String ticketId;
   final String pid;
+  final String token;
 
   @override
   ConsumerState<_ManualLinkRequestCard> createState() =>
@@ -271,10 +278,43 @@ class _ManualLinkRequestCard extends ConsumerStatefulWidget {
 class _ManualLinkRequestCardState
     extends ConsumerState<_ManualLinkRequestCard> {
   var _busy = false;
+  String? _preparedUid;
+  SocialAccountStatus? _preparedAccount;
+  var _preparingAccount = false;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final user = ref.watch(currentAppUserProvider);
+    // La identificación temporal del ticket sí es apta para GUEST, pero
+    // apropiarse del historial económico no: Rules exige una cuenta completa.
+    // Se corta antes de escuchar solicitudes que esa identidad no puede leer.
+    if (user?.isAnonymous ?? false) {
+      _clearPreparedAccount();
+      return _guestAccountCard(l10n);
+    }
+    if (user == null) {
+      _clearPreparedAccount();
+      return _signInCard(l10n);
+    }
+    if (user.needsEmailVerification) {
+      _clearPreparedAccount();
+      return _verifyEmailCard(l10n);
+    }
+    if (_preparedUid != user.uid) {
+      _startAccountPreparation(user.uid);
+    }
+    if (_preparingAccount || _preparedAccount == null) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.hourglass_empty),
+          title: Text(l10n.ticketLinkPreparing),
+        ),
+      );
+    }
+    if (!_preparedAccount!.isReady) {
+      return _accountNotReadyCard(_preparedAccount!.readiness, l10n);
+    }
     final mine = ref
         .watch(
           myManualLinkProvider((
@@ -285,18 +325,17 @@ class _ManualLinkRequestCardState
         .value;
     final manual = mine?.status == ManualLinkStatus.accepted
         ? ref
-            .watch(
-              spaceManualParticipantProvider((
-                spaceId: widget.spaceId,
-                manualId: widget.manualId,
-              )),
-            )
-            .value
+              .watch(
+                spaceManualParticipantProvider((
+                  spaceId: widget.spaceId,
+                  manualId: widget.manualId,
+                )),
+              )
+              .value
         : null;
 
     if (mine?.status == ManualLinkStatus.accepted) {
-      if (manual?.effectiveLinkStatus ==
-          ManualLinkPropagationStatus.active) {
+      if (manual?.effectiveLinkStatus == ManualLinkPropagationStatus.active) {
         return Card(
           child: ListTile(
             leading: const Icon(Icons.verified_user_outlined),
@@ -304,10 +343,8 @@ class _ManualLinkRequestCardState
           ),
         );
       }
-      if (manual?.effectiveLinkStatus ==
-          ManualLinkPropagationStatus.failed) {
-        final message = manual?.linkError ==
-                'legacy-sessions-without-context'
+      if (manual?.effectiveLinkStatus == ManualLinkPropagationStatus.failed) {
+        final message = manual?.linkError == 'legacy-sessions-without-context'
             ? l10n.manualLinkFailedLegacy
             : l10n.manualLinkFailed;
         return Card(
@@ -370,32 +407,146 @@ class _ManualLinkRequestCardState
     );
   }
 
+  Widget _guestAccountCard(AppLocalizations l10n) => Card(
+    child: ActionBanner(
+      icon: Icons.account_circle_outlined,
+      title: Text(l10n.authProtectGuestTitle),
+      subtitle: Text(l10n.authProtectGuestBody),
+      actions: [
+        FilledButton(
+          onPressed: _busy ? null : () => _continueAuth('/register'),
+          child: Text(l10n.authProtectGuestAction),
+        ),
+      ],
+    ),
+  );
+
+  Widget _signInCard(AppLocalizations l10n) => Card(
+    child: ActionBanner(
+      icon: Icons.login,
+      title: Text(l10n.joinIdentifyHint),
+      actions: [
+        FilledButton(
+          onPressed: _busy ? null : () => _continueAuth('/login'),
+          child: Text(l10n.joinWithAccount),
+        ),
+      ],
+    ),
+  );
+
+  Widget _verifyEmailCard(AppLocalizations l10n) => Card(
+    child: ActionBanner(
+      icon: Icons.mark_email_unread_outlined,
+      title: Text(l10n.socialEmailNotVerified),
+      actions: [
+        FilledButton(
+          onPressed: _busy ? null : () => _continueAuth('/verify-email'),
+          child: Text(l10n.joinVerifyEmailAction),
+        ),
+      ],
+    ),
+  );
+
+  Widget _accountNotReadyCard(
+    SocialReadiness readiness,
+    AppLocalizations l10n,
+  ) => switch (readiness) {
+    SocialReadiness.notSignedIn => _signInCard(l10n),
+    SocialReadiness.anonymous => _guestAccountCard(l10n),
+    SocialReadiness.emailNotVerified => _verifyEmailCard(l10n),
+    SocialReadiness.ready => const SizedBox.shrink(),
+    SocialReadiness.staleToken ||
+    SocialReadiness.publicProfileMissing ||
+    SocialReadiness.publicProfileUnavailable => Card(
+      child: ActionBanner(
+        icon: Icons.error_outline,
+        title: Text(
+          readiness == SocialReadiness.staleToken
+              ? l10n.spaceSessionNotReady
+              : l10n.socialProfileNotReady,
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: _busy ? null : _retryAccountPreparation,
+            child: Text(l10n.commonRetry),
+          ),
+        ],
+      ),
+    ),
+  };
+
+  void _clearPreparedAccount() {
+    _preparedUid = null;
+    _preparedAccount = null;
+    _preparingAccount = false;
+  }
+
+  void _startAccountPreparation(String uid) {
+    _preparedUid = uid;
+    _preparedAccount = null;
+    _preparingAccount = true;
+    unawaited(_prepareAccountForView(uid));
+  }
+
+  Future<void> _prepareAccountForView(String uid) async {
+    final account = await _prepareAccountStatus(
+      'manualLink:${widget.spaceId}:${widget.manualId}:view',
+    );
+    if (!mounted || ref.read(currentAppUserProvider)?.uid != uid) return;
+    setState(() {
+      _preparingAccount = false;
+      _preparedAccount = account;
+    });
+  }
+
+  Future<SocialAccountStatus> _prepareAccountStatus(String flow) async {
+    try {
+      return await ref.read(socialAccountServiceProvider).prepare(flow: flow);
+    } on Object {
+      return const SocialAccountStatus(
+        SocialReadiness.publicProfileUnavailable,
+      );
+    }
+  }
+
+  void _retryAccountPreparation() {
+    setState(_clearPreparedAccount);
+  }
+
   Future<void> _ask() async {
     final l10n = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    final ownerUid =
-        ref.read(spaceProvider(widget.spaceId)).value?.ownerUid ?? '';
-    if (ownerUid.isEmpty) {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
-      return;
-    }
     setState(() => _busy = true);
     try {
+      // Es el espejo cliente de `canUseSocial()`: no se intenta nunca una
+      // escritura de solicitud hasta que token, verificación y perfil público
+      // están listos.
+      final account = await ref
+          .read(socialAccountServiceProvider)
+          .prepare(flow: 'manualLink:${widget.spaceId}:${widget.manualId}');
+      if (!mounted) return;
+      if (!account.isReady) {
+        _handleAccountNotReady(account.readiness, l10n, messenger);
+        return;
+      }
       await ref
           .read(manualLinkRepositoryProvider)
           .request(
             widget.spaceId,
             widget.manualId,
             displayName: widget.displayName,
-            // Propietario del espacio: Rules lo revalida contra el real.
-            spaceOwnerUid: ownerUid,
+            // La callable deriva UID y propietario actuales y revalida este
+            // acceso temporal antes de crear la solicitud.
             viaSessionId: widget.sessionId,
             viaTicketId: widget.ticketId,
             viaPid: widget.pid,
           );
+      if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkAskSent)));
     } on Object {
-      messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.manualLinkError)));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -414,8 +565,7 @@ class _ManualLinkRequestCardState
         ManualLinkRetryAction.claimed => switch (result.status) {
           ManualLinkPropagationStatus.active => l10n.manualLinkRetrySuccess,
           ManualLinkPropagationStatus.failed => l10n.manualLinkFailed,
-          ManualLinkPropagationStatus.processing =>
-            l10n.manualLinkRetryStarted,
+          ManualLinkPropagationStatus.processing => l10n.manualLinkRetryStarted,
         },
         ManualLinkRetryAction.active => l10n.manualLinkLinked,
         ManualLinkRetryAction.inProgress => l10n.manualLinkRetryInProgress,
@@ -430,5 +580,41 @@ class _ManualLinkRequestCardState
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _handleAccountNotReady(
+    SocialReadiness readiness,
+    AppLocalizations l10n,
+    ScaffoldMessengerState messenger,
+  ) {
+    switch (readiness) {
+      case SocialReadiness.notSignedIn:
+        _continueAuth('/login');
+        return;
+      case SocialReadiness.anonymous:
+        _continueAuth('/register');
+        return;
+      case SocialReadiness.emailNotVerified:
+        _continueAuth('/verify-email');
+        return;
+      case SocialReadiness.ready:
+        return;
+      case SocialReadiness.staleToken:
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.spaceSessionNotReady)),
+        );
+        return;
+      case SocialReadiness.publicProfileMissing ||
+          SocialReadiness.publicProfileUnavailable:
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.socialProfileNotReady)),
+        );
+        return;
+    }
+  }
+
+  void _continueAuth(String route) {
+    ref.read(pendingTicketLinkProvider.notifier).set(widget.token);
+    if (mounted) context.go(route);
   }
 }

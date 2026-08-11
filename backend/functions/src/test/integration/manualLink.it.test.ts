@@ -15,6 +15,7 @@ import {
   handleManualLinkWrite,
   propagateManualLink,
   publishManualLinkTerminal,
+  requestManualLink,
   retryManualLinkPropagation,
 } from '../../manualLink.js';
 import { recomputeSession } from '../../recompute.js';
@@ -38,6 +39,28 @@ const callRetry = (data: unknown, uid?: string) =>
     rawRequest: {} as never,
     acceptsStreaming: false,
   });
+
+const callRequest = (
+  data: unknown,
+  uid?: string,
+  token: Record<string, unknown> = {},
+) => requestManualLink.run({
+  data,
+  auth: uid
+    ? {
+      uid,
+      token: {
+        uid,
+        email_verified: true,
+        firebase: { sign_in_provider: 'password' },
+        ...token,
+      } as never,
+      rawToken: 'test-token',
+    }
+    : undefined,
+  rawRequest: {} as never,
+  acceptsStreaming: false,
+});
 
 async function expectCallableCode(
   call: Promise<unknown>,
@@ -101,6 +124,47 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     await f.doc(`profiles/${OWNER}`).set({ displayName: 'Edgar' });
   }
 
+  async function seedRequestContext({
+    uid = MARTA,
+    owner = OWNER,
+    member = false,
+    ticketRecipient = false,
+    profile = true,
+  }: {
+    uid?: string;
+    owner?: string;
+    member?: boolean;
+    ticketRecipient?: boolean;
+    profile?: boolean;
+  } = {}): Promise<void> {
+    const f = db();
+    await f.doc('spaces/sp1').set({
+      name: 'Piso', ownerUid: owner, status: 'active',
+      kind: 'group', schemaVersion: 2,
+    });
+    await f.doc('spaces/sp1/manualParticipants/m1').set({
+      manualId: 'm1', displayName: 'Marta', linkedUid: null,
+      createdByUid: owner, schemaVersion: 1,
+    });
+    if (profile) await f.doc(`profiles/${uid}`).set({ displayName: 'Marta' });
+    if (member) {
+      await f.doc(`spaces/sp1/members/${uid}`).set({ uid, role: 'member' });
+    }
+    if (!ticketRecipient) return;
+    await f.doc('ticketLinks/TOKEN').set({
+      sessionId: 's1', accountId: 'a1', ticketId: 't1',
+      targetPid: 'p2', targetManualId: 'm1', status: 'active',
+      createdByUid: 'session-creator',
+      schemaVersion: 2,
+    });
+    await f.doc(`sessions/s1/ticketAccess/t1_${uid}`).set({
+      uid, token: 'TOKEN', ticketId: 't1', pid: 'p2', manualId: 'm1',
+    });
+    await f.doc('sessions/s1/ticketParticipants/t1_p2').set({
+      ticketId: 't1', pid: 'p2', schemaVersion: 1,
+    });
+  }
+
   async function seedRetryManual(
     fields: Record<string, unknown> = {},
   ): Promise<void> {
@@ -122,6 +186,80 @@ describe('vinculación: efecto real (C1)', { skip: !emulatorAvailable() }, () =>
     const snap = await db().collection('economicEntries').get();
     return snap.docs.map((d) => ({ id: d.id, data: d.data() }));
   };
+
+  it('requestManualLink bloquea cuenta anónima, sin verificar, sin perfil y ajena',
+      async () => {
+    await seedRequestContext();
+    const input = { spaceId: 'sp1', manualId: 'm1', displayName: 'Marta' };
+    await expectCallableCode(callRequest(input), 'unauthenticated');
+    await expectCallableCode(callRequest(input, MARTA, {
+      firebase: { sign_in_provider: 'anonymous' },
+    }), 'permission-denied');
+    await expectCallableCode(callRequest(input, MARTA, {
+      email_verified: false,
+    }), 'permission-denied');
+    await clearFirestore();
+    await seedRequestContext({ profile: false });
+    await expectCallableCode(callRequest(input, MARTA), 'permission-denied');
+    await clearFirestore();
+    await seedRequestContext();
+    await expectCallableCode(callRequest(input, MARTA), 'permission-denied');
+  });
+
+  it('requestManualLink acepta miembro y deriva el owner vigente tras transferir',
+      async () => {
+    await seedRequestContext({ member: true });
+    await db().doc('spaces/sp1').update({ ownerUid: 'nuevo-owner' });
+    const result = await callRequest({
+      spaceId: 'sp1', manualId: 'm1', displayName: ' Marta ',
+    }, MARTA);
+    assert.equal(result.action, 'created');
+    const request = await db()
+      .doc(`spaces/sp1/manualLinkRequests/m1_${MARTA}`)
+      .get();
+    assert.equal(request.data()?.spaceOwnerUid, 'nuevo-owner');
+    assert.equal(request.data()?.uid, MARTA);
+    assert.equal(request.data()?.displayName, 'Marta');
+  });
+
+  it('requestManualLink acepta al destinatario, rechaza datos inyectados y no sobrescribe',
+      async () => {
+    await seedRequestContext({ ticketRecipient: true });
+    const input = {
+      spaceId: 'sp1', manualId: 'm1', displayName: 'Marta',
+      viaSessionId: 's1', viaTicketId: 't1', viaPid: 'p2',
+    };
+    assert.equal((await callRequest(input, MARTA)).action, 'created');
+    assert.equal((await callRequest(input, MARTA)).action, 'pending');
+    await expectCallableCode(callRequest({ ...input, uid: OWNER }, MARTA),
+      'invalid-argument');
+    await expectCallableCode(callRequest({ ...input, spaceOwnerUid: OWNER }, MARTA),
+      'invalid-argument');
+    const ref = db().doc(`spaces/sp1/manualLinkRequests/m1_${MARTA}`);
+    await ref.update({ status: 'rejected', attempt: 7 });
+    assert.equal((await callRequest(input, MARTA)).action, 'rejected');
+    assert.equal((await ref.get()).data()?.attempt, 7);
+    await ref.update({ status: 'accepted', actor: 'preserve' });
+    assert.equal((await callRequest(input, MARTA)).action, 'accepted');
+    assert.equal((await ref.get()).data()?.actor, 'preserve');
+  });
+
+  it('requestManualLink rechaza enlaces expirados o con expiry malformado',
+      async () => {
+    const input = {
+      spaceId: 'sp1', manualId: 'm1', displayName: 'Marta',
+      viaSessionId: 's1', viaTicketId: 't1', viaPid: 'p2',
+    };
+    await seedRequestContext({ ticketRecipient: true });
+    await db().doc('ticketLinks/TOKEN').update({
+      expiresAt: Timestamp.fromMillis(Date.now() - 1),
+    });
+    await expectCallableCode(callRequest(input, MARTA), 'permission-denied');
+    await clearFirestore();
+    await seedRequestContext({ ticketRecipient: true });
+    await db().doc('ticketLinks/TOKEN').update({ expiresAt: 'not-a-timestamp' });
+    await expectCallableCode(callRequest(input, MARTA), 'permission-denied');
+  });
 
   it('la aprobación seguida de un rename tardío aún da acceso al histórico',
       async () => {
