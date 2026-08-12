@@ -129,7 +129,11 @@ class ActivityTile extends ConsumerWidget {
             ),
             if (event.hasAmount) ...[
               const SizedBox(width: TokenSpacing.md),
-              MoneyText(Money(event.amountCents!), size: MoneySize.small),
+              MoneyText(
+                Money(event.amountCents!),
+                size: MoneySize.small,
+                currency: event.currency,
+              ),
             ],
           ],
         ),

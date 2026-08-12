@@ -3,6 +3,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salda_mobile/core/ui/money_text.dart';
 import 'package:salda_mobile/features/activity/data/activity_repository.dart';
 import 'package:salda_mobile/features/activity/domain/activity_models.dart';
 import 'package:salda_mobile/features/activity/presentation/activity_screen.dart';
@@ -253,6 +254,48 @@ void main() {
       expect(find.byType(ActivityTile), findsNWidgets(2));
       expect(find.textContaining('1.234.567,89'), findsOneWidget);
       expect(tester.takeException(), isNull); // sin overflows
+    });
+
+    testWidgets('un importe de actividad conserva su moneda USD', (
+      tester,
+    ) async {
+      final fake = FakeFirebaseFirestore();
+      await _seedEvent(
+        fake,
+        'usd-payment',
+        type: 'payment_confirmed',
+        memberUids: ['owner'],
+        summary: {'amount': 1234, 'currency': 'USD'},
+        at: DateTime(2026, 7, 19),
+      );
+      await pump(tester, firestore: fake);
+
+      final tile = find.byType(ActivityTile);
+      expect(tile, findsOneWidget);
+      expect(
+        find.descendant(
+          of: tile,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is MoneyText && widget.currency == 'USD',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: tile,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                RegExp(r'US\$|USD|\$').hasMatch(widget.data ?? ''),
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: tile, matching: find.textContaining('€')),
+        findsNothing,
+      );
     });
   });
 }

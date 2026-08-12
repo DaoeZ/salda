@@ -354,6 +354,31 @@ void main() {
     await cerrar(tester);
   });
 
+  testWidgets('fallo de invitación en Inicio conserva el aviso y lo explica', (
+    tester,
+  ) async {
+    final firestore = await conInvitacion();
+    final overflows = await pantalla(
+      tester,
+      const HomeScreen(),
+      firestore: firestore,
+      escala: 1.3,
+      spacesRepository: _RepoQueFalla(
+        firestore: firestore,
+        uid: () => 'owner',
+        isFullAccount: () => true,
+      ),
+    );
+    expect(overflows, isEmpty);
+    await tester.tap(find.widgetWithText(FilledButton, 'Unirme'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No se pudo completar'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Unirme'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Rechazar'), findsOneWidget);
+    await cerrar(tester);
+  });
+
   testWidgets('invitacion YA ACEPTADA: el aviso desaparece', (tester) async {
     final firestore = await conInvitacion();
     await firestore.doc('spaceInvites/sp1_owner').update({

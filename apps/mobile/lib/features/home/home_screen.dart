@@ -29,7 +29,10 @@ import '../spaces/presentation/space_row.dart';
 import '../spaces/presentation/space_title_text.dart';
 import '../spaces/presentation/spaces_screen.dart';
 import 'balance_hero.dart';
-import 'home_shell.dart';
+import '../profile/presentation/profile_avatar.dart';
+import '../scan/presentation/scan_flow.dart';
+import 'presentation/home_balance_preview.dart';
+import 'presentation/home_recent_preview.dart';
 
 /// Inicio: centro operativo. La jerarquía es deliberada —balance, acción,
 /// contextos, actividad— y no una sucesión de tarjetas del mismo peso.
@@ -48,8 +51,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final fullAccount =
-        ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
+    final user = ref.watch(currentAppUserProvider);
+    final fullAccount = user?.isFullAccount ?? false;
+    final guestDisplayName = user?.isAnonymous == true
+        ? ref.watch(myGuestIdentityProvider).value?.displayName
+        : null;
     // Un INVITADO con nombre PARTICIPA (ADR-034): ve sus grupos y sus
     // invitaciones igual que una cuenta. Lo que sigue siendo exclusivo de
     // una cuenta es CREAR contextos, que es lo que gobierna el FAB.
@@ -60,15 +66,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         titleSpacing: TokenLayout.screenMargin,
         title: const SaldaWordmark(),
         actions: [
-          if (fullAccount) const _ManualLinkBadge(),
           // Unirse por enlace no exige cuenta: es la puerta de entrada del
           // invitado (ADR-035), así que está siempre visible.
           IconButton(
-            tooltip: l10n.joinEntry,
-            onPressed: () => context.push('/join'),
-            icon: const Icon(Icons.add_link),
+            tooltip: l10n.accountHubTitle,
+            onPressed: () => context.push('/home/account'),
+            icon: ProfileAvatar(
+              seed: user?.uid ?? '',
+              displayName: guestDisplayName ?? user?.displayName ?? '',
+              radius: 16,
+            ),
           ),
-          HomeMenuButton(participates: participates, fullAccount: fullAccount),
           const SizedBox(width: TokenSpacing.sm),
         ],
       ),
@@ -84,13 +92,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: fullAccount
-          ? FloatingActionButton.extended(
-              onPressed: () => _showCreateContextSheet(context, ref),
-              icon: const Icon(Icons.add, size: 20),
-              label: Text(l10n.contextCreate),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddSheet(context, ref, fullAccount: fullAccount),
+        icon: const Icon(Icons.add, size: 20),
+        label: Text(l10n.homeAdd),
+      ),
     );
   }
 }
@@ -143,66 +149,215 @@ class _ContextsHome extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final spaces = ref.watch(mySpacesProvider);
-    final invites = ref.watch(mySpaceInvitesProvider).value ?? const [];
-    return spaces.when(
-      loading: () => const ScreenBody(
-        children: [BalanceHero(), SectionGap(), SkeletonList()],
-      ),
-      error: (_, _) =>
-          ScreenBody(children: [ErrorStateView(message: l10n.spacesLoadError)]),
-      data: (all) {
-        final active = all.where((space) => space.isActive).toList();
-        final relationships = active
-            .where((space) => space.isRelationship)
-            .toList();
-        final groups = active.where((space) => !space.isRelationship).toList();
-        return ScreenBody(
-          children: [
-            const BalanceHero(),
-            if (invites.isNotEmpty) ...[
-              const SectionGap(),
-              SectionHeader(title: l10n.contextInvitations),
-              SaldaCardList(
-                children: [
-                  for (final invite in invites) _HomeInviteCard(invite: invite),
-                ],
-              ),
-            ],
-            const SectionGap(),
-            if (relationships.isEmpty && groups.isEmpty)
-              EmptyState(
-                icon: Icons.groups_outlined,
-                title: l10n.homeNoSpacesTitle,
-                body: l10n.homeNoSpacesBody,
-              )
-            else ...[
-              if (relationships.isNotEmpty) ...[
-                SectionHeader(title: l10n.relationshipsTitle),
-                SaldaCardList(
-                  children: [
-                    for (final space in relationships) SpaceRow(space: space),
-                  ],
-                ),
-              ],
-              if (relationships.isNotEmpty && groups.isNotEmpty)
-                const SectionGap(),
-              if (groups.isNotEmpty) ...[
-                SectionHeader(title: l10n.groupsTitle),
-                SaldaCardList(
-                  children: [
-                    for (final space in groups) SpaceRow(space: space),
-                  ],
-                ),
-              ],
-            ],
-            const SizedBox(height: 72),
-          ],
-        );
-      },
+    return const ScreenBody(
+      children: [
+        BalanceHero(),
+        HomeBalancePreviewSection(),
+        _HomeAttention(),
+        _SpacesHomePreview(),
+        HomeRecentPreview(),
+        SizedBox(height: 72),
+      ],
     );
   }
+}
+
+class _SpacesHomePreview extends ConsumerWidget {
+  const _SpacesHomePreview();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return ref
+        .watch(mySpacesProvider)
+        .when(
+          loading: () =>
+              const Column(children: [SectionGap(), SkeletonList(rows: 3)]),
+          error: (_, _) => Column(
+            children: [
+              const SectionGap(),
+              ErrorStateView(message: l10n.spacesLoadError),
+            ],
+          ),
+          data: (all) {
+            final active = all.where((space) => space.isActive).toList()
+              ..sort((left, right) {
+                final leftAt = left.updatedAt ?? left.createdAt;
+                final rightAt = right.updatedAt ?? right.createdAt;
+                final byDate =
+                    (rightAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+                        .compareTo(
+                          leftAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+                        );
+                return byDate != 0 ? byDate : left.id.compareTo(right.id);
+              });
+            final preview = active.take(4).toList();
+            return Column(
+              children: [
+                const SectionGap(),
+                if (active.isEmpty && all.isNotEmpty)
+                  SaldaCardList(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.archive_outlined),
+                        title: Text(l10n.spacesArchivedSection(all.length)),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/home/spaces'),
+                      ),
+                    ],
+                  )
+                else if (active.isEmpty)
+                  EmptyState(
+                    icon: Icons.groups_outlined,
+                    title: l10n.homeNoSpacesTitle,
+                    body: l10n.homeNoSpacesBody,
+                  )
+                else ...[
+                  SectionHeader(
+                    title: l10n.spacesTitle,
+                    action: l10n.homeSeeAllSpaces,
+                    onAction: () => context.push('/home/spaces'),
+                  ),
+                  SaldaCardList(
+                    children: [
+                      for (final space in preview) SpaceRow(space: space),
+                    ],
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+  }
+}
+
+class _HomeAttention extends ConsumerWidget {
+  const _HomeAttention();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final invites = ref.watch(mySpaceInvitesProvider);
+    final manual = ref.watch(myPendingManualLinksProvider);
+    final inviteRows = invites.hasValue
+        ? invites.requireValue
+        : const <SpaceInvite>[];
+    final manualRows = manual.hasValue
+        ? manual.requireValue
+        : const <ManualLinkRequest>[];
+    final manualGroups = _manualGroups(manualRows);
+    if (invites.hasValue &&
+        manual.hasValue &&
+        inviteRows.isEmpty &&
+        manualRows.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (inviteRows.isEmpty && manualRows.isEmpty) {
+      if (invites.isLoading || manual.isLoading) {
+        return const Column(children: [SectionGap(), SkeletonList(rows: 1)]);
+      }
+      return Column(
+        children: [
+          const SectionGap(),
+          ErrorStateView(message: l10n.spacesLoadError),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        const SectionGap(),
+        SectionHeader(
+          title: l10n.homeAttention,
+          action: inviteRows.length + manualRows.length > 3
+              ? l10n.homeSeePending(inviteRows.length + manualRows.length)
+              : null,
+          onAction: () => _showAllAttention(context, inviteRows, manualRows),
+        ),
+        SaldaCardList(
+          children: [
+            for (final invite in inviteRows.take(3))
+              _HomeInviteCard(invite: invite),
+            for (final group in manualGroups.take(
+              inviteRows.length >= 3 ? 0 : 3 - inviteRows.length,
+            ))
+              ListTile(
+                leading: const Icon(Icons.assignment_ind_outlined),
+                title: Text(l10n.manualLinkRequestsTitle),
+                subtitle: Text(
+                  l10n.manualLinkPendingInSpace(group.requests.length),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/home/spaces/${group.spaceId}'),
+              ),
+          ],
+        ),
+        if (!invites.hasValue)
+          Padding(
+            padding: const EdgeInsets.only(top: TokenSpacing.sm),
+            child: invites.isLoading
+                ? const SkeletonList(rows: 1)
+                : ErrorStateView(message: l10n.spacesLoadError),
+          ),
+        if (!manual.hasValue)
+          Padding(
+            padding: const EdgeInsets.only(top: TokenSpacing.sm),
+            child: manual.isLoading
+                ? const SkeletonList(rows: 1)
+                : ErrorStateView(message: l10n.spacesLoadError),
+          ),
+      ],
+    );
+  }
+}
+
+Future<void> _showAllAttention(
+  BuildContext context,
+  List<SpaceInvite> invites,
+  List<ManualLinkRequest> manual,
+) => showModalBottomSheet<void>(
+  context: context,
+  builder: (sheetContext) => SafeArea(
+    child: ListView(
+      shrinkWrap: true,
+      children: [
+        for (final invite in invites) _HomeInviteCard(invite: invite),
+        for (final group in _manualGroups(manual))
+          ListTile(
+            leading: const Icon(Icons.assignment_ind_outlined),
+            title: Text(
+              AppLocalizations.of(sheetContext).manualLinkRequestsTitle,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            subtitle: Text(
+              AppLocalizations.of(
+                sheetContext,
+              ).manualLinkPendingInSpace(group.requests.length),
+            ),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              context.push('/home/spaces/${group.spaceId}');
+            },
+          ),
+      ],
+    ),
+  ),
+);
+
+({String spaceId, List<ManualLinkRequest> requests}) _manualGroup(
+  String spaceId,
+  List<ManualLinkRequest> requests,
+) => (spaceId: spaceId, requests: requests);
+
+List<({String spaceId, List<ManualLinkRequest> requests})> _manualGroups(
+  List<ManualLinkRequest> rows,
+) {
+  final grouped = <String, List<ManualLinkRequest>>{};
+  for (final row in rows) {
+    if (row.spaceId.isNotEmpty) {
+      grouped.putIfAbsent(row.spaceId, () => []).add(row);
+    }
+  }
+  final keys = grouped.keys.toList()..sort();
+  return [for (final key in keys) _manualGroup(key, grouped[key]!)];
 }
 
 class _HomeInviteCard extends ConsumerStatefulWidget {
@@ -220,6 +375,14 @@ class _HomeInviteCardState extends ConsumerState<_HomeInviteCard> {
     setState(() => busy = true);
     try {
       await action();
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).spaceActionError),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -254,7 +417,6 @@ class _HomeInviteCardState extends ConsumerState<_HomeInviteCard> {
           onPressed: busy
               ? null
               : () => resolve(() => repo.acceptInvite(widget.invite)),
-          style: FilledButton.styleFrom(minimumSize: const Size(0, 38)),
           child: Text(l10n.spaceInviteAccept),
         ),
       ],
@@ -262,39 +424,101 @@ class _HomeInviteCardState extends ConsumerState<_HomeInviteCard> {
   }
 }
 
-Future<void> _showCreateContextSheet(BuildContext context, WidgetRef ref) =>
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final l10n = AppLocalizations.of(sheetContext);
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.person_add_alt_1_outlined),
-                title: Text(l10n.relationshipCreate),
-                subtitle: Text(l10n.relationshipCreateHelp),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  context.push('/home/relationship/new');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.group_add_outlined),
-                title: Text(l10n.groupCreate),
-                subtitle: Text(l10n.groupCreateHelp),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  showCreateSpaceDialog(context, ref);
-                },
-              ),
-            ],
+Future<void> _showAddSheet(
+  BuildContext context,
+  WidgetRef ref, {
+  required bool fullAccount,
+}) => showModalBottomSheet<void>(
+  context: context,
+  showDragHandle: true,
+  builder: (sheetContext) {
+    final l10n = AppLocalizations.of(sheetContext);
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (fullAccount)
+            ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: Text(l10n.homeAddExpense),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                final spaces = ref.read(mySpacesProvider);
+                if (!spaces.hasValue) {
+                  final message = spaces.hasError
+                      ? l10n.homeSpacesUnavailable
+                      : l10n.homeSpacesLoading;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(message)));
+                  return;
+                }
+                final active = spaces.requireValue
+                    .where((space) => space.isActive)
+                    .toList();
+                if (active.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.homeNoActiveSpaces)),
+                  );
+                  return;
+                }
+                final selected = active.length == 1
+                    ? active.single
+                    : await showDialog<Space>(
+                        context: context,
+                        builder: (dialogContext) => SimpleDialog(
+                          title: Text(l10n.contextChoose),
+                          children: [
+                            for (final space in active)
+                              SimpleDialogOption(
+                                onPressed: () =>
+                                    Navigator.pop(dialogContext, space),
+                                child: SpaceTitleText(
+                                  spaceId: space.id,
+                                  storedName: space.name,
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                if (selected == null || !context.mounted) return;
+                ref
+                    .read(pendingSpaceLinkProvider.notifier)
+                    .set(selected.id, selected.name, selected.kind);
+                showScanEntrySheet(context, ref);
+              },
+            ),
+          if (fullAccount)
+            ListTile(
+              leading: const Icon(Icons.person_add_alt_1_outlined),
+              title: Text(l10n.homeAddRelationship),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                context.push('/home/relationship/new');
+              },
+            ),
+          if (fullAccount)
+            ListTile(
+              leading: const Icon(Icons.group_add_outlined),
+              title: Text(l10n.homeAddGroup),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                showCreateSpaceDialog(context, ref);
+              },
+            ),
+          ListTile(
+            leading: const Icon(Icons.add_link_outlined),
+            title: Text(l10n.homeAddJoin),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              context.push('/join');
+            },
           ),
-        );
-      },
+        ],
+      ),
     );
+  },
+);
 
 /// Aviso al INVITADO que aún no ha elegido nombre (ADR-034). Sin nombre no
 /// puede participar: es lo único que necesita, sin crear ninguna cuenta.
@@ -658,58 +882,3 @@ class _SessionsSkeleton extends StatelessWidget {
 /// Solo aparece si hay alguna: un contador a cero es ruido. La consulta es un
 /// collection group acotado por `spaceOwnerUid`, así que quien no es
 /// anfitrión no puede enumerar nada.
-class _ManualLinkBadge extends ConsumerWidget {
-  const _ManualLinkBadge();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final pending = ref.watch(myPendingManualLinksProvider).value ?? const [];
-    if (pending.isEmpty) return const SizedBox.shrink();
-
-    // Agrupadas por espacio: al anfitrión le importa dónde tiene que decidir.
-    final bySpace = <String, int>{};
-    for (final request in pending) {
-      bySpace[request.spaceId] = (bySpace[request.spaceId] ?? 0) + 1;
-    }
-    return IconButton(
-      tooltip: l10n.manualLinkRequestsTitle,
-      onPressed: () => _open(context, bySpace),
-      icon: Badge.count(
-        count: pending.length,
-        child: const Icon(Icons.person_add_alt),
-      ),
-    );
-  }
-
-  void _open(BuildContext context, Map<String, int> bySpace) {
-    final l10n = AppLocalizations.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                l10n.manualLinkRequestsTitle,
-                style: Theme.of(sheetContext).textTheme.titleMedium,
-              ),
-              subtitle: Text(l10n.manualLinkRequestHelp),
-            ),
-            for (final entry in bySpace.entries)
-              ListTile(
-                leading: const Icon(Icons.groups_outlined),
-                title: Text(l10n.manualLinkPendingInSpace(entry.value)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  context.push('/home/spaces/${entry.key}');
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}

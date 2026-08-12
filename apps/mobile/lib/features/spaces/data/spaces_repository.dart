@@ -270,9 +270,7 @@ class SpacesRepository {
           .doc(manualId)
           .delete();
 
-  ManualParticipant? _manualFrom(
-    DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
+  ManualParticipant? _manualFrom(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
     if (data == null) return null;
     return ManualParticipant(

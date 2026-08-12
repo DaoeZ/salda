@@ -145,16 +145,16 @@ class _SpaceBalance extends ConsumerWidget {
       return const Skeleton.line(width: 52, height: 15);
     }
     final scoped = overview.value!.withinSpace(spaceId);
-    var net = 0;
-    var currency = 'EUR';
+    final nets = <String, int>{};
     for (final balance in scoped.balances) {
       if (balance.signedOutstandingCents == 0) continue;
-      currency = balance.currency;
-      net += balance.debtorUid == scoped.viewerUid
+      final signed = balance.debtorUid == scoped.viewerUid
           ? -balance.outstanding.cents
           : balance.outstanding.cents;
+      nets[balance.currency] = (nets[balance.currency] ?? 0) + signed;
     }
-    if (net == 0) {
+    nets.removeWhere((_, cents) => cents == 0);
+    if (nets.isEmpty) {
       return Text(
         '—',
         style: Theme.of(
@@ -162,12 +162,26 @@ class _SpaceBalance extends ConsumerWidget {
         ).textTheme.titleSmall?.copyWith(color: c.textMuted),
       );
     }
+    if (nets.length > 1) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 132),
+        child: Text(
+          AppLocalizations.of(context).balanceMultipleCurrencies,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: c.textSecondary),
+        ),
+      );
+    }
+    final entry = nets.entries.single;
     return MoneyText(
-      Money(net),
+      Money(entry.value),
       size: MoneySize.small,
-      currency: currency,
+      currency: entry.key,
       signed: true,
-      tone: net > 0 ? MoneyTone.positive : MoneyTone.negative,
+      tone: entry.value > 0 ? MoneyTone.positive : MoneyTone.negative,
     );
   }
 }

@@ -678,10 +678,10 @@ class _ManualParticipantsState extends ConsumerState<_ManualParticipants> {
     return switch (manual.effectiveLinkStatus) {
       ManualLinkPropagationStatus.active => l10n.manualLinkLinked,
       ManualLinkPropagationStatus.processing => l10n.manualLinkProcessing,
-      ManualLinkPropagationStatus.failed => manual.linkError ==
-              'legacy-sessions-without-context'
-          ? l10n.manualLinkFailedLegacy
-          : l10n.manualLinkFailed,
+      ManualLinkPropagationStatus.failed =>
+        manual.linkError == 'legacy-sessions-without-context'
+            ? l10n.manualLinkFailedLegacy
+            : l10n.manualLinkFailed,
       null => l10n.manualParticipantHint,
     };
   }
@@ -788,8 +788,7 @@ class _ManualParticipantsState extends ConsumerState<_ManualParticipants> {
         ManualLinkRetryAction.claimed => switch (result.status) {
           ManualLinkPropagationStatus.active => l10n.manualLinkRetrySuccess,
           ManualLinkPropagationStatus.failed => l10n.manualLinkFailed,
-          ManualLinkPropagationStatus.processing =>
-            l10n.manualLinkRetryStarted,
+          ManualLinkPropagationStatus.processing => l10n.manualLinkRetryStarted,
         },
         ManualLinkRetryAction.active => l10n.manualLinkLinked,
         ManualLinkRetryAction.inProgress => l10n.manualLinkRetryInProgress,
