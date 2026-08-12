@@ -1234,6 +1234,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo guardar. Comprueba la conexión o prueba otro nombre de usuario.';
 
   @override
+  String get profileLoadError =>
+      'No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.';
+
+  @override
   String get profileBannerTitle => 'Completa tu perfil público';
 
   @override
@@ -2081,4 +2085,109 @@ class AppLocalizationsEs extends AppLocalizations {
 
     return 'Caduca el $dateString';
   }
+
+  @override
+  String get accountHubTitle => 'Cuenta';
+
+  @override
+  String get accountHubProfile => 'Perfil';
+
+  @override
+  String get accountHubPayments => 'Cobros';
+
+  @override
+  String get accountHubPreferences => 'Preferencias';
+
+  @override
+  String get accountHubData => 'Datos';
+
+  @override
+  String get accountHubAdvanced => 'Avanzado';
+
+  @override
+  String get accountHubOpenSettings => 'Abrir ajustes';
+
+  @override
+  String get personasTitle => 'Personas';
+
+  @override
+  String get personasRequests => 'Solicitudes recibidas';
+
+  @override
+  String get personasContacts => 'Tus contactos';
+
+  @override
+  String get personasSearch => 'Buscar personas';
+
+  @override
+  String get homeBalances => 'Balances';
+
+  @override
+  String get balanceMultipleCurrencies => 'Varias monedas';
+
+  @override
+  String homeSeeBalances(int count) {
+    return 'Ver mis $count balances';
+  }
+
+  @override
+  String get homeRecent => 'Recientes';
+
+  @override
+  String get homeSeeAllSpaces => 'Ver todos los espacios';
+
+  @override
+  String get homeAttention => 'Necesita tu atención';
+
+  @override
+  String homeSeePending(int count) {
+    return 'Ver las $count pendientes';
+  }
+
+  @override
+  String get homeSpacesLoading =>
+      'Estamos cargando tus espacios. Inténtalo de nuevo en un momento.';
+
+  @override
+  String get homeSpacesUnavailable =>
+      'No hemos podido cargar tus espacios. Inténtalo de nuevo.';
+
+  @override
+  String get homeNoActiveSpaces =>
+      'Crea o abre un espacio antes de añadir un gasto.';
+
+  @override
+  String get homeAdd => 'Añadir';
+
+  @override
+  String get homeAddExpense => 'Gasto o ticket';
+
+  @override
+  String get homeAddRelationship => 'Relación';
+
+  @override
+  String get homeAddGroup => 'Grupo';
+
+  @override
+  String get homeAddJoin => 'Unirme con un enlace';
+
+  @override
+  String get homeGuestEconomyTitle => 'Tu participación';
+
+  @override
+  String get homeGuestEconomyBody =>
+      'Consulta tus balances dentro de cada espacio.';
+
+  @override
+  String get routeNotFoundTitle => 'No encontramos esta pantalla';
+
+  @override
+  String get routeNotFoundBody =>
+      'Puede que el enlace haya caducado o ya no esté disponible.';
+
+  @override
+  String get routeGoHome => 'Volver a Inicio';
+
+  @override
+  String get routeBack => 'Volver';
 }

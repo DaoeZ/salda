@@ -435,6 +435,7 @@
   "profileUsernameHelp": "Único y en minúsculas: letras, números y _",
   "profileSaved": "Perfil guardado",
   "profileSaveError": "No se pudo guardar. Comprueba la conexión o prueba otro nombre de usuario.",
+  "profileLoadError": "No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.",
   "profileBannerTitle": "Completa tu perfil público",
   "profileBannerAction": "Crear perfil",
   "usernameChecking": "Comprobando disponibilidad…",
@@ -709,5 +710,41 @@
     "placeholders": {
       "date": { "type": "DateTime", "format": "yMMMd" }
     }
-  }
+  },
+  "accountHubTitle": "Cuenta",
+  "accountHubProfile": "Perfil",
+  "accountHubPayments": "Cobros",
+  "accountHubPreferences": "Preferencias",
+  "accountHubData": "Datos",
+  "accountHubAdvanced": "Avanzado",
+  "accountHubOpenSettings": "Abrir ajustes",
+  "personasTitle": "Personas",
+  "personasRequests": "Solicitudes recibidas",
+  "personasContacts": "Tus contactos",
+  "personasSearch": "Buscar personas",
+  "homeBalances": "Balances",
+  "balanceMultipleCurrencies": "Varias monedas",
+  "homeSeeBalances": "Ver mis {count} balances",
+  "@homeSeeBalances": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "homeRecent": "Recientes",
+  "homeSeeAllSpaces": "Ver todos los espacios",
+  "homeAttention": "Necesita tu atención",
+  "homeSeePending": "Ver las {count} pendientes",
+  "@homeSeePending": {"placeholders": {"count": {"type": "int"}}},
+  "homeSpacesLoading": "Estamos cargando tus espacios. Inténtalo de nuevo en un momento.",
+  "homeSpacesUnavailable": "No hemos podido cargar tus espacios. Inténtalo de nuevo.",
+  "homeNoActiveSpaces": "Crea o abre un espacio antes de añadir un gasto.",
+  "homeAdd": "Añadir",
+  "homeAddExpense": "Gasto o ticket",
+  "homeAddRelationship": "Relación",
+  "homeAddGroup": "Grupo",
+  "homeAddJoin": "Unirme con un enlace",
+  "homeGuestEconomyTitle": "Tu participación",
+  "homeGuestEconomyBody": "Consulta tus balances dentro de cada espacio.",
+  "routeNotFoundTitle": "No encontramos esta pantalla",
+  "routeNotFoundBody": "Puede que el enlace haya caducado o ya no esté disponible.",
+  "routeGoHome": "Volver a Inicio",
+  "routeBack": "Volver"
 }

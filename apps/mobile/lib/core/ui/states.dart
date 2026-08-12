@@ -72,35 +72,37 @@ class ErrorStateView extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.salda;
     final l10n = AppLocalizations.of(context);
-    return SaldaCard(
-      color: c.negativeMuted,
-      borderColor: c.negative.withValues(alpha: 0.35),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.error_outline, size: 20, color: c.negative),
-          const SizedBox(width: TokenSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(message, style: Theme.of(context).textTheme.bodyMedium),
-                if (onRetry != null) ...[
-                  const SizedBox(height: TokenSpacing.sm),
-                  TextButton(
-                    onPressed: onRetry,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 36),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    return Semantics(
+      liveRegion: true,
+      child: SaldaCard(
+        color: c.negativeMuted,
+        borderColor: c.negative.withValues(alpha: 0.35),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, size: 20, color: c.negative),
+            const SizedBox(width: TokenSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(message, style: Theme.of(context).textTheme.bodyMedium),
+                  if (onRetry != null) ...[
+                    const SizedBox(height: TokenSpacing.sm),
+                    TextButton(
+                      onPressed: onRetry,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(48, TokenLayout.minTouchTarget),
+                      ),
+                      child: Text(l10n.commonRetry),
                     ),
-                    child: Text(l10n.commonRetry),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

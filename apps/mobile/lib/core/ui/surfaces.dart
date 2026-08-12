@@ -101,34 +101,32 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.salda;
+    final titleWidget = Text(
+      title.toUpperCase(),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: c.textMuted,
+        letterSpacing: 0.8,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final actionWidget = action != null && onAction != null
+        ? TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(48, TokenLayout.minTouchTarget),
+              padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.sm),
+            ),
+            child: Text(action!),
+          )
+        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: TokenSpacing.md),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title.toUpperCase(),
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: c.textMuted,
-                letterSpacing: 0.8,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ?trailing,
-          if (action != null && onAction != null)
-            TextButton(
-              onPressed: onAction,
-              style: TextButton.styleFrom(
-                minimumSize: const Size(0, 32),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: TokenSpacing.sm,
-                ),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(action!),
-            ),
-        ],
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: TokenSpacing.sm,
+        runSpacing: TokenSpacing.xs,
+        children: [titleWidget, ?trailing, ?actionWidget],
       ),
     );
   }

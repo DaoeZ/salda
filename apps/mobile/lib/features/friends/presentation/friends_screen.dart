@@ -26,6 +26,19 @@ class FriendsScreen extends ConsumerWidget {
         body: const ScreenBody(children: [SkeletonList(rows: 5)]),
       );
     }
+    if (profile.hasError) {
+      return Scaffold(
+        appBar: AppBar(title: Text(l10n.friendsTitle)),
+        body: ScreenBody(
+          children: [
+            ErrorStateView(
+              message: l10n.profileLoadError,
+              onRetry: () => ref.invalidate(myProfileProvider),
+            ),
+          ],
+        ),
+      );
+    }
     if (profile.value == null) {
       return Scaffold(
         appBar: AppBar(title: Text(l10n.friendsTitle)),
@@ -34,75 +47,98 @@ class FriendsScreen extends ConsumerWidget {
     }
 
     final relationships = ref.watch(friendshipsProvider);
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(l10n.friendsTitle),
-          actions: [
-            IconButton(
-              tooltip: l10n.searchPeopleTitle,
-              onPressed: () => context.push('/home/people'),
-              icon: const Icon(Icons.person_search_outlined),
-            ),
-          ],
-          bottom: TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: l10n.friendsTabFriends),
-              Tab(text: l10n.friendsTabReceived),
-              Tab(text: l10n.friendsTabSent),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.personasTitle),
+        actions: [
+          IconButton(
+            tooltip: l10n.searchPeopleTitle,
+            onPressed: () => context.push('/home/people-search'),
+            icon: const Icon(Icons.person_search_outlined),
           ),
+        ],
+      ),
+      body: relationships.when(
+        loading: () => const ScreenBody(children: [SkeletonList(rows: 5)]),
+        error: (_, _) => _ErrorState(
+          onRetry: () => ref.invalidate(friendshipsProvider),
+          l10n: l10n,
         ),
-        body: relationships.when(
-          loading: () => const ScreenBody(children: [SkeletonList(rows: 5)]),
-          error: (_, _) => _ErrorState(
-            onRetry: () => ref.invalidate(friendshipsProvider),
-            l10n: l10n,
-          ),
-          data: (items) {
-            final currentUid = ref.read(currentUserIdProvider);
-            final friends = items
-                .where((item) => item.status == FriendshipStatus.friends)
-                .toList();
-            final received = items
-                .where(
-                  (item) =>
-                      item.status == FriendshipStatus.pending &&
-                      item.receiverUid == currentUid,
-                )
-                .toList();
-            final sent = items
-                .where(
-                  (item) =>
-                      item.status == FriendshipStatus.pending &&
-                      item.requesterUid == currentUid,
-                )
-                .toList();
-            return TabBarView(
-              children: [
-                _RelationshipList(
-                  items: friends,
-                  currentUid: currentUid,
-                  emptyTitle: l10n.friendsEmpty,
-                  emptyBody: l10n.friendsEmptyBody,
-                  showSearchAction: true,
+        data: (items) {
+          // Usa la misma identidad que creó el repositorio/stream. Evita que
+          // una lectura sincrónica independiente clasifique una petición
+          // entrante con un UID anterior durante una transición de cuenta.
+          final currentUid = ref.watch(currentAppUserProvider)?.uid;
+          if (currentUid == null) return const SizedBox.shrink();
+          final friends = items
+              .where((item) => item.status == FriendshipStatus.friends)
+              .toList();
+          final received = items
+              .where(
+                (item) =>
+                    item.status == FriendshipStatus.pending &&
+                    item.relationFor(currentUid) ==
+                        FriendshipRelationState.incoming,
+              )
+              .toList();
+          final sent = items
+              .where(
+                (item) =>
+                    item.status == FriendshipStatus.pending &&
+                    item.relationFor(currentUid) ==
+                        FriendshipRelationState.outgoing,
+              )
+              .toList();
+          return ScreenBody(
+            children: [
+              if (received.isNotEmpty) ...[
+                SectionHeader(title: l10n.personasRequests),
+                SaldaCardList(
+                  children: [
+                    for (final item in received)
+                      _RelationshipCard(
+                        relationship: item,
+                        currentUid: currentUid,
+                      ),
+                  ],
                 ),
-                _RelationshipList(
-                  items: received,
-                  currentUid: currentUid,
-                  emptyTitle: l10n.friendRequestsReceivedEmpty,
+                const SectionGap(),
+              ],
+              SectionHeader(title: l10n.personasContacts),
+              if (friends.isEmpty)
+                EmptyState(
+                  icon: Icons.people_outline,
+                  title: l10n.friendsEmpty,
+                  body: l10n.friendsEmptyBody,
+                  action: l10n.personasSearch,
+                  onAction: () => context.push('/home/people-search'),
+                )
+              else
+                SaldaCardList(
+                  children: [
+                    for (final item in friends)
+                      _RelationshipCard(
+                        relationship: item,
+                        currentUid: currentUid,
+                      ),
+                  ],
                 ),
-                _RelationshipList(
-                  items: sent,
-                  currentUid: currentUid,
-                  emptyTitle: l10n.friendRequestsSentEmpty,
+              if (sent.isNotEmpty) ...[
+                const SectionGap(),
+                SectionHeader(title: l10n.friendsTabSent),
+                SaldaCardList(
+                  children: [
+                    for (final item in sent)
+                      _RelationshipCard(
+                        relationship: item,
+                        currentUid: currentUid,
+                      ),
+                  ],
                 ),
               ],
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -125,54 +161,6 @@ class _ProfileRequired extends StatelessWidget {
       ),
     ],
   );
-}
-
-class _RelationshipList extends StatelessWidget {
-  const _RelationshipList({
-    required this.items,
-    required this.currentUid,
-    required this.emptyTitle,
-    this.emptyBody,
-    this.showSearchAction = false,
-  });
-
-  final List<Friendship> items;
-  final String currentUid;
-  final String emptyTitle;
-  final String? emptyBody;
-  final bool showSearchAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    if (items.isEmpty) {
-      return ScreenBody(
-        children: [
-          EmptyState(
-            icon: Icons.people_outline,
-            title: emptyTitle,
-            body: emptyBody ?? l10n.friendsEmptyBody,
-            action: showSearchAction ? l10n.searchPeopleTitle : null,
-            onAction: showSearchAction
-                ? () => context.push('/home/people')
-                : null,
-          ),
-        ],
-      );
-    }
-    // UNA superficie con las filas separadas por un pelo, en vez de una
-    // tarjeta por persona.
-    return ScreenBody(
-      children: [
-        SaldaCardList(
-          children: [
-            for (final item in items)
-              _RelationshipCard(relationship: item, currentUid: currentUid),
-          ],
-        ),
-      ],
-    );
-  }
 }
 
 class _RelationshipCard extends ConsumerStatefulWidget {

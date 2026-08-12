@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -22,12 +23,14 @@ import '../../features/sessions/presentation/session_detail_screen.dart';
 import '../../features/sessions/presentation/share_screen.dart';
 import '../../features/sessions/presentation/ticket_navigation.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/settings/presentation/account_hub_screen.dart';
 import '../../features/spaces/data/spaces_repository.dart';
 import '../../features/spaces/presentation/space_detail_screen.dart';
 import '../../features/spaces/presentation/create_relationship_screen.dart';
 import '../../features/spaces/presentation/join_space_screen.dart';
 import '../../features/spaces/presentation/space_link_screen.dart';
 import '../../features/spaces/presentation/spaces_screen.dart';
+import '../../l10n/generated/app_localizations.dart';
 
 /// Rutas ANIDADAS bajo /home: navegar con go() a cualquier destino construye
 /// la pila completa (home debajo), así SIEMPRE hay "atrás" y nunca se queda
@@ -41,6 +44,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final pendingTicketLink = ref.watch(pendingTicketLinkProvider);
   return GoRouter(
     initialLocation: '/auth-loading',
+    errorBuilder: (_, _) => const _ProductRouteError(),
     redirect: (context, state) {
       final location = state.matchedLocation;
       if (auth.isLoading) {
@@ -80,6 +84,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             location == '/home/profile' ||
             location == '/home/friends' ||
             location == '/home/people' ||
+            location == '/home/people-search' ||
+            location == '/home/personas' ||
             location.startsWith('/home/person/');
         if (isAccountOnlyRoute) return '/home';
         if (location == '/register' ||
@@ -162,12 +168,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const CreateRelationshipScreen(),
           ),
           GoRoute(path: 'profile', builder: (_, _) => const ProfileScreen()),
+          GoRoute(path: 'account', builder: (_, _) => const AccountHubScreen()),
           // Identidad del invitado: su nombre visible (ADR-034).
           GoRoute(
             path: 'guest-name',
             builder: (_, _) => const GuestNameScreen(),
           ),
           GoRoute(path: 'friends', builder: (_, _) => const FriendsScreen()),
+          GoRoute(path: 'personas', builder: (_, _) => const FriendsScreen()),
           GoRoute(path: 'activity', builder: (_, _) => const ActivityScreen()),
           GoRoute(
             path: 'economy',
@@ -183,6 +191,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: 'people',
+            builder: (_, _) => const PeopleSearchScreen(),
+          ),
+          GoRoute(
+            path: 'people-search',
             builder: (_, _) => const PeopleSearchScreen(),
           ),
           GoRoute(
@@ -260,4 +272,45 @@ String _afterAuth(String? groupToken, String? ticketToken) {
   if (ticketToken != null) return '/t/$ticketToken';
   if (groupToken != null) return '/g/$groupToken';
   return '/home';
+}
+
+/// Error de navegación de producto. Solo cubre ubicaciones que GoRouter no
+/// reconoce; no atrapa excepciones de widgets en debug.
+class _ProductRouteError extends StatelessWidget {
+  const _ProductRouteError();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.travel_explore_outlined, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                l10n.routeNotFoundTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(l10n.routeNotFoundBody, textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => context.go('/home'),
+                child: Text(l10n.routeGoHome),
+              ),
+              TextButton(
+                onPressed: () =>
+                    context.canPop() ? context.pop() : context.go('/home'),
+                child: Text(l10n.routeBack),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

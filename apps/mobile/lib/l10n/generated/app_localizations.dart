@@ -2236,6 +2236,12 @@ abstract class AppLocalizations {
   /// **'No se pudo guardar. Comprueba la conexión o prueba otro nombre de usuario.'**
   String get profileSaveError;
 
+  /// No description provided for @profileLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.'**
+  String get profileLoadError;
+
   /// No description provided for @profileBannerTitle.
   ///
   /// In es, this message translates to:
@@ -3693,6 +3699,198 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Caduca el {date}'**
   String spaceLinkExpiresOn(DateTime date);
+
+  /// No description provided for @accountHubTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuenta'**
+  String get accountHubTitle;
+
+  /// No description provided for @accountHubProfile.
+  ///
+  /// In es, this message translates to:
+  /// **'Perfil'**
+  String get accountHubProfile;
+
+  /// No description provided for @accountHubPayments.
+  ///
+  /// In es, this message translates to:
+  /// **'Cobros'**
+  String get accountHubPayments;
+
+  /// No description provided for @accountHubPreferences.
+  ///
+  /// In es, this message translates to:
+  /// **'Preferencias'**
+  String get accountHubPreferences;
+
+  /// No description provided for @accountHubData.
+  ///
+  /// In es, this message translates to:
+  /// **'Datos'**
+  String get accountHubData;
+
+  /// No description provided for @accountHubAdvanced.
+  ///
+  /// In es, this message translates to:
+  /// **'Avanzado'**
+  String get accountHubAdvanced;
+
+  /// No description provided for @accountHubOpenSettings.
+  ///
+  /// In es, this message translates to:
+  /// **'Abrir ajustes'**
+  String get accountHubOpenSettings;
+
+  /// No description provided for @personasTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Personas'**
+  String get personasTitle;
+
+  /// No description provided for @personasRequests.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitudes recibidas'**
+  String get personasRequests;
+
+  /// No description provided for @personasContacts.
+  ///
+  /// In es, this message translates to:
+  /// **'Tus contactos'**
+  String get personasContacts;
+
+  /// No description provided for @personasSearch.
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar personas'**
+  String get personasSearch;
+
+  /// No description provided for @homeBalances.
+  ///
+  /// In es, this message translates to:
+  /// **'Balances'**
+  String get homeBalances;
+
+  /// No description provided for @balanceMultipleCurrencies.
+  ///
+  /// In es, this message translates to:
+  /// **'Varias monedas'**
+  String get balanceMultipleCurrencies;
+
+  /// No description provided for @homeSeeBalances.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver mis {count} balances'**
+  String homeSeeBalances(int count);
+
+  /// No description provided for @homeRecent.
+  ///
+  /// In es, this message translates to:
+  /// **'Recientes'**
+  String get homeRecent;
+
+  /// No description provided for @homeSeeAllSpaces.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver todos los espacios'**
+  String get homeSeeAllSpaces;
+
+  /// No description provided for @homeAttention.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesita tu atención'**
+  String get homeAttention;
+
+  /// No description provided for @homeSeePending.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver las {count} pendientes'**
+  String homeSeePending(int count);
+
+  /// No description provided for @homeSpacesLoading.
+  ///
+  /// In es, this message translates to:
+  /// **'Estamos cargando tus espacios. Inténtalo de nuevo en un momento.'**
+  String get homeSpacesLoading;
+
+  /// No description provided for @homeSpacesUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido cargar tus espacios. Inténtalo de nuevo.'**
+  String get homeSpacesUnavailable;
+
+  /// No description provided for @homeNoActiveSpaces.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea o abre un espacio antes de añadir un gasto.'**
+  String get homeNoActiveSpaces;
+
+  /// No description provided for @homeAdd.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir'**
+  String get homeAdd;
+
+  /// No description provided for @homeAddExpense.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto o ticket'**
+  String get homeAddExpense;
+
+  /// No description provided for @homeAddRelationship.
+  ///
+  /// In es, this message translates to:
+  /// **'Relación'**
+  String get homeAddRelationship;
+
+  /// No description provided for @homeAddGroup.
+  ///
+  /// In es, this message translates to:
+  /// **'Grupo'**
+  String get homeAddGroup;
+
+  /// No description provided for @homeAddJoin.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirme con un enlace'**
+  String get homeAddJoin;
+
+  /// No description provided for @homeGuestEconomyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu participación'**
+  String get homeGuestEconomyTitle;
+
+  /// No description provided for @homeGuestEconomyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Consulta tus balances dentro de cada espacio.'**
+  String get homeGuestEconomyBody;
+
+  /// No description provided for @routeNotFoundTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'No encontramos esta pantalla'**
+  String get routeNotFoundTitle;
+
+  /// No description provided for @routeNotFoundBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Puede que el enlace haya caducado o ya no esté disponible.'**
+  String get routeNotFoundBody;
+
+  /// No description provided for @routeGoHome.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver a Inicio'**
+  String get routeGoHome;
+
+  /// No description provided for @routeBack.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver'**
+  String get routeBack;
 }
 
 class _AppLocalizationsDelegate

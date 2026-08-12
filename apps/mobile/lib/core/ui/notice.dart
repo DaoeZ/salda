@@ -41,7 +41,7 @@ class Notice extends StatelessWidget {
       onPressed: onAction,
       style: TextButton.styleFrom(
         foregroundColor: fg,
-        minimumSize: const Size(0, 36),
+        minimumSize: const Size(48, TokenLayout.minTouchTarget),
         padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.md),
       ),
       child: Text(actionLabel),

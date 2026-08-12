@@ -565,7 +565,10 @@ class SaldaColors extends ThemeExtension<SaldaColors> {
         TokenColors.textSecondaryLight,
         TokenColors.textSecondaryDark,
       ),
-      textMuted: pick(TokenColors.textMutedLight, TokenColors.textMutedDark),
+      // El token claro original no alcanzaba contraste AA sobre blanco para
+      // texto pequeño. Se ajusta en el rol semántico de la app sin alterar la
+      // marca compartida ni la paleta oscura.
+      textMuted: Color(dark ? TokenColors.textMutedDark : 0xFF59645F),
       primary: pick(TokenColors.primaryLight, TokenColors.primaryDark),
       onPrimary: pick(TokenColors.onPrimaryLight, TokenColors.onPrimaryDark),
       primaryMuted: pick(
