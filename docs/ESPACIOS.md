@@ -210,8 +210,16 @@ Decisiones clave:
   P5 permite consultar y liquidar una deuda ya originada porque el pago es
   bilateral y no muta el espacio; no se pueden crear tickets nuevos mientras
   el espacio permanezca archivado.
-- **Sin administradores**: solo propietario y miembro. No hay necesidad real
-  todavía (lista negra de sobre-ingeniería de la Biblia).
+- **Administradores (ADR-038)**: `members/{uid}.role: 'admin'|'member'`, ausente
+  = miembro. Apareció con una necesidad real —un cobro dirigido a alguien SIN
+  cuenta no lo podía confirmar nadie más que el propietario—, no por simetría
+  con otros productos. El propietario sigue siendo ÚNICO y sigue viviendo en
+  `ownerUid`: `role` es una delegación, no un segundo dueño, así que la
+  transferencia sigue siendo la escritura atómica de UN documento. Solo el
+  propietario lo concede o lo retira, nadie nace administrador, y un INVITADO no
+  puede serlo (ADR-034: no tiene cuenta con la que administrar). Ser
+  administrador **no** da acceso al saldo de una cuenta ajena; el detalle está
+  en `docs/RELACIONES_ECONOMICAS.md`.
 
 ## Participantes manuales (ADR-033)
 
