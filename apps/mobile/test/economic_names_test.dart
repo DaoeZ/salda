@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/core/theme/app_theme.dart';
+import 'package:salda_mobile/features/auth/data/auth_repository.dart';
+import 'package:salda_mobile/features/auth/data/guest_identity_repository.dart';
 import 'package:salda_mobile/features/economy/application/identity_names.dart';
 import 'package:salda_mobile/features/economy/presentation/economic_overview_screen.dart';
 import 'package:salda_mobile/features/economy/presentation/economic_relation_screen.dart';
@@ -95,12 +97,31 @@ void main() {
     });
   }
 
-  Future<ProviderContainer> pump(WidgetTester tester, String spaceId) async {
+  Future<ProviderContainer> pump(
+    WidgetTester tester,
+    String spaceId, {
+    String viewerUid = yo,
+    AppUser? user,
+  }) async {
     tester.view.physicalSize = const Size(430, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
-      overrides: loggedInOverrides(firestore: firestore),
+      overrides:
+          loggedInOverrides(
+            firestore: firestore,
+            uid: viewerUid,
+            authRepository: FakeAuthRepository(
+              user: user ?? AppUser(uid: viewerUid),
+            ),
+          )..add(
+            guestIdentityRepositoryProvider.overrideWithValue(
+              GuestIdentityRepository(
+                firestore: firestore,
+                uid: () => viewerUid,
+              ),
+            ),
+          ),
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -207,6 +228,62 @@ void main() {
     await obligacion(id: 'e1', spaceId: 'rel3', debtor: 'manual:m1');
     await pump(tester, 'rel3');
     expect(find.textContaining('Pablo 🎸'), findsOneWidget);
+    await cerrar(tester);
+  });
+
+  testWidgets('invitado resuelve el manual autorizado desde economía legible', (
+    tester,
+  ) async {
+    await espacio('guest-space', kind: 'group', manuales: {'m1': 'Pablo'});
+    await firestore.doc('spaces/guest-space/members/guest').set({
+      'uid': 'guest',
+      'kind': 'guest',
+      'displayName': 'Invitada',
+    });
+    await firestore.doc('economicEntries/guest-entry').set({
+      'spaceId': 'guest-space',
+      'debtorUid': 'guest',
+      'creditorUid': 'manual:m1',
+      'amount': 1500,
+      'currency': 'EUR',
+      'memberUids': ['guest'],
+      'sessionId': 's1',
+      'accountId': 'a1',
+      'ticketId': 't1',
+      'ticketName': 'Cena',
+    });
+    await pump(
+      tester,
+      'guest-space',
+      viewerUid: 'guest',
+      user: const AppUser(uid: 'guest', isAnonymous: true),
+    );
+    expect(find.textContaining('Pablo'), findsOneWidget);
+    sinIdentificador();
+    await cerrar(tester);
+  });
+
+  testWidgets('cuenta resuelve el nombre de un invitado, no su UID', (
+    tester,
+  ) async {
+    await espacio('guest-name', kind: 'group', cuentas: ['guest']);
+    await firestore.doc('spaces/guest-name/members/guest').set({
+      'uid': 'guest',
+      'kind': 'guest',
+      'displayName': 'Inés',
+    });
+    await firestore.doc('guestIdentities/guest').set({'displayName': 'Inés'});
+    await ticket('guest-name');
+    await obligacion(
+      id: 'guest-name-entry',
+      spaceId: 'guest-name',
+      debtor: 'guest',
+    );
+
+    await pump(tester, 'guest-name');
+
+    expect(find.textContaining('Inés'), findsOneWidget);
+    expect(find.textContaining('guest'), findsNothing);
     await cerrar(tester);
   });
 

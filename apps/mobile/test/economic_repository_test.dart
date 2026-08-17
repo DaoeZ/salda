@@ -1,15 +1,20 @@
 import 'package:domain/domain.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salda_mobile/features/auth/data/auth_repository.dart';
 import 'package:salda_mobile/features/economy/data/economic_repository.dart';
 import 'package:salda_mobile/features/economy/domain/economic_models.dart';
+
+import 'fakes.dart';
 
 class _FakeFunctions implements EconomicFunctionsGateway {
   final created = <Map<String, Object>>[];
   final resolved = <Map<String, Object>>[];
+  var rebuilds = 0;
 
   @override
-  Future<void> rebuildMyRelations() async {}
+  Future<void> rebuildMyRelations() async => rebuilds++;
 
   @override
   Future<void> createPayment(Map<String, Object> data) async =>
@@ -76,6 +81,22 @@ void main() {
     expect(overview.summaries.single.owedToMe, Money(600));
   });
 
+  test('la proyección participante de cuenta conserva el warmup', () async {
+    final container = ProviderContainer(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(
+          FakeAuthRepository(user: const AppUser(uid: 'edgar')),
+        ),
+        economicRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(participantEconomicOverviewProvider);
+    await container.read(economicProjectionWarmupProvider.future);
+    expect(functions.rebuilds, 1);
+  });
+
   test('marca pago parcial con idempotencia y céntimos enteros', () async {
     await repository.markPaid(
       receiverUid: 'alba',
@@ -133,6 +154,58 @@ void main() {
       );
       expect(guest.watchEntries, throwsA(isA<EconomicFailure>()));
       expect(functions.created, isEmpty);
+    },
+  );
+
+  test(
+    'lectura participativa permite invitado y puede limitarse a un espacio',
+    () async {
+      await firestore.doc('economicEntries/e1').set({
+        'memberUids': ['guest', 'alba'],
+        'debtorUid': 'alba',
+        'creditorUid': 'guest',
+        'amount': 1000,
+        'currency': 'EUR',
+        'sessionId': 's1',
+        'accountId': 'a1',
+        'ticketId': 't1',
+        'ticketName': 'Cena',
+        'spaceId': 'space-a',
+      });
+      await firestore.doc('economicEntries/e2').set({
+        'memberUids': ['guest', 'alba'],
+        'debtorUid': 'guest',
+        'creditorUid': 'alba',
+        'amount': 500,
+        'currency': 'USD',
+        'sessionId': 's2',
+        'accountId': 'a2',
+        'ticketId': 't2',
+        'ticketName': 'Taxi',
+        'spaceId': 'space-b',
+      });
+      final guest = EconomicRepository(
+        firestore: firestore,
+        functions: functions,
+        uid: () => 'guest',
+        isFullAccount: () => false,
+      );
+
+      final readable = await guest.watchReadableEntries().first;
+      expect(readable, hasLength(2));
+      expect(
+        EconomicOverview.compute(
+          viewerUid: 'guest',
+          entries: readable,
+          payments: const [],
+        ).withinSpace('space-a').entries.single.ticketId,
+        't1',
+      );
+      expect(guest.watchEntries, throwsA(isA<EconomicFailure>()));
+      await expectLater(
+        guest.markPaid(receiverUid: 'alba', amount: Money(1), currency: 'EUR'),
+        throwsA(isA<EconomicFailure>()),
+      );
     },
   );
 }

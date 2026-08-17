@@ -2,6 +2,7 @@ import 'package:domain/domain.dart' show isManualActor, manualIdOf;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../profile/data/profile_repository.dart';
+import '../../auth/data/guest_identity_repository.dart';
 import '../../spaces/data/spaces_repository.dart';
 import '../data/economic_repository.dart';
 
@@ -38,7 +39,7 @@ class EconomicName {
 /// implicados en las obligaciones y se construye el mapa completo, de modo
 /// que ninguna pantalla tenga que interpretar un identificador.
 final economicNamesProvider = Provider.autoDispose<Map<String, String>>((ref) {
-  final overview = ref.watch(economicOverviewProvider).value;
+  final overview = ref.watch(participantEconomicOverviewProvider).value;
   if (overview == null) return const {};
 
   // Espacios que aparecen en alguna obligación: son los únicos que pueden
@@ -76,7 +77,7 @@ final economicNameProvider = Provider.autoDispose.family<EconomicName, String>((
     if (nombre != null) return EconomicName(EconomicNameSource.person, nombre);
     // Sin nombre conocido todavía: puede estar cargando el espacio. Se
     // distingue de «no tiene nombre» para no parpadear un rótulo genérico.
-    final overview = ref.watch(economicOverviewProvider);
+    final overview = ref.watch(participantEconomicOverviewProvider);
     if (overview.isLoading) {
       return const EconomicName(EconomicNameSource.loading);
     }
@@ -85,11 +86,9 @@ final economicNameProvider = Provider.autoDispose.family<EconomicName, String>((
     return const EconomicName(EconomicNameSource.unnamed);
   }
 
-  // CUENTA o INVITADO: perfil público.
+  // Cuenta o invitado: un invitado no tiene perfil público, pero sí una
+  // identidad de invitado autorizada para el resto de miembros del espacio.
   final profile = ref.watch(publicProfileProvider(actor));
-  if (profile.isLoading && !profile.hasValue) {
-    return const EconomicName(EconomicNameSource.loading);
-  }
   final value = profile.value;
   final displayName = (value?.displayName ?? '').trim();
   if (displayName.isNotEmpty) {
@@ -98,6 +97,15 @@ final economicNameProvider = Provider.autoDispose.family<EconomicName, String>((
   final username = (value?.username ?? '').trim();
   if (username.isNotEmpty) {
     return EconomicName(EconomicNameSource.person, '@$username');
+  }
+  final guest = ref.watch(guestIdentityProvider(actor));
+  final guestName = (guest.value?.displayName ?? '').trim();
+  if (guestName.isNotEmpty) {
+    return EconomicName(EconomicNameSource.person, guestName);
+  }
+  if ((profile.isLoading && !profile.hasValue) ||
+      (guest.isLoading && !guest.hasValue)) {
+    return const EconomicName(EconomicNameSource.loading);
   }
   return const EconomicName(EconomicNameSource.unnamed);
 });

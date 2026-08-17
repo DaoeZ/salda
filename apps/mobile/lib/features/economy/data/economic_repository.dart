@@ -76,6 +76,16 @@ class EconomicRepository {
         .map((snapshot) => [for (final doc in snapshot.docs) _entry(doc)]);
   }
 
+  /// Lectura económica sin acciones, permitida a toda identidad que pueda
+  /// participar en el contexto. Las Rules siguen siendo la autoridad: la
+  /// consulta conserva `memberUids arrayContains uid` y no abre ninguna
+  /// mutación ni materialización global.
+  Stream<List<EconomicEntryView>> watchReadableEntries() => firestore
+      .collection('economicEntries')
+      .where('memberUids', arrayContains: uid())
+      .snapshots()
+      .map((snapshot) => [for (final doc in snapshot.docs) _entry(doc)]);
+
   Stream<List<EconomicPaymentView>> watchPayments() {
     _requireAccount();
     return firestore
@@ -89,6 +99,22 @@ class EconomicRepository {
           );
           return payments;
         });
+  }
+
+  Stream<List<EconomicPaymentView>> watchReadablePayments() => firestore
+      .collection('economicPayments')
+      .where('memberUids', arrayContains: uid())
+      .snapshots()
+      .map(_sortedPayments);
+
+  List<EconomicPaymentView> _sortedPayments(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final payments = [for (final doc in snapshot.docs) _payment(doc)];
+    payments.sort(
+      (a, b) => _millis(b.createdAt).compareTo(_millis(a.createdAt)),
+    );
+    return payments;
   }
 
   Future<void> rebuildMyRelations() async {
@@ -250,6 +276,63 @@ final economicPaymentsProvider =
       return ref.watch(economicRepositoryProvider).watchPayments();
     });
 
+/// Proyección únicamente de lectura para cuentas e invitados operativos.
+/// No depende de [economicProjectionWarmupProvider], que sigue siendo un
+/// contrato exclusivo de la vista económica de cuentas completas.
+final readableEconomicEntriesProvider =
+    StreamProvider.autoDispose<List<EconomicEntryView>>((ref) {
+      final user = ref.watch(currentAppUserProvider);
+      if (user == null) return Stream.value(const []);
+      return ref.watch(economicRepositoryProvider).watchReadableEntries();
+    });
+
+final readableEconomicPaymentsProvider =
+    StreamProvider.autoDispose<List<EconomicPaymentView>>((ref) {
+      final user = ref.watch(currentAppUserProvider);
+      if (user == null) return Stream.value(const []);
+      return ref.watch(economicRepositoryProvider).watchReadablePayments();
+    });
+
+final readableEconomicOverviewProvider =
+    Provider.autoDispose<AsyncValue<EconomicOverview>>((ref) {
+      final user = ref.watch(currentAppUserProvider);
+      final entries = ref.watch(readableEconomicEntriesProvider);
+      final payments = ref.watch(readableEconomicPaymentsProvider);
+      if (user == null) {
+        return const AsyncData(
+          EconomicOverview(
+            viewerUid: '',
+            entries: [],
+            payments: [],
+            balances: [],
+          ),
+        );
+      }
+      if (entries.hasError) {
+        return AsyncError(entries.error!, entries.stackTrace!);
+      }
+      if (payments.hasError) {
+        return AsyncError(payments.error!, payments.stackTrace!);
+      }
+      if (entries.isLoading || payments.isLoading) return const AsyncLoading();
+      return AsyncData(
+        EconomicOverview.compute(
+          viewerUid: user.uid,
+          entries: entries.value ?? const [],
+          payments: payments.value ?? const [],
+        ),
+      );
+    });
+
+/// Proyección de solo lectura limitada a un espacio. Es apta para las filas
+/// de Inicio y para invitados; nunca activa la reconstrucción global.
+final spaceEconomicOverviewProvider = Provider.autoDispose
+    .family<AsyncValue<EconomicOverview>, String>(
+      (ref, spaceId) => ref
+          .watch(readableEconomicOverviewProvider)
+          .whenData((overview) => overview.withinSpace(spaceId)),
+    );
+
 /// Materializa una sola vez las sesiones históricas accesibles por la cuenta.
 /// La marca autoritativa vive en `users/{uid}` y hace idempotentes las aperturas
 /// posteriores de la pantalla económica.
@@ -295,3 +378,35 @@ final economicOverviewProvider =
         ),
       );
     });
+
+/// Proyección adecuada a quien participa: las cuentas conservan su contrato
+/// existente (incluida la materialización autorizada); los invitados leen la
+/// misma economía ya autorizada por Rules, sin poder activar ni mutar nada.
+final participantEconomicOverviewProvider =
+    Provider.autoDispose<AsyncValue<EconomicOverview>>((ref) {
+      final user = ref.watch(currentAppUserProvider);
+      return user?.isFullAccount == true
+          ? ref.watch(economicOverviewProvider)
+          : ref.watch(readableEconomicOverviewProvider);
+    });
+
+/// Reintenta las fuentes reales de la proyección que corresponde al rol, no
+/// solo su envoltorio derivado. Las mutaciones siguen fuera de este camino.
+/// This is deliberately a [WidgetRef].  A provider [Ref] is not the ref a
+/// retry button owns in Riverpod 3, and accepting it here made the UI retry
+/// path fail to compile.  Keeping the invalidation at the caller boundary
+/// still refreshes the role-specific source streams rather than masking the
+/// error by invalidating only this derived provider.
+void retryParticipantEconomicOverview(WidgetRef ref) {
+  final isFullAccount =
+      ref.read(currentAppUserProvider)?.isFullAccount ?? false;
+  if (isFullAccount) {
+    ref.invalidate(economicProjectionWarmupProvider);
+    ref.invalidate(economicEntriesProvider);
+    ref.invalidate(economicPaymentsProvider);
+  } else {
+    ref.invalidate(readableEconomicEntriesProvider);
+    ref.invalidate(readableEconomicPaymentsProvider);
+  }
+  ref.invalidate(participantEconomicOverviewProvider);
+}

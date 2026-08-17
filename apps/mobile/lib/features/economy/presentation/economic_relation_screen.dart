@@ -9,6 +9,7 @@ import '../../../core/ui/badges.dart';
 import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../sessions/presentation/ticket_navigation.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import 'economic_names.dart';
@@ -25,7 +26,8 @@ class EconomicRelationScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final name = economicNameText(ref, l10n, otherUid);
-    final overview = ref.watch(economicOverviewProvider);
+    final overview = ref.watch(participantEconomicOverviewProvider);
+    final canMutate = ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -37,10 +39,19 @@ class EconomicRelationScreen extends ConsumerWidget {
       body: overview.when(
         loading: () => const ScreenBody(children: [SkeletonList(rows: 4)]),
         error: (_, _) => ScreenBody(
-          children: [ErrorStateView(message: l10n.economyLoadError)],
+          children: [
+            ErrorStateView(
+              message: l10n.economyLoadError,
+              onRetry: () => retryParticipantEconomicOverview(ref),
+            ),
+          ],
         ),
-        data: (data) =>
-            _RelationBody(overview: data, otherUid: otherUid, otherName: name),
+        data: (data) => _RelationBody(
+          overview: data,
+          otherUid: otherUid,
+          otherName: name,
+          canMutate: canMutate,
+        ),
       ),
     );
   }
@@ -51,11 +62,13 @@ class _RelationBody extends ConsumerWidget {
     required this.overview,
     required this.otherUid,
     required this.otherName,
+    required this.canMutate,
   });
 
   final EconomicOverview overview;
   final String otherUid;
   final String otherName;
+  final bool canMutate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -105,6 +118,7 @@ class _RelationBody extends ConsumerWidget {
             viewerUid: overview.viewerUid,
             otherUid: otherUid,
             otherName: otherName,
+            canMutate: canMutate,
           ),
         const SectionGap(),
         SectionHeader(title: l10n.economyTicketsTitle),
@@ -137,7 +151,11 @@ class _RelationBody extends ConsumerWidget {
           SaldaCardList(
             children: [
               for (final payment in payments)
-                _PaymentTile(payment: payment, viewerUid: overview.viewerUid),
+                _PaymentTile(
+                  payment: payment,
+                  viewerUid: overview.viewerUid,
+                  canMutate: canMutate,
+                ),
             ],
           ),
       ],
@@ -151,12 +169,14 @@ class _BalanceCard extends ConsumerStatefulWidget {
     required this.viewerUid,
     required this.otherUid,
     required this.otherName,
+    required this.canMutate,
   });
 
   final BilateralEconomicBalance balance;
   final String viewerUid;
   final String otherUid;
   final String otherName;
+  final bool canMutate;
 
   @override
   ConsumerState<_BalanceCard> createState() => _BalanceCardState();
@@ -227,7 +247,7 @@ class _BalanceCardState extends ConsumerState<_BalanceCard> {
               context,
             ).textTheme.bodySmall?.copyWith(color: c.textMuted),
           ),
-          if (iOwe && balance.outstanding.cents > 0) ...[
+          if (widget.canMutate && iOwe && balance.outstanding.cents > 0) ...[
             const SizedBox(height: TokenSpacing.lg),
             SizedBox(
               width: double.infinity,
@@ -359,10 +379,15 @@ class _EntryTile extends StatelessWidget {
 }
 
 class _PaymentTile extends ConsumerStatefulWidget {
-  const _PaymentTile({required this.payment, required this.viewerUid});
+  const _PaymentTile({
+    required this.payment,
+    required this.viewerUid,
+    required this.canMutate,
+  });
 
   final EconomicPaymentView payment;
   final String viewerUid;
+  final bool canMutate;
 
   @override
   ConsumerState<_PaymentTile> createState() => _PaymentTileState();
@@ -381,10 +406,12 @@ class _PaymentTileState extends ConsumerState<_PaymentTile> {
       EconomicPaymentStatus.cancelled => l10n.economyPaymentCancelled,
     };
     final canConfirm =
+        widget.canMutate &&
         payment.source == 'user' &&
         payment.status == EconomicPaymentStatus.pending &&
         payment.receiverUid == widget.viewerUid;
     final canCancel =
+        widget.canMutate &&
         payment.source == 'user' &&
         payment.status == EconomicPaymentStatus.pending &&
         payment.payerUid == widget.viewerUid;

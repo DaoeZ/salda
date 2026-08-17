@@ -11,6 +11,7 @@ import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../auth/data/auth_repository.dart';
 import '../application/identity_names.dart';
 import 'economic_names.dart';
 import '../data/economic_repository.dart';
@@ -22,18 +23,18 @@ class EconomicOverviewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final overview = ref.watch(economicOverviewProvider);
+    final overview = ref.watch(participantEconomicOverviewProvider);
+    final canMutate = ref.watch(currentAppUserProvider)?.isFullAccount ?? false;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.economyTitle)),
       body: overview.when(
         loading: () => const _EconomicSkeleton(),
         error: (_, _) => _EconomicError(
           onRetry: () {
-            ref.invalidate(economicEntriesProvider);
-            ref.invalidate(economicPaymentsProvider);
+            retryParticipantEconomicOverview(ref);
           },
         ),
-        data: (data) => _OverviewBody(overview: data),
+        data: (data) => _OverviewBody(overview: data, canMutate: canMutate),
       ),
     );
   }
@@ -47,7 +48,7 @@ class EconomicHomeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final overview = ref.watch(economicOverviewProvider);
+    final overview = ref.watch(participantEconomicOverviewProvider);
     return overview.maybeWhen(
       data: (data) {
         if (data.summaries.isEmpty) return const SizedBox.shrink();
@@ -86,9 +87,10 @@ class EconomicHomeCard extends ConsumerWidget {
 }
 
 class _OverviewBody extends StatelessWidget {
-  const _OverviewBody({required this.overview});
+  const _OverviewBody({required this.overview, required this.canMutate});
 
   final EconomicOverview overview;
+  final bool canMutate;
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +124,7 @@ class _OverviewBody extends StatelessWidget {
           SaldaCardList(
             children: [
               for (final payment in pendingToMe)
-                _PendingConfirmation(payment: payment),
+                _PendingConfirmation(payment: payment, canMutate: canMutate),
             ],
           ),
         ],
@@ -236,9 +238,10 @@ class _RelationshipTile extends ConsumerWidget {
 }
 
 class _PendingConfirmation extends ConsumerStatefulWidget {
-  const _PendingConfirmation({required this.payment});
+  const _PendingConfirmation({required this.payment, required this.canMutate});
 
   final EconomicPaymentView payment;
+  final bool canMutate;
 
   @override
   ConsumerState<_PendingConfirmation> createState() =>
@@ -252,50 +255,71 @@ class _PendingConfirmationState extends ConsumerState<_PendingConfirmation> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final name = economicNameText(ref, l10n, widget.payment.payerUid);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(TokenSpacing.md),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(
-                    formatCurrencyMoney(
-                      widget.payment.amount,
-                      widget.payment.currency,
-                    ),
-                  ),
-                ],
+    return Padding(
+      padding: const EdgeInsets.all(TokenSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text(
+            formatCurrencyMoney(widget.payment.amount, widget.payment.currency),
+          ),
+          if (widget.canMutate) ...[
+            const SizedBox(height: TokenSpacing.sm),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonal(
+                onPressed: busy ? null : _confirm,
+                child: busy
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(l10n.economyConfirmPayment),
               ),
             ),
-            FilledButton.tonal(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      setState(() => busy = true);
-                      try {
-                        await ref
-                            .read(economicRepositoryProvider)
-                            .confirmPayment(widget.payment.id);
-                      } finally {
-                        if (mounted) setState(() => busy = false);
-                      }
-                    },
-              child: busy
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(l10n.economyConfirmPayment),
-            ),
           ],
-        ),
+        ],
       ),
     );
   }
+
+  Future<void> _confirm() async {
+    if (busy) {
+      return;
+    }
+    setState(() => busy = true);
+    final l10n = AppLocalizations.of(context);
+    try {
+      await ref
+          .read(economicRepositoryProvider)
+          .confirmPayment(widget.payment.id);
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_paymentErrorText(l10n, error))));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
+}
+
+String _paymentErrorText(AppLocalizations l10n, Object error) {
+  if (error is! EconomicFailure) return l10n.economyPaymentErrorUnexpected;
+  return switch (error.code) {
+    EconomicFailureCode.exceedsBalance ||
+    EconomicFailureCode.invalidAmount => l10n.economyPaymentErrorOver,
+    EconomicFailureCode.notAllowed ||
+    EconomicFailureCode.accountRequired => l10n.economyPaymentErrorPermission,
+    EconomicFailureCode.network ||
+    EconomicFailureCode.serviceUnavailable => l10n.economyPaymentErrorNetwork,
+    EconomicFailureCode.alreadyResolved ||
+    EconomicFailureCode.unexpected => l10n.economyPaymentErrorUnexpected,
+  };
 }
 
 class _EmptyEconomy extends StatelessWidget {

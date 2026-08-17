@@ -37,7 +37,7 @@ class SpaceEconomicSummary extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final overview = ref.watch(economicOverviewProvider);
+    final overview = ref.watch(participantEconomicOverviewProvider);
     final tickets = ref.watch(spaceTicketsProvider(spaceId));
 
     Widget cuerpo() {
