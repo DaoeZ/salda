@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
@@ -90,6 +92,64 @@ void main() {
       expect(spaces.map((s) => s.id), [id1]);
       expect(spaces.single.name, 'Piso');
     });
+
+    test('watchMySpaces.first emite y cancela sin bloquear', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+
+      final spaces = await repo.watchMySpaces().first.timeout(
+        const Duration(seconds: 2),
+      );
+
+      expect(spaces.map((space) => space.id), [id]);
+    });
+
+    test(
+      'watchMySpaces reemite cambios vivos de padre y ordena membresías',
+      () async {
+        final repo = repoFor('uid-a');
+        await firestore.doc('spaces/first').set({
+          'name': 'Primero',
+          'ownerUid': 'uid-a',
+          'status': 'active',
+          'createdAt': DateTime(2026, 1, 1),
+          'updatedAt': DateTime(2026, 1, 1),
+        });
+        await firestore.doc('spaces/first/members/uid-a').set({'uid': 'uid-a'});
+        await firestore.doc('spaces/second').set({
+          'name': 'Segundo',
+          'ownerUid': 'uid-a',
+          'status': 'active',
+          'createdAt': DateTime(2026, 2, 1),
+          'updatedAt': DateTime(2026, 2, 1),
+        });
+        await firestore.doc('spaces/second/members/uid-a').set({
+          'uid': 'uid-a',
+        });
+        final iterator = StreamIterator(repo.watchMySpaces());
+        addTearDown(iterator.cancel);
+
+        Future<List<Space>> nextWithCount(int count) async {
+          while (await iterator.moveNext()) {
+            if (iterator.current.length == count) return iterator.current;
+          }
+          throw StateError('El stream terminó antes de emitir $count espacios');
+        }
+
+        final initial = await nextWithCount(2);
+        expect(initial.map((space) => space.id), ['second', 'first']);
+
+        await firestore.doc('spaces/first').update({
+          'name': 'Renombrado',
+          'status': 'archived',
+          'updatedAt': DateTime(2026, 3, 1),
+        });
+        final changed = await nextWithCount(2);
+        expect(changed.map((space) => space.id), ['first', 'second']);
+        expect(changed.first.name, 'Renombrado');
+        expect(changed.first.status, SpaceStatus.archived);
+      },
+    );
 
     test('archivar y reactivar', () async {
       final repo = repoFor('uid-a');
@@ -384,6 +444,42 @@ void main() {
       expect(tickets.single.merchantName, 'Casa Paco');
       expect(tickets.single.grandTotalCents, 1200);
       expect(tickets.single.sessionId, 's1');
+    });
+
+    test('tickets se ordenan por creación, fecha heredada y ruta', () async {
+      final repo = repoFor('uid-a');
+      for (final ticket in [
+        (
+          'sessions/s1/accounts/a/tickets/old',
+          DateTime(2026, 1, 1),
+          '2026-06-01',
+        ),
+        (
+          'sessions/s1/accounts/a/tickets/new',
+          DateTime(2026, 3, 1),
+          '2020-01-01',
+        ),
+        ('sessions/s1/accounts/a/tickets/date', null, '2026-02-01'),
+        ('sessions/s1/accounts/a/tickets/path-a', null, null),
+        ('sessions/s1/accounts/a/tickets/path-z', null, null),
+      ]) {
+        await firestore.doc(ticket.$1).set({
+          'spaceId': 'sp1',
+          'grandTotal': 100,
+          'merchant': {'name': ticket.$1},
+          if (ticket.$2 != null) 'createdAt': ticket.$2,
+          if (ticket.$3 != null) 'date': ticket.$3,
+        });
+      }
+
+      final tickets = await repo.watchSpaceTickets('sp1').first;
+      expect(tickets.map((ticket) => ticket.id), [
+        'new',
+        'old',
+        'date',
+        'path-z',
+        'path-a',
+      ]);
     });
 
     test(

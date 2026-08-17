@@ -3868,6 +3868,18 @@ abstract class AppLocalizations {
   /// **'Consulta tus balances dentro de cada espacio.'**
   String get homeGuestEconomyBody;
 
+  /// No description provided for @homeSearchSpaces.
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar espacios'**
+  String get homeSearchSpaces;
+
+  /// No description provided for @homeNoSearchResults.
+  ///
+  /// In es, this message translates to:
+  /// **'No hay espacios que coincidan con la búsqueda.'**
+  String get homeNoSearchResults;
+
   /// No description provided for @routeNotFoundTitle.
   ///
   /// In es, this message translates to:
@@ -3891,6 +3903,126 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Volver'**
   String get routeBack;
+
+  /// No description provided for @spaceManageTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Gestionar'**
+  String get spaceManageTitle;
+
+  /// No description provided for @spaceManageGroupTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Gestionar grupo'**
+  String get spaceManageGroupTitle;
+
+  /// No description provided for @spaceManagePeople.
+  ///
+  /// In es, this message translates to:
+  /// **'Personas'**
+  String get spaceManagePeople;
+
+  /// No description provided for @spaceManagePermissions.
+  ///
+  /// In es, this message translates to:
+  /// **'Permisos'**
+  String get spaceManagePermissions;
+
+  /// No description provided for @spaceManageInformationHistory.
+  ///
+  /// In es, this message translates to:
+  /// **'Información e historial'**
+  String get spaceManageInformationHistory;
+
+  /// No description provided for @spaceManageIdentity.
+  ///
+  /// In es, this message translates to:
+  /// **'Identidad'**
+  String get spaceManageIdentity;
+
+  /// No description provided for @spaceManageInvitationLink.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitación y vinculación'**
+  String get spaceManageInvitationLink;
+
+  /// No description provided for @spaceManageOptions.
+  ///
+  /// In es, this message translates to:
+  /// **'Opciones'**
+  String get spaceManageOptions;
+
+  /// No description provided for @spaceManageRequests.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitudes'**
+  String get spaceManageRequests;
+
+  /// No description provided for @spaceManageActions.
+  ///
+  /// In es, this message translates to:
+  /// **'Acciones'**
+  String get spaceManageActions;
+
+  /// No description provided for @spaceManageLinking.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculación'**
+  String get spaceManageLinking;
+
+  /// No description provided for @spaceManageActivity.
+  ///
+  /// In es, this message translates to:
+  /// **'Actividad'**
+  String get spaceManageActivity;
+
+  /// No description provided for @spaceManageChat.
+  ///
+  /// In es, this message translates to:
+  /// **'Chat'**
+  String get spaceManageChat;
+
+  /// No description provided for @spaceCoverGroupBalance.
+  ///
+  /// In es, this message translates to:
+  /// **'En este grupo'**
+  String get spaceCoverGroupBalance;
+
+  /// No description provided for @spaceCoverRelationshipBalance.
+  ///
+  /// In es, this message translates to:
+  /// **'Entre vosotros'**
+  String get spaceCoverRelationshipBalance;
+
+  /// No description provided for @spaceCoverViewBalance.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver balance'**
+  String get spaceCoverViewBalance;
+
+  /// No description provided for @spaceCoverViewBalances.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver balances'**
+  String get spaceCoverViewBalances;
+
+  /// No description provided for @spaceCoverViewAll.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver todos'**
+  String get spaceCoverViewAll;
+
+  /// No description provided for @spaceTicketsAllTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todos los tickets'**
+  String get spaceTicketsAllTitle;
+
+  /// No description provided for @spaceBalancesAllTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Balances del espacio'**
+  String get spaceBalancesAllTitle;
 }
 
 class _AppLocalizationsDelegate

@@ -128,28 +128,100 @@ class SpacesRepository {
 
   // ── Lectura en tiempo real ────────────────────────────────────────────
 
-  /// Mis espacios: collection group sobre MIS membresías; cada cambio de
-  /// membresía relee los espacios. (Editar el nombre de un espacio se
-  /// refleja al entrar en su detalle, que sí escucha el doc en vivo.)
+  /// Mis espacios: escucha las membresías y, para cada una vigente, el
+  /// documento padre en vivo. Así un renombre, archivo o `updatedAt` no queda
+  /// congelado hasta que cambie también una membresía.
   ///
   /// También para INVITADOS: participar incluye poder llegar a los grupos
   /// de los que ya se es miembro. Sin esto, entrar por enlace dejaba al
   /// invitado dentro del grupo pero sin ninguna pantalla desde la que verlo.
   Stream<List<Space>> watchMySpaces() {
     _requireParticipant();
-    return firestore
-        .collectionGroup('members')
-        .where('uid', isEqualTo: uid())
-        .snapshots()
-        .asyncMap((snapshot) async {
-          final refs = [
-            for (final member in snapshot.docs) ?member.reference.parent.parent,
-          ];
-          final docs = await Future.wait(refs.map((ref) => ref.get()));
-          final spaces = [for (final doc in docs) ?_spaceFrom(doc)];
-          spaces.sort((a, b) => a.name.compareTo(b.name));
-          return spaces;
-        });
+    late StreamController<List<Space>> controller;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? memberships;
+    final documents =
+        <String, StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>{};
+    // Se registra ANTES de `listen`: FakeFirestore puede entregar el primer
+    // snapshot síncronamente, antes de que la suscripción se asigne al mapa.
+    final watchedIds = <String>{};
+    final snapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+    var closed = false;
+
+    void emit() {
+      final spaces = [
+        for (final snapshot in snapshots.values) ?_spaceFrom(snapshot),
+      ]..sort(_compareSpaceRecency);
+      if (!closed) controller.add(spaces);
+    }
+
+    void rebuildDocuments(
+      QuerySnapshot<Map<String, dynamic>> membershipSnapshot,
+    ) {
+      final wanted = <String, DocumentReference<Map<String, dynamic>>>{
+        for (final member in membershipSnapshot.docs)
+          if (member.reference.parent.parent != null)
+            member.reference.parent.parent!.id: member.reference.parent.parent!,
+      };
+      var removed = false;
+      for (final id in watchedIds.toList()) {
+        if (wanted.containsKey(id)) continue;
+        watchedIds.remove(id);
+        documents.remove(id)?.cancel();
+        snapshots.remove(id);
+        removed = true;
+      }
+      for (final entry in wanted.entries) {
+        if (watchedIds.contains(entry.key)) continue;
+        watchedIds.add(entry.key);
+        documents[entry.key] = entry.value.snapshots().listen(
+          (snapshot) {
+            if (closed || !watchedIds.contains(entry.key)) return;
+            snapshots[entry.key] = snapshot;
+            emit();
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!closed) controller.addError(error, stackTrace);
+          },
+        );
+      }
+      // Publicar la retirada antes de esperar otro evento del documento
+      // restante evita que un consumidor quede esperando indefinidamente si
+      // Firestore no vuelve a emitir ese documento tras cambiar membresías.
+      if (removed || wanted.isEmpty) emit();
+    }
+
+    controller = StreamController<List<Space>>(
+      onListen: () {
+        memberships = firestore
+            .collectionGroup('members')
+            .where('uid', isEqualTo: uid())
+            .snapshots()
+            .listen(
+              rebuildDocuments,
+              onError: (Object error, StackTrace stackTrace) {
+                if (!closed) controller.addError(error, stackTrace);
+              },
+            );
+      },
+      // `Stream.first` waits for cancellation. Awaiting Firestore's nested
+      // listeners here can deadlock FakeFirestore (and leaves a caller that
+      // only needs the initial list waiting indefinitely). Close our local
+      // state synchronously, then let the listener cancellations finish.
+      onCancel: () {
+        closed = true;
+        final membership = memberships;
+        if (membership != null) {
+          unawaited(membership.cancel());
+        }
+        for (final subscription in documents.values) {
+          unawaited(subscription.cancel());
+        }
+        documents.clear();
+        watchedIds.clear();
+        snapshots.clear();
+      },
+    );
+    return controller.stream;
   }
 
   Stream<Space?> watchSpace(String spaceId) =>
@@ -326,11 +398,41 @@ class SpacesRepository {
                   ((d.data()['merchant'] as Map?)?['name'] as String?) ?? '',
               grandTotalCents: (d.data()['grandTotal'] as int?) ?? 0,
               date: d.data()['date'] as String?,
+              createdAt: (d.data()['createdAt'] as Timestamp?)?.toDate(),
             ),
         ];
-        tickets.sort((a, b) => b.path.compareTo(a.path));
+        tickets.sort(_compareSpaceTicketsByRecency);
         return tickets;
       });
+
+  static int _compareSpaceRecency(Space left, Space right) {
+    final leftAt = left.updatedAt ?? left.createdAt;
+    final rightAt = right.updatedAt ?? right.createdAt;
+    final byDate = (rightAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+        .compareTo(leftAt ?? DateTime.fromMillisecondsSinceEpoch(0));
+    return byDate != 0 ? byDate : left.id.compareTo(right.id);
+  }
+
+  static int _compareSpaceTicketsByRecency(
+    SpaceTicket left,
+    SpaceTicket right,
+  ) {
+    final byCreatedAt = _compareNewest(left.createdAt, right.createdAt);
+    if (byCreatedAt != 0) return byCreatedAt;
+    final byDate = _compareNewest(
+      _parseTicketDate(left.date),
+      _parseTicketDate(right.date),
+    );
+    return byDate != 0 ? byDate : right.path.compareTo(left.path);
+  }
+
+  static DateTime? _parseTicketDate(String? value) =>
+      value == null ? null : DateTime.tryParse(value);
+
+  static int _compareNewest(DateTime? left, DateTime? right) =>
+      (right ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+        left ?? DateTime.fromMillisecondsSinceEpoch(0),
+      );
 
   // ── Ciclo de vida del espacio ─────────────────────────────────────────
 

@@ -22,10 +22,13 @@ class BalanceHero extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     return ref
-        .watch(economicOverviewProvider)
+        .watch(participantEconomicOverviewProvider)
         .when(
           loading: () => const _HeroSkeleton(),
-          error: (_, _) => ErrorStateView(message: l10n.economyLoadError),
+          error: (_, _) => ErrorStateView(
+            message: l10n.economyLoadError,
+            onRetry: () => retryParticipantEconomicOverview(ref),
+          ),
           data: (overview) {
             final summaries = overview.summaries
                 .where((s) => s.owedToMe.cents != 0 || s.iOwe.cents != 0)
@@ -35,23 +38,15 @@ class BalanceHero extends ConsumerWidget {
                   ref.watch(currentAppUserProvider)?.isAnonymous ?? false;
               return isGuest ? const _GuestEconomyHero() : const _SettledHero();
             }
-            return Column(
-              children: [
-                for (final summary in summaries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: TokenSpacing.md),
-                    child: _CurrencyHero(summary: summary),
-                  ),
-              ],
-            );
+            return _CurrencyHero(summaries: summaries);
           },
         );
   }
 }
 
 class _CurrencyHero extends StatelessWidget {
-  const _CurrencyHero({required this.summary});
-  final CurrencyEconomicSummary summary;
+  const _CurrencyHero({required this.summaries});
+  final List<CurrencyEconomicSummary> summaries;
 
   @override
   Widget build(BuildContext context) {
@@ -70,29 +65,31 @@ class _CurrencyHero extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: TokenSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: _Leg(
-                  label: l10n.balanceTheyOweYou,
-                  amount: summary.owedToMe,
-                  currency: summary.currency,
-                  tone: MoneyTone.positive,
+          for (final summary in summaries) ...[
+            const SizedBox(height: TokenSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: _Leg(
+                    label: l10n.balanceTheyOweYou,
+                    amount: summary.owedToMe,
+                    currency: summary.currency,
+                    tone: MoneyTone.positive,
+                  ),
                 ),
-              ),
-              Container(width: 1, height: 46, color: c.border),
-              Expanded(
-                child: _Leg(
-                  label: l10n.balanceYouOwe,
-                  amount: summary.iOwe,
-                  currency: summary.currency,
-                  tone: MoneyTone.negative,
-                  alignEnd: true,
+                Container(width: 1, height: 46, color: c.border),
+                Expanded(
+                  child: _Leg(
+                    label: l10n.balanceYouOwe,
+                    amount: summary.iOwe,
+                    currency: summary.currency,
+                    tone: MoneyTone.negative,
+                    alignEnd: true,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -155,6 +152,7 @@ class _SettledHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return SaldaCard(
+      onTap: () => context.push('/home/economy'),
       padding: const EdgeInsets.all(TokenSpacing.xl),
       child: Row(
         children: [

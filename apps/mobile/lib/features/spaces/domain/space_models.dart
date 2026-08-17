@@ -310,6 +310,7 @@ class SpaceTicket {
     required this.merchantName,
     required this.grandTotalCents,
     this.date,
+    this.createdAt,
   });
 
   /// sessions/{sid}/accounts/{aid}/tickets/{tid}
@@ -322,4 +323,8 @@ class SpaceTicket {
   final String merchantName;
   final int grandTotalCents;
   final String? date;
+
+  /// Fecha de creación autoritativa del documento. Los tickets anteriores
+  /// pueden no tenerla; en ese caso la lista usa la fecha textual heredada.
+  final DateTime? createdAt;
 }

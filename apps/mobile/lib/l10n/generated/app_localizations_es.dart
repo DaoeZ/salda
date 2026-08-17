@@ -2179,6 +2179,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Consulta tus balances dentro de cada espacio.';
 
   @override
+  String get homeSearchSpaces => 'Buscar espacios';
+
+  @override
+  String get homeNoSearchResults =>
+      'No hay espacios que coincidan con la búsqueda.';
+
+  @override
   String get routeNotFoundTitle => 'No encontramos esta pantalla';
 
   @override
@@ -2190,4 +2197,64 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get routeBack => 'Volver';
+
+  @override
+  String get spaceManageTitle => 'Gestionar';
+
+  @override
+  String get spaceManageGroupTitle => 'Gestionar grupo';
+
+  @override
+  String get spaceManagePeople => 'Personas';
+
+  @override
+  String get spaceManagePermissions => 'Permisos';
+
+  @override
+  String get spaceManageInformationHistory => 'Información e historial';
+
+  @override
+  String get spaceManageIdentity => 'Identidad';
+
+  @override
+  String get spaceManageInvitationLink => 'Invitación y vinculación';
+
+  @override
+  String get spaceManageOptions => 'Opciones';
+
+  @override
+  String get spaceManageRequests => 'Solicitudes';
+
+  @override
+  String get spaceManageActions => 'Acciones';
+
+  @override
+  String get spaceManageLinking => 'Vinculación';
+
+  @override
+  String get spaceManageActivity => 'Actividad';
+
+  @override
+  String get spaceManageChat => 'Chat';
+
+  @override
+  String get spaceCoverGroupBalance => 'En este grupo';
+
+  @override
+  String get spaceCoverRelationshipBalance => 'Entre vosotros';
+
+  @override
+  String get spaceCoverViewBalance => 'Ver balance';
+
+  @override
+  String get spaceCoverViewBalances => 'Ver balances';
+
+  @override
+  String get spaceCoverViewAll => 'Ver todos';
+
+  @override
+  String get spaceTicketsAllTitle => 'Todos los tickets';
+
+  @override
+  String get spaceBalancesAllTitle => 'Balances del espacio';
 }

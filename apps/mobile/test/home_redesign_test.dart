@@ -1,115 +1,121 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:salda_mobile/core/theme/app_theme.dart';
-import 'package:salda_mobile/core/ui/states.dart';
+import 'package:salda_mobile/features/auth/data/auth_repository.dart';
+import 'package:salda_mobile/features/auth/data/guest_identity_repository.dart';
+import 'package:salda_mobile/features/economy/data/economic_repository.dart';
+import 'package:salda_mobile/features/economy/domain/economic_models.dart';
+import 'package:salda_mobile/features/home/balance_hero.dart';
 import 'package:salda_mobile/features/home/home_screen.dart';
-import 'package:salda_mobile/features/home/presentation/home_balance_preview.dart';
-import 'package:salda_mobile/features/spaces/presentation/space_row.dart';
-import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
+import 'package:salda_mobile/features/home/presentation/home_space_row.dart';
+import 'package:salda_mobile/features/review/application/draft_store.dart';
 import 'package:salda_mobile/features/spaces/data/manual_link_repository.dart';
+import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
 import 'package:salda_mobile/features/spaces/domain/space_models.dart';
 import 'package:salda_mobile/l10n/generated/app_localizations.dart';
 
 import 'fakes.dart';
 
-/// Inicio rediseñado: el balance manda, los contextos se distinguen y los
-/// resolvers centrales de BUG-5 (título) y BUG-6 (personas) siguen siendo
-/// los que mandan en pantalla.
 void main() {
-  const yo = 'owner';
+  const uid = 'owner';
   late FakeFirebaseFirestore firestore;
 
   setUp(() => firestore = FakeFirebaseFirestore());
 
-  Future<void> seedRelacion({int deudaCents = 0, bool aFavor = true}) async {
-    await firestore.doc('spaces/rel1').set({
-      'name': 'legado que no vale',
-      'ownerUid': yo,
-      'kind': 'relationship',
-      'relationshipUids': [yo, 'uid-pedro'],
-      'status': 'active',
-      'schemaVersion': 2,
-    });
-    await firestore.doc('spaces/rel1/members/$yo').set({'uid': yo});
-    await firestore.doc('spaces/rel1/members/uid-pedro').set({
-      'uid': 'uid-pedro',
-    });
-    await firestore.doc('profiles/uid-pedro').set({'displayName': 'Pedro'});
-    if (deudaCents > 0) {
-      await firestore.collection('economicEntries').add({
-        'spaceId': 'rel1',
-        'debtorUid': aFavor ? 'uid-pedro' : yo,
-        'creditorUid': aFavor ? yo : 'uid-pedro',
-        'amount': deudaCents,
-        'currency': 'EUR',
-        'memberUids': [yo, 'uid-pedro'],
-        'sessionId': 's1',
-        'accountId': 'a1',
-        'ticketId': 't1',
-        'ticketName': 'Cena',
-        'schemaVersion': 1,
+  Future<void> seedSpaces(int count, {int archived = 0}) async {
+    for (var index = 0; index < count; index++) {
+      await firestore.doc('spaces/s$index').set({
+        'name': 'Espacio $index',
+        'ownerUid': uid,
+        'kind': 'group',
+        'status': index < archived ? 'archived' : 'active',
+        'updatedAt': DateTime(2026, 1, 1).add(Duration(minutes: index)),
       });
+      await firestore.doc('spaces/s$index/members/$uid').set({'uid': uid});
     }
   }
 
-  Future<void> seedGrupoConManual() async {
-    await firestore.doc('spaces/g1').set({
-      'name': 'Piso',
-      'ownerUid': yo,
-      'kind': 'group',
-      'status': 'active',
-      'schemaVersion': 2,
-    });
-    await firestore.doc('spaces/g1/members/$yo').set({'uid': yo});
-    await firestore.doc('spaces/g1/manualParticipants/m1').set({
-      'manualId': 'm1',
-      'displayName': 'Pablo',
-      'linkedUid': null,
-      'createdByUid': yo,
-      'schemaVersion': 1,
-    });
-  }
-
-  Future<void> pump(
+  Future<void> pumpHome(
     WidgetTester tester, {
+    List<ManualLinkRequest>? links,
+    EconomicOverview? economy,
+    AppUser? user,
+    GuestIdentity? guestIdentity,
     Brightness brightness = Brightness.light,
-    double textScale = 1.0,
-    SpacesRepository? spacesRepository,
-    List<ManualLinkRequest>? pendingManualLinks,
+    double textScale = 1,
+    List<Override> extraOverrides = const [],
   }) async {
-    tester.view.physicalSize = const Size(420, 2000);
-    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final container = ProviderContainer(
-      overrides:
-          loggedInOverrides(
+    final overrides =
+        loggedInOverrides(
             firestore: firestore,
-            spacesRepository: spacesRepository,
-          )..addAll(
-            pendingManualLinks == null
-                ? const []
-                : [
-                    myPendingManualLinksProvider.overrideWithValue(
-                      AsyncData(pendingManualLinks),
+            authRepository: FakeAuthRepository(
+              user: user ?? const AppUser(uid: uid),
+            ),
+          )
+          ..addAll([
+            // Inicio solo necesita estas fuentes para presentar datos. Hacerlas
+            // deterministas evita reintentos reales ajenos al escenario probado.
+            mySpaceInvitesProvider.overrideWithValue(const AsyncData([])),
+            myPendingManualLinksProvider.overrideWithValue(
+              AsyncData(links ?? const []),
+            ),
+            savedDraftProvider.overrideWithValue(const AsyncData(null)),
+            participantEconomicOverviewProvider.overrideWithValue(
+              AsyncData(
+                economy ??
+                    EconomicOverview.compute(
+                      viewerUid: user?.uid ?? uid,
+                      entries: const [],
+                      payments: const [],
                     ),
-                  ],
-          ),
+              ),
+            ),
+            if (guestIdentity != null)
+              myGuestIdentityProvider.overrideWithValue(
+                AsyncData(guestIdentity),
+              ),
+          ])
+          ..addAll(extraOverrides);
+    final container = ProviderContainer(overrides: overrides);
+    final router = GoRouter(
+      initialLocation: '/home',
+      routes: [
+        GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
+        GoRoute(
+          path: '/home/economy',
+          builder: (_, _) => const Scaffold(body: Text('Economía destino')),
+        ),
+      ],
     );
-    addTearDown(container.dispose);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      container.dispose();
+      router.dispose();
+    });
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(
+        child: MaterialApp.router(
           theme: brightness == Brightness.dark
               ? AppTheme.dark()
               : AppTheme.light(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: MediaQuery(
-            data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
-            child: const HomeScreen(),
+          routerConfig: router,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
           ),
         ),
       ),
@@ -117,351 +123,308 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Inicio lee balances en vivo: hay que desmontar dentro de la prueba.
-  Future<void> cerrar(WidgetTester tester) async {
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(seconds: 2));
-  }
-
-  testWidgets('sin espacios: un estado vacío que explica el paso siguiente', (
+  testWidgets('0 espacios muestra el balance una vez y el estado vacío', (
     tester,
   ) async {
-    await pump(tester);
-    expect(find.byType(EmptyState), findsOneWidget);
-    expect(find.text('Todavía no compartes gastos con nadie'), findsOneWidget);
-    // No se pintan secciones vacías con su título.
-    expect(find.text('RELACIONES'), findsNothing);
-    await cerrar(tester);
+    await pumpHome(tester);
+    expect(find.byType(BalanceHero), findsOneWidget);
+    expect(find.text('Reintentar'), findsNothing);
+    expect(find.byType(HomeSpaceRow), findsNothing);
   });
 
-  testWidgets('fallo de espacios no borra el balance independiente', (
+  testWidgets('retry del balance reconstruye su fuente económica real', (
     tester,
   ) async {
-    await seedRelacion(deudaCents: 2500);
-    await pump(
-      tester,
-      spacesRepository: _SpacesLoadFail(firestore: firestore, uid: () => yo),
-    );
-    expect(
-      find.text('No se pudieron cargar los espacios. Comprueba la conexión.'),
-      findsOneWidget,
-    );
-    expect(find.text('Te deben'), findsWidgets);
-    expect(find.text('Ver mis 1 balances'), findsOneWidget);
-    await cerrar(tester);
-  });
-
-  testWidgets('saldo a favor: importe, rótulo y desglose', (tester) async {
-    await seedRelacion(deudaCents: 2500);
-    await pump(tester);
-    expect(find.text('Tu saldo'), findsOneWidget);
-    // El signo no se transmite solo por color.
-    expect(find.text('Te deben'), findsAtLeastNWidgets(2));
-    expect(find.text('Debes'), findsOneWidget);
-    await cerrar(tester);
-  });
-
-  testWidgets('saldo en contra: cambia el rótulo, no solo el color', (
-    tester,
-  ) async {
-    await seedRelacion(deudaCents: 2500, aFavor: false);
-    await pump(tester);
-    expect(find.text('Debes'), findsWidgets);
-    await cerrar(tester);
-  });
-
-  testWidgets('sin deudas: se dice que estás en paz', (tester) async {
-    await seedRelacion();
-    await pump(tester);
-    expect(find.text('Estás en paz'), findsOneWidget);
-    await cerrar(tester);
-  });
-
-  testWidgets('la tarjeta de relación enseña a la otra persona (BUG-5)', (
-    tester,
-  ) async {
-    await seedRelacion();
-    await pump(tester);
-    expect(find.byType(SpaceRow), findsOneWidget);
-    expect(find.text('Pedro'), findsOneWidget);
-    expect(find.text('legado que no vale'), findsNothing);
-    await cerrar(tester);
-  });
-
-  testWidgets('el grupo conserva su nombre y cuenta PERSONAS (BUG-6)', (
-    tester,
-  ) async {
-    await seedGrupoConManual();
-    await pump(tester);
-    expect(find.text('Piso'), findsOneWidget);
-    // Una cuenta + un MANUAL son DOS personas, no «1 miembro».
-    expect(find.text('2 personas'), findsOneWidget);
-    await cerrar(tester);
-  });
-
-  testWidgets('relación pendiente: se marca como tal', (tester) async {
-    await firestore.doc('spaces/rel2').set({
-      'name': 'Ana',
-      'ownerUid': yo,
-      'kind': 'relationship',
-      'relationshipUids': [yo, 'uid-ana'],
-      'status': 'active',
-      'schemaVersion': 2,
-    });
-    await firestore.doc('spaces/rel2/members/$yo').set({'uid': yo});
-    await pump(tester);
-    expect(find.text('Pendiente'), findsOneWidget);
-    expect(find.text('1 persona'), findsOneWidget);
-    await cerrar(tester);
-  });
-
-  testWidgets('modo oscuro: la misma pantalla, sin excepciones', (
-    tester,
-  ) async {
-    await seedRelacion(deudaCents: 1500);
-    await pump(tester, brightness: Brightness.dark);
-    expect(tester.takeException(), isNull);
-    expect(find.text('Pedro'), findsAtLeastNWidgets(2));
-    expect(find.text('Te deben'), findsWidgets);
-    await cerrar(tester);
-  });
-
-  testWidgets('con el texto al 175 % nada desborda', (tester) async {
-    await seedRelacion(deudaCents: 123456789);
-    await pump(tester, textScale: 1.75);
-    expect(tester.takeException(), isNull);
-    await cerrar(tester);
-  });
-
-  testWidgets('con el texto al 250 % las secciones siguen siendo utilizables', (
-    tester,
-  ) async {
-    await seedRelacion(deudaCents: 123456789);
-    await pump(tester, textScale: 2.5);
-    expect(tester.takeException(), isNull);
-    await cerrar(tester);
-  });
-
-  testWidgets(
-    'Añadir de cuenta completa muestra los cuatro flujos permitidos',
-    (tester) async {
-      await seedRelacion();
-      await pump(tester);
-      await tester.tap(find.text('Añadir'));
-      await tester.pumpAndSettle();
-      expect(find.text('Gasto o ticket'), findsOneWidget);
-      expect(find.text('Relación'), findsOneWidget);
-      expect(find.text('Grupo'), findsOneWidget);
-      expect(find.text('Unirme con un enlace'), findsOneWidget);
-      await cerrar(tester);
-    },
-  );
-
-  testWidgets('mientras carga se enseña estructura, no un aro girando', (
-    tester,
-  ) async {
-    await seedRelacion();
-    final container = ProviderContainer(
-      overrides: loggedInOverrides(firestore: firestore),
-    );
-    addTearDown(container.dispose);
-    tester.view.physicalSize = const Size(420, 2000);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+    var generations = 0;
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
+      ProviderScope(
+        overrides: [
+          currentAppUserProvider.overrideWithValue(const AppUser(uid: uid)),
+          participantEconomicOverviewProvider.overrideWith((ref) {
+            generations++;
+            return generations == 1
+                ? AsyncError(StateError('offline'), StackTrace.empty)
+                : AsyncData(
+                    EconomicOverview.compute(
+                      viewerUid: uid,
+                      entries: const [],
+                      payments: const [],
+                    ),
+                  );
+          }),
+        ],
         child: MaterialApp(
-          theme: AppTheme.light(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const HomeScreen(),
+          home: const Scaffold(body: BalanceHero()),
         ),
       ),
     );
     await tester.pump();
-    expect(find.byType(Skeleton), findsWidgets);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    await tester.pumpAndSettle();
-    await cerrar(tester);
+    expect(find.text('Reintentar'), findsOneWidget);
+
+    await tester.tap(find.text('Reintentar'));
+    await tester.pump();
+    expect(generations, greaterThanOrEqualTo(2));
+    expect(find.text('Estás en paz'), findsOneWidget);
   });
 
-  testWidgets('la barra superior deja de ser una fila de iconos', (
+  testWidgets('retry de espacios reconstruye el stream de espacios', (
     tester,
   ) async {
-    await seedRelacion();
-    await pump(tester);
-    // Eran ocho; ahora quedan el enlace de entrada y el menú.
-    final appBar = find.byType(AppBar);
+    var generations = 0;
+    await pumpHome(
+      tester,
+      extraOverrides: [
+        mySpacesProvider.overrideWith((ref) {
+          generations++;
+          return generations == 1
+              ? Stream<List<Space>>.error(StateError('offline'))
+              : Stream.value(const <Space>[]);
+        }),
+      ],
+    );
+    expect(find.text('Reintentar'), findsOneWidget);
+
+    await tester.tap(find.text('Reintentar'));
+    await tester.pump();
+    expect(generations, greaterThanOrEqualTo(2));
+    expect(find.text('Reintentar'), findsNothing);
+  });
+
+  testWidgets('un espacio se representa directamente en Inicio', (
+    tester,
+  ) async {
+    await seedSpaces(1);
+    await pumpHome(tester);
+    expect(find.byType(HomeSpaceRow), findsOneWidget);
+    expect(find.text('Espacio 0'), findsOneWidget);
+  });
+
+  testWidgets('55 espacios usan lista perezosa y búsqueda local', (
+    tester,
+  ) async {
+    await seedSpaces(55);
+    await pumpHome(tester);
+    expect(find.byType(SliverList), findsWidgets);
+    expect(find.byType(HomeSpaceRow), isNot(findsNWidgets(55)));
+    await tester.enterText(find.byType(TextField), 'Espacio 54');
+    await tester.pumpAndSettle();
     expect(
-      find.descendant(of: appBar, matching: find.byType(IconButton)),
+      find.descendant(
+        of: find.byType(HomeSpaceRow),
+        matching: find.text('Espacio 54'),
+      ),
       findsOneWidget,
     );
-    await cerrar(tester);
   });
 
-  testWidgets('atención agrupa cuatro solicitudes manuales y revela todas', (
+  testWidgets('la búsqueda resuelve el título de una relación para invitado', (
     tester,
   ) async {
-    final requests = <ManualLinkRequest>[];
-    for (var index = 0; index < 4; index++) {
-      await firestore.doc('spaces/g$index').set({
-        'name': 'Grupo $index',
-        'ownerUid': yo,
-        'kind': 'group',
-        'status': 'active',
-        'schemaVersion': 2,
-      });
-      await firestore.doc('spaces/g$index/members/$yo').set({'uid': yo});
-      requests.add(
-        ManualLinkRequest(
-          id: 'm$index',
-          manualId: 'm$index',
-          uid: 'uid-$index',
-          displayName: 'Persona $index',
-          status: ManualLinkStatus.pending,
-          spaceId: 'g$index',
-        ),
-      );
-    }
-    await pump(tester, pendingManualLinks: requests);
-    expect(find.text('Ver las 4 pendientes'), findsOneWidget);
-    expect(find.byIcon(Icons.assignment_ind_outlined), findsNWidgets(3));
-    await tester.tap(find.text('Ver las 4 pendientes'));
-    await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.assignment_ind_outlined), findsNWidgets(7));
-    expect(tester.takeException(), isNull);
-    await cerrar(tester);
-  });
-
-  testWidgets('solo espacios archivados mantienen acceso al directorio', (
-    tester,
-  ) async {
-    await firestore.doc('spaces/archivado').set({
-      'name': 'Viaje pasado',
-      'ownerUid': yo,
-      'kind': 'group',
-      'status': 'archived',
-      'schemaVersion': 2,
+    await seedSpaces(9);
+    await firestore.doc('spaces/rel').set({
+      'name': 'Nombre guardado que no debe buscarse',
+      'ownerUid': uid,
+      'kind': 'relationship',
+      'relationshipUids': [uid, 'lucia'],
+      'status': 'active',
+      'updatedAt': DateTime(2026, 2),
     });
-    await firestore.doc('spaces/archivado/members/$yo').set({'uid': yo});
-    await pump(tester);
+    await firestore.doc('spaces/rel/members/$uid').set({'uid': uid});
+    await firestore.doc('spaces/rel/members/lucia').set({'uid': 'lucia'});
+    await firestore.doc('profiles/lucia').set({
+      'displayName': 'Lucía',
+      'username': 'lucia',
+    });
 
-    expect(find.text('Archivados (1)'), findsOneWidget);
-    expect(find.text('Todavía no compartes gastos con nadie'), findsNothing);
-    await cerrar(tester);
+    await pumpHome(tester);
+    await tester.enterText(find.byType(TextField), 'Lucía');
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(HomeSpaceRow),
+        matching: find.text('Lucía'),
+      ),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('30 balances se resumen en cinco con CTA completa', (
+  testWidgets('la búsqueda persiste al bajar de diez espacios activos', (
     tester,
   ) async {
-    await seedRelacion();
-    for (var index = 0; index < 30; index++) {
-      final uid = 'person-$index';
-      await firestore.doc('profiles/$uid').set({
-        'displayName': 'Persona $index',
-      });
+    await seedSpaces(10);
+    await pumpHome(tester);
+    await tester.enterText(find.byType(TextField), 'Espacio');
+    await tester.pumpAndSettle();
+
+    await firestore.doc('spaces/s9').update({'status': 'archived'});
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(find.text('Espacio 8'), findsOneWidget);
+    expect(find.text('Espacio 9'), findsNothing);
+  });
+
+  testWidgets('las monedas se muestran separadas, sin resumen ambiguo', (
+    tester,
+  ) async {
+    await seedSpaces(1);
+    for (final currency in ['EUR', 'USD']) {
       await firestore.collection('economicEntries').add({
-        'spaceId': 'rel1',
-        'debtorUid': uid,
-        'creditorUid': yo,
-        'amount': index + 1,
-        'currency': index.isEven ? 'EUR' : 'USD',
-        'memberUids': [yo, uid],
-        'sessionId': 's$index',
-        'accountId': 'a$index',
-        'ticketId': 't$index',
-        'ticketName': 'Ticket $index',
-        'schemaVersion': 1,
+        'spaceId': 's0',
+        'debtorUid': 'other',
+        'creditorUid': uid,
+        'amount': 1200,
+        'currency': currency,
+        'memberUids': [uid, 'other'],
+        'sessionId': 'session',
+        'accountId': 'account',
+        'ticketId': currency,
+        'ticketName': 'Ticket',
       });
     }
-    await pump(tester);
-    final preview = find.byType(HomeBalancePreviewSection);
-    expect(preview, findsOneWidget);
-    expect(
-      find.descendant(of: preview, matching: find.byType(ListTile)),
-      findsNWidgets(5),
+    final overview = EconomicOverview.compute(
+      viewerUid: uid,
+      entries: [
+        for (final currency in ['EUR', 'USD'])
+          EconomicEntryView(
+            id: currency,
+            debtorUid: 'other',
+            creditorUid: uid,
+            amount: Money(1200),
+            currency: currency,
+            sessionId: 'session',
+            accountId: 'account',
+            ticketId: currency,
+            ticketName: 'Ticket',
+            spaceId: 's0',
+          ),
+      ],
+      payments: const [],
     );
-    expect(find.text('Ver mis 30 balances'), findsOneWidget);
-    await cerrar(tester);
-  });
-
-  testWidgets('un espacio con EUR y USD muestra monedas separadas', (
-    tester,
-  ) async {
-    await seedRelacion(deudaCents: 1234);
-    await firestore.collection('economicEntries').add({
-      'spaceId': 'rel1',
-      'debtorUid': 'uid-pedro',
-      'creditorUid': yo,
-      'amount': 5678,
-      'currency': 'USD',
-      'memberUids': [yo, 'uid-pedro'],
-      'sessionId': 's-usd',
-      'accountId': 'a-usd',
-      'ticketId': 't-usd',
-      'ticketName': 'Cena USD',
-      'schemaVersion': 1,
-    });
-    await pump(tester);
-
-    final row = find.byType(SpaceRow);
-    expect(row, findsOneWidget);
+    await pumpHome(tester, economy: overview);
+    final hero = find.byType(BalanceHero);
+    final row = find.byType(HomeSpaceRow);
     expect(
-      find.descendant(of: row, matching: find.text('Varias monedas')),
+      find.descendant(of: hero, matching: find.textContaining('12,00')),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(of: row, matching: find.textContaining('12,00')),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(of: hero, matching: find.textContaining('€')),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(of: hero, matching: find.textContaining(r'$')),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(of: row, matching: find.textContaining('€')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: row, matching: find.textContaining('69,12')),
-      findsNothing,
-    );
-    await cerrar(tester);
-  });
-
-  testWidgets('el balance de un manual usa su nombre custodiado', (
-    tester,
-  ) async {
-    await seedGrupoConManual();
-    await firestore.doc('spaces/g1/manualParticipants/m1').update({
-      'displayName': 'Pablo Manual',
-    });
-    await firestore.collection('economicEntries').add({
-      'spaceId': 'g1',
-      'debtorUid': 'manual:m1',
-      'creditorUid': yo,
-      'amount': 2500,
-      'currency': 'EUR',
-      'memberUids': [yo],
-      'sessionId': 's-manual',
-      'accountId': 'a-manual',
-      'ticketId': 't-manual',
-      'ticketName': 'Cena manual',
-      'schemaVersion': 1,
-    });
-    await pump(tester);
-
-    final preview = find.byType(HomeBalancePreviewSection);
-    expect(
-      find.descendant(of: preview, matching: find.text('Pablo Manual')),
+      find.descendant(of: row, matching: find.textContaining(r'$')),
       findsOneWidget,
     );
-    expect(
-      find.descendant(of: preview, matching: find.textContaining('manual:')),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: preview, matching: find.text('Alguien')),
-      findsNothing,
-    );
-    await cerrar(tester);
+    expect(find.text('Varias monedas'), findsNothing);
   });
-}
 
-class _SpacesLoadFail extends SpacesRepository {
-  _SpacesLoadFail({required super.firestore, required super.uid})
-    : super(isFullAccount: () => true);
+  testWidgets(
+    'modo oscuro y texto 250 % conservan el hero y fila multimoneda',
+    (tester) async {
+      await seedSpaces(1);
+      final overview = EconomicOverview.compute(
+        viewerUid: uid,
+        entries: [
+          for (final currency in ['EUR', 'USD'])
+            EconomicEntryView(
+              id: currency,
+              debtorUid: 'other',
+              creditorUid: uid,
+              amount: Money(123456789),
+              currency: currency,
+              sessionId: 's',
+              accountId: 'a',
+              ticketId: currency,
+              ticketName: 'Ticket',
+              spaceId: 's0',
+            ),
+        ],
+        payments: const [],
+      );
+      await pumpHome(
+        tester,
+        economy: overview,
+        brightness: Brightness.dark,
+        textScale: 2.5,
+      );
+      expect(find.byType(BalanceHero), findsOneWidget);
+      expect(find.byType(HomeSpaceRow), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  @override
-  Stream<List<Space>> watchMySpaces() =>
-      Stream.error(StateError('spaces down'));
+  testWidgets('atención solo procede de solicitudes manuales pendientes', (
+    tester,
+  ) async {
+    await seedSpaces(1);
+    await pumpHome(
+      tester,
+      links: const [
+        ManualLinkRequest(
+          id: 'request',
+          manualId: 'manual',
+          uid: uid,
+          spaceId: 's0',
+          status: ManualLinkStatus.pending,
+        ),
+      ],
+    );
+    expect(find.text('1 solicitud'), findsOneWidget);
+    expect(find.byIcon(Icons.assignment_ind_outlined), findsOneWidget);
+  });
+
+  testWidgets('archivados quedan como acceso secundario', (tester) async {
+    await seedSpaces(1, archived: 1);
+    await pumpHome(tester);
+    expect(find.text('Archivados (1)'), findsOneWidget);
+    expect(find.byType(HomeSpaceRow), findsNothing);
+  });
+
+  testWidgets('el resumen de saldo abre economía', (tester) async {
+    await pumpHome(tester);
+    await tester.tap(find.text('Estás en paz'));
+    await tester.pumpAndSettle();
+    expect(find.text('Economía destino'), findsOneWidget);
+  });
+
+  testWidgets('el FAB abre las acciones de Añadir', (tester) async {
+    await pumpHome(tester);
+    await tester.tap(find.text('Añadir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Gasto o ticket'), findsOneWidget);
+    expect(find.text('Grupo'), findsOneWidget);
+  });
+
+  testWidgets('un invitado operativo ve contextos sin flujos de creación', (
+    tester,
+  ) async {
+    await seedSpaces(1);
+    const guest = AppUser(uid: uid, isAnonymous: true);
+    await pumpHome(
+      tester,
+      user: guest,
+      guestIdentity: GuestIdentity(uid: uid, displayName: 'Invitada'),
+    );
+    expect(find.byType(HomeSpaceRow), findsOneWidget);
+    await tester.tap(find.text('Añadir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unirme con un enlace'), findsOneWidget);
+    expect(find.text('Grupo'), findsNothing);
+  });
 }
