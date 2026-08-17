@@ -1603,6 +1603,136 @@ describe('economic relations', () => {
   });
 });
 
+// ─── Permisos económicos y representación (ADR-038) ────────────────────
+// sp1: propietario SOCIAL_OUTSIDER; miembros STRANGER y OWNER; FOURTH fuera.
+describe('economic permissions', () => {
+  const MANUAL = 'manual:mpj';
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/mpj'), {
+        manualId: 'mpj', displayName: 'Javi', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+      // Deuda de una CUENTA hacia alguien SIN cuenta: un solo lector natural.
+      await setDoc(doc(f, 'economicEntries/eManual'), {
+        memberUids: [STRANGER], debtorUid: STRANGER, creditorUid: MANUAL,
+        amount: 1000, currency: 'EUR', sessionId: 's1', accountId: 'a1',
+        ticketId: 't1', ticketName: 'Familycash', spaceId: 'sp1',
+        hasManualParty: true, schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'economicPayments/pManual'), {
+        memberUids: [STRANGER], pairId: 'pair', payerUid: STRANGER,
+        receiverUid: MANUAL, amount: 400, currency: 'EUR',
+        status: 'confirmed', source: 'user', spaceId: 'sp1',
+        hasManualParty: true, schemaVersion: 1,
+      });
+      // Deuda entre DOS CUENTAS en el mismo espacio: nadie más la ve.
+      await setDoc(doc(f, 'economicEntries/eAccounts'), {
+        memberUids: [STRANGER, THIRD].sort(), debtorUid: STRANGER,
+        creditorUid: THIRD, amount: 700, currency: 'EUR', sessionId: 's1',
+        accountId: 'a1', ticketId: 't2', ticketName: 'Cena', spaceId: 'sp1',
+        hasManualParty: false, schemaVersion: 1,
+      });
+    });
+  });
+
+  const makeAdmin = (uid) => env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), `spaces/sp1/members/${uid}`),
+      { role: 'admin' });
+  });
+
+  it('el propietario del espacio representa a quien no tiene cuenta',
+      async () => {
+    await assertSucceeds(
+      getDoc(doc(db(SOCIAL_OUTSIDER), 'economicEntries/eManual')));
+    await assertSucceeds(
+      getDoc(doc(db(SOCIAL_OUTSIDER), 'economicPayments/pManual')));
+  });
+
+  it('un administrador nombrado también, y un miembro normal no', async () => {
+    await assertFails(getDoc(doc(db(OWNER), 'economicEntries/eManual')));
+    await makeAdmin(OWNER);
+    await assertSucceeds(getDoc(doc(db(OWNER), 'economicEntries/eManual')));
+  });
+
+  it('NADIE ajeno al espacio representa a ese manual', async () => {
+    await assertFails(getDoc(doc(db(FOURTH), 'economicEntries/eManual')));
+    await assertFails(getDoc(doc(db(GUEST), 'economicEntries/eManual')));
+  });
+
+  it('un administrador NO puede leer deuda entre dos cuentas ajenas',
+      async () => {
+    await makeAdmin(OWNER);
+    await assertFails(getDoc(doc(db(OWNER), 'economicEntries/eAccounts')));
+    await assertFails(
+      getDoc(doc(db(SOCIAL_OUTSIDER), 'economicEntries/eAccounts')));
+  });
+
+  it('la consulta del administrador se acota a las deudas representables',
+      async () => {
+    await makeAdmin(OWNER);
+    await assertSucceeds(getDocs(query(
+      collection(db(OWNER), 'economicEntries'),
+      where('spaceId', '==', 'sp1'),
+      where('hasManualParty', '==', true),
+    )));
+    // Sin el filtro arrastraría la deuda entre dos cuentas: denegada entera.
+    await assertFails(getDocs(query(
+      collection(db(OWNER), 'economicEntries'),
+      where('spaceId', '==', 'sp1'),
+    )));
+  });
+
+  it('solo el propietario nombra o retira administradores', async () => {
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OWNER}`),
+      { role: 'admin' }));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OWNER}`),
+      { role: 'member' }));
+    // Ni uno se asciende a sí mismo, ni un miembro asciende a otro.
+    await assertFails(updateDoc(
+      doc(db(OWNER), `spaces/sp1/members/${OWNER}`), { role: 'admin' }));
+    await assertFails(updateDoc(
+      doc(db(STRANGER), `spaces/sp1/members/${OWNER}`), { role: 'admin' }));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OWNER}`),
+      { role: 'superadmin' }));
+  });
+
+  it('un INVITADO no administra el contexto', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `spaces/sp1/members/${OTHER}`), {
+        uid: OTHER, joinedAt: serverTimestamp(), kind: 'guest',
+        displayName: 'Invitado',
+      });
+    });
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OTHER}`),
+      { role: 'admin' }));
+  });
+
+  it('nadie NACE administrador al unirse', async () => {
+    const f = db(THIRD);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/sp1_${THIRD}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${THIRD}`), {
+      uid: THIRD, joinedAt: serverTimestamp(), role: 'admin',
+    });
+    await assertFails(batch.commit());
+  });
+
+  // Que la representación CESE al vincular el manual con una cuenta lo
+  // decide la Function, que es quien lee `linkedUid`: está cubierto en
+  // packages/domain (economic_authority_test.dart) y en backend/functions
+  // (settleEconomicEntries.test.ts). Rules solo delimita quién puede leer.
+});
+
 // ─── Actividad (P6): proyección de auditoría ────────────────────────────
 describe('activityEvents', () => {
   beforeEach(async () => {

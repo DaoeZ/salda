@@ -25,6 +25,7 @@ import {
 } from './domain/balanceEngine.js';
 import {
   accountUidsOf,
+  isManualActor,
   manualActor,
   resolveActorIdentity,
 } from './domain/economicActor.js';
@@ -742,6 +743,13 @@ export async function recomputeSession(sid: string): Promise<void> {
     ticketName: entry.ticketName,
     ...(entry.ticketDate ? { ticketDate: entry.ticketDate } : {}),
     ...(entry.spaceId ? { spaceId: entry.spaceId } : {}),
+    // Propiedad DERIVADA e inmutable de la obligación: si una de sus partes
+    // no tiene cuenta, alguien tiene que poder representarla (ADR-038). Se
+    // persiste porque una query no puede filtrar por el prefijo del actor, y
+    // sin ella la consulta del administrador arrastraría obligaciones entre
+    // dos cuentas que no le corresponde leer.
+    hasManualParty: isManualActor(entry.debtorUid) ||
+      isManualActor(entry.creditorUid),
     schemaVersion: 1,
   });
   const legacyPaymentData = (

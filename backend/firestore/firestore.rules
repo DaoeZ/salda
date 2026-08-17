@@ -445,13 +445,25 @@ service cloud.firestore {
     // callables). El cliente solo consulta los pares en los que participa.
     match /economicEntries/{entryId} {
       allow read: if canParticipate()
-        && request.auth.uid in resource.data.memberUids;
+        && (
+          request.auth.uid in resource.data.memberUids
+          // Representación de identidades SIN cuenta (ADR-038): una deuda de
+          // la que forma parte un `manual:{id}` la ve también quien
+          // administra el espacio que lo custodia, porque si no nadie podría
+          // cerrarla nunca. Cuenta ↔ cuenta queda fuera por construcción.
+          || (resource.data.get('hasManualParty', false) == true
+            && representableEconomicDoc(resource.data))
+        );
       allow create, update, delete: if false;
     }
 
     match /economicPayments/{paymentId} {
       allow read: if canParticipate()
-        && request.auth.uid in resource.data.memberUids;
+        && (
+          request.auth.uid in resource.data.memberUids
+          || (resource.data.get('hasManualParty', false) == true
+            && representableEconomicDoc(resource.data))
+        );
       allow create, update, delete: if false;
     }
 
@@ -667,6 +679,33 @@ service cloud.firestore {
 
     function isSpaceOwner(spaceId) {
       return canUseSocial() && spaceData(spaceId).ownerUid == request.auth.uid;
+    }
+
+    // ── Administradores del espacio (ADR-038) ──────────────────────────
+    // El propietario sigue siendo único y vive en `ownerUid`; `role` en la
+    // membresía es la ÚNICA delegación, y solo el propietario la concede.
+    // Un administrador NO hereda capacidad sobre el saldo de una cuenta: su
+    // única potestad económica es representar a quien no tiene cuenta y por
+    // tanto no puede confirmar nada por sí mismo.
+    function isSpaceAdminOf(spaceId) {
+      return canUseSocial()
+        && exists(/databases/$(database)/documents/spaces/$(spaceId))
+        && (
+          spaceData(spaceId).ownerUid == request.auth.uid
+          || (isSpaceMember(spaceId)
+            && get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+                .data.get('role', 'member') == 'admin')
+        );
+    }
+
+    // Una obligación con una parte SIN cuenta necesita quien la represente;
+    // entre dos cuentas jamás se abre a terceros (el administrador no puede
+    // ni leerla). `hasManualParty` lo escribe recompute como propiedad
+    // derivada, y la consulta del administrador filtra por él para que la
+    // regla sea demostrable documento a documento.
+    function representableEconomicDoc(data) {
+      return data.get('spaceId', '') != ''
+        && isSpaceAdminOf(data.spaceId);
     }
 
     // Política del anfitrión sobre los invitados (ADR-034). Ausente = el
@@ -944,9 +983,12 @@ service cloud.firestore {
         // leerlo: es un snapshot del contexto, no identidad buscable.
         allow create: if canParticipate()
           && request.resource.data.keys().hasOnly(
-            ['uid', 'joinedAt', 'kind', 'displayName'])
+            ['uid', 'joinedAt', 'kind', 'displayName', 'role'])
           && request.resource.data.uid == memberUid
           && request.resource.data.joinedAt is timestamp
+          // Nadie NACE administrador: la delegación es un acto posterior y
+          // explícito del propietario (ADR-038).
+          && request.resource.data.get('role', 'member') == 'member'
           && (request.resource.data.get('kind', 'account') == 'guest'
             ? (isGuest()
               && request.resource.data.displayName is string
@@ -982,14 +1024,25 @@ service cloud.firestore {
                 spaceId))
           );
 
-        // Única mutación: el owner marca `removedBy` en el MISMO batch del
-        // borrado (P6 distingue así expulsión de salida voluntaria; Rules
-        // garantiza que el marcador es él y nunca el propio expulsado).
+        // Dos mutaciones, ambas exclusivas del propietario:
+        //  (a) `removedBy` en el MISMO batch del borrado (P6 distingue así
+        //      expulsión de salida voluntaria; Rules garantiza que el
+        //      marcador es él y nunca el propio expulsado);
+        //  (b) `role`: nombrar o retirar administradores (ADR-038). Un
+        //      INVITADO nunca administra —no tiene cuenta ni identidad
+        //      pública (ADR-034)—, y el propietario no se administra a sí
+        //      mismo porque ya lo es por `ownerUid`.
         allow update: if isSpaceOwner(spaceId)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['removedBy'])
-          && request.resource.data.removedBy == request.auth.uid
-          && memberUid != request.auth.uid;
+          && memberUid != request.auth.uid
+          && (
+            (request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['removedBy'])
+              && request.resource.data.removedBy == request.auth.uid)
+            || (request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['role'])
+              && request.resource.data.role in ['member', 'admin']
+              && resource.data.get('kind', 'account') == 'account')
+          );
 
         // Salir (nunca el owner: antes transfiere o archiva) o expulsión
         // por el owner. Solo borra el acceso social futuro.

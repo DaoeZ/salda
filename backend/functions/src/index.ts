@@ -34,6 +34,7 @@ export { cleanupOnSessionDelete } from './cleanup.js';
 export {
   createEconomicPayment,
   resolveEconomicPayment,
+  settleEconomicEntries,
 } from './economicPayments.js';
 export {
   activityOnSpace,
