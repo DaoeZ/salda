@@ -242,6 +242,9 @@ class SpacesRepository {
                   ? SpaceMemberKind.guest
                   : SpaceMemberKind.account,
               displayName: d.data()['displayName'] as String?,
+              role: d.data()['role'] == 'admin'
+                  ? SpaceMemberRole.admin
+                  : SpaceMemberRole.member,
             ),
         ],
       );
@@ -977,6 +980,26 @@ class SpacesRepository {
     await member.delete();
   }
 
+  /// Nombra o retira a un administrador (ADR-038).
+  ///
+  /// Solo el propietario, nunca sobre sí mismo (ya lo es por `ownerUid`) y
+  /// nunca sobre un INVITADO, que no tiene cuenta con la que administrar.
+  /// Rules lo vuelve a comprobar: esto solo evita ofrecer una acción que ya
+  /// sabemos que terminaría en error.
+  Future<void> setMemberRole(
+    String spaceId,
+    String memberUid,
+    SpaceMemberRole role,
+  ) async {
+    _requireAccount();
+    if (memberUid == uid()) {
+      throw const SpaceFailure(SpaceFailureCode.notAllowed);
+    }
+    await _spaces.doc(spaceId).collection('members').doc(memberUid).update({
+      'role': role == SpaceMemberRole.admin ? 'admin' : 'member',
+    });
+  }
+
   // ── Tickets ───────────────────────────────────────────────────────────
 
   /// Vincula un ticket a un espacio (máximo uno: el campo sobrescribe).
@@ -1080,6 +1103,20 @@ final spaceMembersProvider = StreamProvider.autoDispose
       (ref, spaceId) =>
           ref.watch(spacesRepositoryProvider).watchMembers(spaceId),
     );
+
+/// ¿Administro este espacio? Propietario o miembro con `role: admin`
+/// (ADR-038). Es solo el criterio de la INTERFAZ: la autoridad real la
+/// aplican Rules y las Functions, que no confían en esta respuesta.
+final iAdministerSpaceProvider = Provider.autoDispose.family<bool, String>((
+  ref,
+  spaceId,
+) {
+  final uid = ref.watch(currentUserIdFromSpacesProvider);
+  if (uid.isEmpty) return false;
+  if (ref.watch(spaceProvider(spaceId)).value?.ownerUid == uid) return true;
+  final members = ref.watch(spaceMembersProvider(spaceId)).value;
+  return members?.any((member) => member.uid == uid && member.isAdmin) ?? false;
+});
 
 /// Participantes manuales del espacio (ADR-033), en vivo.
 final spaceManualParticipantsProvider = StreamProvider.autoDispose

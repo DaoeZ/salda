@@ -14,6 +14,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
 import '../application/identity_names.dart';
 import 'economic_names.dart';
+import 'obligation_settlement.dart';
 import '../data/economic_repository.dart';
 import '../domain/economic_models.dart';
 
@@ -227,11 +228,29 @@ class _RelationshipTile extends ConsumerWidget {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: MoneyText(
-        balance.outstanding,
-        size: MoneySize.small,
-        currency: balance.currency,
-        tone: iOwe ? MoneyTone.negative : MoneyTone.positive,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MoneyText(
+            balance.outstanding,
+            size: MoneySize.small,
+            currency: balance.currency,
+            tone: iOwe ? MoneyTone.negative : MoneyTone.positive,
+          ),
+          // Cobrar se alcanza desde el propio saldo, sin pasar por el
+          // detalle: es la misma acción y el mismo sistema en todas partes.
+          if (!iOwe && balance.debtorUid != null)
+            IconButton(
+              tooltip: l10n.economyConfirmPayment,
+              icon: const Icon(Icons.check_rounded, size: 20),
+              onPressed: () => openObligationSettlement(
+                context,
+                debtorActor: balance.debtorUid!,
+                creditorActor: viewerUid,
+                currency: balance.currency,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -291,9 +310,7 @@ class _PendingConfirmationState extends ConsumerState<_PendingConfirmation> {
     setState(() => busy = true);
     final l10n = AppLocalizations.of(context);
     try {
-      await ref
-          .read(economicRepositoryProvider)
-          .confirmPayment(widget.payment.id);
+      await ref.read(economicRepositoryProvider).confirmPayment(widget.payment);
     } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(

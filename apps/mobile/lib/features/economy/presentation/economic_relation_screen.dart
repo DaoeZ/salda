@@ -13,6 +13,7 @@ import '../../auth/data/auth_repository.dart';
 import '../../sessions/presentation/ticket_navigation.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import 'economic_names.dart';
+import 'obligation_settlement.dart';
 import '../application/identity_names.dart';
 import '../data/economic_repository.dart';
 import '../domain/economic_models.dart';
@@ -247,15 +248,29 @@ class _BalanceCardState extends ConsumerState<_BalanceCard> {
               context,
             ).textTheme.bodySmall?.copyWith(color: c.textMuted),
           ),
-          if (widget.canMutate && iOwe && balance.outstanding.cents > 0) ...[
+          // El saldo es el punto de ENTRADA a las deudas que lo explican, en
+          // los dos sentidos. Antes, quien cobraba no tenía ninguna acción
+          // aquí: veía «Test te debe 14,73» y no podía hacer nada con ello.
+          if (widget.canMutate && balance.outstanding.cents > 0) ...[
             const SizedBox(height: TokenSpacing.lg),
             SizedBox(
               width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: busy ? null : _markPaid,
-                icon: const Icon(Icons.payments_outlined, size: 18),
-                label: Text(l10n.economyMarkPaid),
-              ),
+              child: iOwe
+                  ? FilledButton.icon(
+                      onPressed: busy ? null : _markPaid,
+                      icon: const Icon(Icons.payments_outlined, size: 18),
+                      label: Text(l10n.economyMarkPaid),
+                    )
+                  : FilledButton.icon(
+                      onPressed: () => openObligationSettlement(
+                        context,
+                        debtorActor: widget.otherUid,
+                        creditorActor: widget.viewerUid,
+                        currency: balance.currency,
+                      ),
+                      icon: const Icon(Icons.check_rounded, size: 18),
+                      label: Text(l10n.economyConfirmPayment),
+                    ),
             ),
           ],
         ],
@@ -474,7 +489,7 @@ class _PaymentTileState extends ConsumerState<_PaymentTile> {
     try {
       final repository = ref.read(economicRepositoryProvider);
       if (action == 'confirm') {
-        await repository.confirmPayment(widget.payment.id);
+        await repository.confirmPayment(widget.payment);
       } else if (action == 'reject') {
         await repository.rejectPayment(widget.payment.id);
       } else {

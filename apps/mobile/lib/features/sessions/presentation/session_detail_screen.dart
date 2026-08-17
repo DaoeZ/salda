@@ -638,7 +638,9 @@ class _SettlementCard extends ConsumerWidget {
                           settlement.id,
                           SettlementState.confirmed,
                         ),
-                        child: Text(l10n.actionConfirm),
+                        // Misma acción, mismo nombre en toda la app y en la
+                        // web de invitados: confirmar que el dinero llegó.
+                        child: Text(l10n.economyConfirmPayment),
                       )
                     else
                       // El receptor reclamó su nombre: confirma él desde la

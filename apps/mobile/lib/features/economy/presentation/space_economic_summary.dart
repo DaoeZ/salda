@@ -13,6 +13,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../spaces/data/spaces_repository.dart';
 import '../application/identity_names.dart';
 import 'economic_names.dart';
+import 'obligation_settlement.dart';
 import '../data/economic_repository.dart';
 
 /// Situación económica del espacio.
@@ -37,7 +38,9 @@ class SpaceEconomicSummary extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final overview = ref.watch(participantEconomicOverviewProvider);
+    final overview = ref.watch(
+      spaceManageableEconomicOverviewProvider(spaceId),
+    );
     final tickets = ref.watch(spaceTicketsProvider(spaceId));
 
     Widget cuerpo() {
@@ -50,7 +53,7 @@ class SpaceEconomicSummary extends ConsumerWidget {
         return ErrorStateView(message: l10n.economyLoadError);
       }
 
-      final scoped = overview.value!.withinSpace(spaceId);
+      final scoped = overview.value!;
       final open = scoped.balances
           .where((balance) => balance.signedOutstandingCents != 0)
           .toList();
@@ -100,6 +103,7 @@ class SpaceEconomicSummary extends ConsumerWidget {
                   _SpaceBalanceTile(
                     balance: balance,
                     viewerUid: scoped.viewerUid,
+                    spaceId: spaceId,
                   ),
               ],
             ),
@@ -155,10 +159,15 @@ class _GastoTotal extends StatelessWidget {
 }
 
 class _SpaceBalanceTile extends ConsumerWidget {
-  const _SpaceBalanceTile({required this.balance, required this.viewerUid});
+  const _SpaceBalanceTile({
+    required this.balance,
+    required this.viewerUid,
+    required this.spaceId,
+  });
 
   final BilateralEconomicBalance balance;
   final String viewerUid;
+  final String spaceId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -170,6 +179,17 @@ class _SpaceBalanceTile extends ConsumerWidget {
     // es justo lo que se veia en los saldos.
     final name = economicNameText(ref, l10n, otherUid);
     final iOwe = balance.debtorUid == viewerUid;
+    // Quien representa a alguien SIN cuenta ve deudas de las que no es parte:
+    // pintarlas como suyas era falso (ADR-038).
+    final amParty =
+        balance.firstUid == viewerUid || balance.secondUid == viewerUid;
+    final debtor = balance.debtorUid;
+    final creditor = balance.creditorUid;
+    final canConfirm =
+        debtor != null &&
+        creditor != null &&
+        !iOwe &&
+        canViewerConfirmReceipt(ref, creditorActor: creditor, spaceId: spaceId);
     return ListTile(
       onTap: () => context.push('/home/economy/$otherUid'),
       leading: SaldaAvatar(
@@ -178,15 +198,41 @@ class _SpaceBalanceTile extends ConsumerWidget {
         radius: 17,
       ),
       title: Text(
-        iOwe ? l10n.economyYouOwe(name) : l10n.economyOwesYou(name),
+        amParty
+            ? (iOwe ? l10n.economyYouOwe(name) : l10n.economyOwesYou(name))
+            : l10n.economyOwesTo(
+                economicNameText(ref, l10n, debtor ?? otherUid),
+                economicNameText(ref, l10n, creditor ?? otherUid),
+              ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: MoneyText(
-        balance.outstanding,
-        size: MoneySize.small,
-        currency: balance.currency,
-        tone: iOwe ? MoneyTone.negative : MoneyTone.positive,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MoneyText(
+            balance.outstanding,
+            size: MoneySize.small,
+            currency: balance.currency,
+            tone: !amParty
+                ? MoneyTone.muted
+                : iOwe
+                ? MoneyTone.negative
+                : MoneyTone.positive,
+          ),
+          if (canConfirm)
+            IconButton(
+              tooltip: l10n.economyConfirmPayment,
+              icon: const Icon(Icons.check_rounded, size: 20),
+              onPressed: () => openObligationSettlement(
+                context,
+                debtorActor: debtor,
+                creditorActor: creditor,
+                currency: balance.currency,
+                spaceId: spaceId,
+              ),
+            ),
+        ],
       ),
     );
   }

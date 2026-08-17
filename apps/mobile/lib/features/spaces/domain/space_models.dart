@@ -92,15 +92,17 @@ String relationshipSpaceId(String leftUid, String rightUid) {
 bool isRelationshipSpaceId(String spaceId) =>
     spaceId.startsWith('relationship_') && spaceId.contains('~');
 
-/// Membresía = acceso al espacio. El ROL no se persiste: propietario es
-/// quien coincide con `space.ownerUid` (fuente única de verdad, lo que hace
-/// atómica la transferencia); miembro, el resto.
+/// Membresía = acceso al espacio. El PROPIETARIO sigue siendo único y sigue
+/// viviendo en `space.ownerUid` (fuente única de verdad, lo que hace atómica
+/// la transferencia). `role` es la ÚNICA delegación (ADR-038) y solo el
+/// propietario la concede: no sustituye a `ownerUid` ni compite con él.
 class SpaceMember {
   const SpaceMember({
     required this.uid,
     this.joinedAt,
     this.kind = SpaceMemberKind.account,
     this.displayName,
+    this.role = SpaceMemberRole.member,
   });
 
   final String uid;
@@ -114,10 +116,19 @@ class SpaceMember {
   /// perfil público del que leerlo en vivo.
   final String? displayName;
 
+  /// Delegación explícita del propietario. Ausente = miembro normal.
+  final SpaceMemberRole role;
+
   bool get isGuest => kind == SpaceMemberKind.guest;
+  bool get isAdmin => role == SpaceMemberRole.admin;
 }
 
 enum SpaceMemberKind { account, guest }
+
+/// Un administrador puede editar el contexto y representar económicamente a
+/// quien NO tiene cuenta. Nunca puede tocar el saldo de una cuenta ajena:
+/// eso lo impide la autoridad económica, no la interfaz (ADR-038).
+enum SpaceMemberRole { member, admin }
 
 /// Participante MANUAL (ADR-033): una persona sin cuenta que el anfitrión
 /// escribe a mano. No tiene UID ni dispositivo — no lee ni confirma nada —

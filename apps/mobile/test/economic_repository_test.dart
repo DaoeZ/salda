@@ -20,10 +20,29 @@ class _FakeFunctions implements EconomicFunctionsGateway {
   Future<void> createPayment(Map<String, Object> data) async =>
       created.add(data);
 
+  final settled = <Map<String, Object>>[];
+
   @override
   Future<void> resolvePayment(Map<String, Object> data) async =>
       resolved.add(data);
+
+  @override
+  Future<void> settleEntries(Map<String, Object> data) async =>
+      settled.add(data);
 }
+
+EconomicPaymentView _payment(String id, {String source = 'user'}) =>
+    EconomicPaymentView(
+      id: id,
+      payerUid: 'test',
+      receiverUid: 'edgar',
+      amount: const Money(675),
+      currency: 'EUR',
+      status: EconomicPaymentStatus.pending,
+      source: source,
+      sourceSessionId: source == 'user' ? null : 's1',
+      settlementId: source == 'user' ? null : 'st1',
+    );
 
 void main() {
   late FakeFirebaseFirestore firestore;
@@ -115,7 +134,7 @@ void main() {
   test(
     'confirmar, rechazar y cancelar delegan en la Function autoritativa',
     () async {
-      await repository.confirmPayment('p1');
+      await repository.confirmPayment(_payment('p1'));
       await repository.rejectPayment('p2');
       await repository.cancelPayment('p3');
 
@@ -126,6 +145,46 @@ void main() {
       ]);
     },
   );
+
+  test('liquidar obligaciones viaja POR DEUDA, nunca por el agregado', () async {
+    await repository.settleEntries([
+      const EntrySettlementRequest('e_familycash'),
+      const EntrySettlementRequest('e_tfamilycash', amount: Money(500)),
+    ]);
+
+    expect(functions.settled.single, {
+      'entries': [
+        {'entryId': 'e_familycash'},
+        {'entryId': 'e_tfamilycash', 'amount': 500},
+      ],
+      'idempotencyKey': '1234567890abcdef',
+    });
+    // El camino normal no manda importe: lo resuelve el servidor con el
+    // pendiente REAL de esa deuda.
+    expect(
+      (functions.settled.single['entries']! as List).first,
+      isNot(contains('amount')),
+    );
+  });
+
+  test('confirmar un pago LEGADO escribe su liquidación de sesión', () async {
+    // La callable de P5 rechaza los pagos legado por diseño: antes Economía
+    // ofrecía el botón igualmente y la acción moría con un error genérico.
+    await firestore.doc('sessions/s1/settlements/st1').set({
+      'from': 'p2',
+      'to': 'p1',
+      'amount': 675,
+      'state': 'marked',
+    });
+
+    await repository.confirmPayment(
+      _payment('legacy_st1', source: 'legacySettlement'),
+    );
+
+    final settlement = await firestore.doc('sessions/s1/settlements/st1').get();
+    expect(settlement.data()!['state'], 'confirmed');
+    expect(functions.resolved, isEmpty);
+  });
 
   test(
     'bloquea auto-pago, cero e invitado antes de llamar al servidor',

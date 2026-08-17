@@ -921,6 +921,8 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
             ? l10n.spaceOwnerBadge
             : member.isGuest
             ? l10n.guestBadge
+            : member.isAdmin
+            ? l10n.spaceMemberRoleAdmin
             : '',
       ),
       trailing:
@@ -930,27 +932,57 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
               space.isActive
           ? PopupMenuButton<String>(
               enabled: !_busy,
-              onSelected: (action) => _confirm(
-                context,
-                action == 'remove'
-                    ? l10n.spaceRemoveMemberTitle
-                    : l10n.spaceTransferTitle,
-                action == 'remove'
-                    ? l10n.spaceRemoveMemberBody(name)
-                    : l10n.spaceTransferBody(name),
-                () => action == 'remove'
-                    ? ref
-                          .read(spacesRepositoryProvider)
-                          .removeMember(space.id, member.uid)
-                    : ref
-                          .read(spacesRepositoryProvider)
-                          .transferOwnership(space.id, member.uid),
-              ),
+              onSelected: (action) => switch (action) {
+                'remove' => _confirm(
+                  context,
+                  l10n.spaceRemoveMemberTitle,
+                  l10n.spaceRemoveMemberBody(name),
+                  () => ref
+                      .read(spacesRepositoryProvider)
+                      .removeMember(space.id, member.uid),
+                ),
+                'transfer' => _confirm(
+                  context,
+                  l10n.spaceTransferTitle,
+                  l10n.spaceTransferBody(name),
+                  () => ref
+                      .read(spacesRepositoryProvider)
+                      .transferOwnership(space.id, member.uid),
+                ),
+                // Delegar la administración no toca el saldo de nadie: solo
+                // permite gestionar el contexto y representar a quien no
+                // tiene cuenta (ADR-038).
+                _ => _confirm(
+                  context,
+                  member.isAdmin ? l10n.spaceRemoveAdmin : l10n.spaceMakeAdmin,
+                  l10n.spaceAdminExplanation,
+                  () => ref
+                      .read(spacesRepositoryProvider)
+                      .setMemberRole(
+                        space.id,
+                        member.uid,
+                        member.isAdmin
+                            ? SpaceMemberRole.member
+                            : SpaceMemberRole.admin,
+                      ),
+                ),
+              },
               itemBuilder: (_) => [
                 PopupMenuItem(
                   value: 'transfer',
                   child: Text(l10n.spaceTransferTitle),
                 ),
+                // Un INVITADO no administra: no tiene cuenta con la que
+                // hacerlo y Rules lo deniega igualmente.
+                if (!member.isGuest)
+                  PopupMenuItem(
+                    value: 'role',
+                    child: Text(
+                      member.isAdmin
+                          ? l10n.spaceRemoveAdmin
+                          : l10n.spaceMakeAdmin,
+                    ),
+                  ),
                 PopupMenuItem(
                   value: 'remove',
                   child: Text(l10n.spaceRemoveMemberTitle),

@@ -2629,8 +2629,110 @@ abstract class AppLocalizations {
   /// No description provided for @economyMarkPaid.
   ///
   /// In es, this message translates to:
-  /// **'Marcar como pagado'**
+  /// **'Ya he pagado'**
   String get economyMarkPaid;
+
+  /// No description provided for @economyObligationsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Deudas pendientes'**
+  String get economyObligationsTitle;
+
+  /// No description provided for @economyOwesTo.
+  ///
+  /// In es, this message translates to:
+  /// **'{debtor} debe a {creditor}'**
+  String economyOwesTo(String debtor, String creditor);
+
+  /// No description provided for @economySettleTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Cobrar a {name}'**
+  String economySettleTitle(String name);
+
+  /// No description provided for @economySettleSelected.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmar recepción ({count})'**
+  String economySettleSelected(int count);
+
+  /// No description provided for @economySettleHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Marca lo que ya has recibido. Cada deuda se confirma por separado y conserva su ticket.'**
+  String get economySettleHint;
+
+  /// No description provided for @economyNoOpenObligations.
+  ///
+  /// In es, this message translates to:
+  /// **'No queda nada por cobrar.'**
+  String get economyNoOpenObligations;
+
+  /// No description provided for @economyDeclaredByPayer.
+  ///
+  /// In es, this message translates to:
+  /// **'Dice que ya te ha pagado'**
+  String get economyDeclaredByPayer;
+
+  /// No description provided for @economyPartialPayment.
+  ///
+  /// In es, this message translates to:
+  /// **'Registrar pago parcial'**
+  String get economyPartialPayment;
+
+  /// No description provided for @economyPartialAmount.
+  ///
+  /// In es, this message translates to:
+  /// **'Importe recibido'**
+  String get economyPartialAmount;
+
+  /// No description provided for @economySettleSuccess.
+  ///
+  /// In es, this message translates to:
+  /// **'Cobro confirmado.'**
+  String get economySettleSuccess;
+
+  /// No description provided for @economyRepresentingNotice.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} no tiene cuenta en Salda: confirmas en su nombre.'**
+  String economyRepresentingNotice(String name);
+
+  /// No description provided for @economyOnBehalfOf.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmado en nombre de {name}'**
+  String economyOnBehalfOf(String name);
+
+  /// No description provided for @spaceMemberRoleAdmin.
+  ///
+  /// In es, this message translates to:
+  /// **'Administrador'**
+  String get spaceMemberRoleAdmin;
+
+  /// No description provided for @spaceMemberRoleMember.
+  ///
+  /// In es, this message translates to:
+  /// **'Miembro'**
+  String get spaceMemberRoleMember;
+
+  /// No description provided for @spaceMakeAdmin.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombrar administrador'**
+  String get spaceMakeAdmin;
+
+  /// No description provided for @spaceRemoveAdmin.
+  ///
+  /// In es, this message translates to:
+  /// **'Retirar administrador'**
+  String get spaceRemoveAdmin;
+
+  /// No description provided for @spaceAdminExplanation.
+  ///
+  /// In es, this message translates to:
+  /// **'Un administrador gestiona el contexto y puede confirmar cobros de las personas sin cuenta. Nunca puede tocar el saldo de quien sí la tiene.'**
+  String get spaceAdminExplanation;
 
   /// No description provided for @economyPaymentAmount.
   ///

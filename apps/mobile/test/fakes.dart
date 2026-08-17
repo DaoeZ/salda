@@ -205,4 +205,7 @@ class _NoopEconomicGateway implements EconomicFunctionsGateway {
 
   @override
   Future<void> resolvePayment(Map<String, Object> data) async {}
+
+  @override
+  Future<void> settleEntries(Map<String, Object> data) async {}
 }

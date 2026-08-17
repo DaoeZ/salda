@@ -286,8 +286,10 @@ class GuestSession {
   }
 
   /**
-   * "He recibido el dinero": marked → confirmed SOLO en las liquidaciones
-   * donde este dispositivo reclama al RECEPTOR (la regla lo garantiza).
+   * "Confirmar recepción": pending|marked → confirmed SOLO en las
+   * liquidaciones donde este dispositivo reclama al RECEPTOR (la regla lo
+   * garantiza). No exige que el deudor haya declarado nada antes: puede
+   * haber pagado en mano y no abrir esto nunca (ADR-038).
    */
   async confirmReceived(settlementId: string): Promise<void> {
     await updateDoc(

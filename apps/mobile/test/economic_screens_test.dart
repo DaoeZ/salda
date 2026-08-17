@@ -21,8 +21,14 @@ class _FakeFunctions implements EconomicFunctionsGateway {
   Future<void> createPayment(Map<String, Object> data) async =>
       created.add(data);
 
+  final settled = <Map<String, Object>>[];
+
   @override
   Future<void> resolvePayment(Map<String, Object> data) async {}
+
+  @override
+  Future<void> settleEntries(Map<String, Object> data) async =>
+      settled.add(data);
 }
 
 class _FailingConfirmRepository extends EconomicRepository {
@@ -36,7 +42,7 @@ class _FailingConfirmRepository extends EconomicRepository {
        );
 
   @override
-  Future<void> confirmPayment(String paymentId) async {
+  Future<void> confirmPayment(EconomicPaymentView payment) async {
     throw const EconomicFailure(EconomicFailureCode.network);
   }
 }
@@ -141,9 +147,9 @@ void main() {
 
     // La tarjeta de saldo es ahora una cabecera con el importe en grande,
     // así que el botón puede quedar bajo el pliegue en pantallas cortas.
-    await tester.ensureVisible(find.text('Marcar como pagado'));
+    await tester.ensureVisible(find.text('Ya he pagado'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Marcar como pagado'));
+    await tester.tap(find.text('Ya he pagado'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '10,00');
     await tester.tap(find.text('Continuar'));
@@ -205,7 +211,7 @@ void main() {
       user: guest,
       displayedOverview: guestOverview,
     );
-    expect(find.text('Marcar como pagado'), findsNothing);
+    expect(find.text('Ya he pagado'), findsNothing);
     expect(find.text('Confirmar pago'), findsNothing);
     expect(functions.created, isEmpty);
   });

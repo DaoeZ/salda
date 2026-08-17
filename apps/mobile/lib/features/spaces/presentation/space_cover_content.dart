@@ -12,6 +12,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../economy/data/economic_repository.dart';
 import '../../economy/application/identity_names.dart';
 import '../../economy/presentation/economic_names.dart';
+import '../../economy/presentation/obligation_settlement.dart';
 import '../../sessions/presentation/ticket_navigation.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_models.dart';
@@ -27,16 +28,18 @@ class SpaceBalances extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    // Incluye las deudas de las personas SIN cuenta que este contexto permite
+    // representar (ADR-038): si no, quien administra vería un espacio «en
+    // paz» mientras alguien sigue debiéndole dinero a un participante manual.
     return ref
-        .watch(participantEconomicOverviewProvider)
+        .watch(spaceManageableEconomicOverviewProvider(spaceId))
         .when(
           loading: () => const SkeletonList(rows: 2, leading: false),
           error: (_, _) => ErrorStateView(
             message: l10n.economyLoadError,
             onRetry: () => retryParticipantEconomicOverview(ref),
           ),
-          data: (overview) {
-            final scoped = overview.withinSpace(spaceId);
+          data: (scoped) {
             final balances = scoped.balances
                 .where((balance) => balance.signedOutstandingCents != 0)
                 .toList();
@@ -78,11 +81,23 @@ class _SpaceBalanceRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    // Quien mira NO siempre es una de las dos partes: al representar a
+    // alguien sin cuenta ve deudas ajenas, y darlas por propias las pintaba
+    // como «te debe» (ADR-038).
+    final amParty =
+        balance.firstUid == viewerUid || balance.secondUid == viewerUid;
     final otherUid = balance.firstUid == viewerUid
         ? balance.secondUid
         : balance.firstUid;
     final name = economicNameText(ref, l10n, otherUid);
     final iOwe = balance.debtorUid == viewerUid;
+    final debtor = balance.debtorUid;
+    final creditor = balance.creditorUid;
+    final canConfirm =
+        debtor != null &&
+        creditor != null &&
+        !iOwe &&
+        canViewerConfirmReceipt(ref, creditorActor: creditor, spaceId: spaceId);
     return ListTile(
       minTileHeight: 48,
       leading: SaldaAvatar(
@@ -91,15 +106,41 @@ class _SpaceBalanceRow extends ConsumerWidget {
         radius: 17,
       ),
       title: Text(
-        iOwe ? l10n.economyYouOwe(name) : l10n.economyOwesYou(name),
+        amParty
+            ? (iOwe ? l10n.economyYouOwe(name) : l10n.economyOwesYou(name))
+            : l10n.economyOwesTo(
+                economicNameText(ref, l10n, debtor ?? otherUid),
+                economicNameText(ref, l10n, creditor ?? otherUid),
+              ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: MoneyText(
-        balance.outstanding,
-        size: MoneySize.small,
-        currency: balance.currency,
-        tone: iOwe ? MoneyTone.negative : MoneyTone.positive,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MoneyText(
+            balance.outstanding,
+            size: MoneySize.small,
+            currency: balance.currency,
+            tone: !amParty
+                ? MoneyTone.muted
+                : iOwe
+                ? MoneyTone.negative
+                : MoneyTone.positive,
+          ),
+          if (canConfirm)
+            IconButton(
+              tooltip: l10n.economyConfirmPayment,
+              icon: const Icon(Icons.check_rounded, size: 20),
+              onPressed: () => openObligationSettlement(
+                context,
+                debtorActor: debtor,
+                creditorActor: creditor,
+                currency: balance.currency,
+                spaceId: spaceId,
+              ),
+            ),
+        ],
       ),
       onTap: linkEnabled
           ? () => context.push('/home/spaces/$spaceId/balances/$otherUid')
@@ -232,6 +273,10 @@ class SpaceBalancesScreen extends StatelessWidget {
 /// Detail constrained by both the context and counterpart.  It deliberately
 /// never links back to a global economic relation, where entries from another
 /// space would be mixed into the explanation.
+///
+/// Enseña las DEUDAS que forman el saldo, no solo el saldo: antes era un
+/// callejón sin salida —«Test te debe 14,73» y ninguna acción—, que es
+/// justamente lo que hacía inconsistente el producto (ADR-038).
 class SpaceBalanceDetailScreen extends ConsumerWidget {
   const SpaceBalanceDetailScreen({
     super.key,
@@ -246,7 +291,9 @@ class SpaceBalanceDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final name = economicNameText(ref, l10n, otherUid);
-    final overview = ref.watch(participantEconomicOverviewProvider);
+    final overview = ref.watch(
+      spaceManageableEconomicOverviewProvider(spaceId),
+    );
     return Scaffold(
       appBar: AppBar(title: Text(l10n.economyDetailTitle(name))),
       body: overview.when(
@@ -260,7 +307,7 @@ class SpaceBalanceDetailScreen extends ConsumerWidget {
           ],
         ),
         data: (data) {
-          final balances = data.withinSpace(spaceId).withUser(otherUid);
+          final balances = data.withUser(otherUid);
           if (balances.isEmpty) {
             return ScreenBody(
               children: [
@@ -272,6 +319,27 @@ class SpaceBalanceDetailScreen extends ConsumerWidget {
               ],
             );
           }
+          // Las deudas se toman de la DIRECCIÓN de cada saldo, no dando por
+          // hecho que quien mira sea el acreedor: al representar a alguien
+          // sin cuenta no lo es (ADR-038).
+          final open = balances.where((b) => b.debtorUid != null);
+          final obligations = [
+            for (final balance in open)
+              ...data.openObligations(
+                debtorActor: balance.debtorUid!,
+                creditorActor: balance.creditorUid!,
+                currency: balance.currency,
+              ),
+          ];
+          final settleable = open
+              .where(
+                (balance) => canViewerConfirmReceipt(
+                  ref,
+                  creditorActor: balance.creditorUid!,
+                  spaceId: spaceId,
+                ),
+              )
+              .firstOrNull;
           return ScreenBody(
             children: [
               for (final balance in balances)
@@ -281,6 +349,52 @@ class SpaceBalanceDetailScreen extends ConsumerWidget {
                   viewerUid: data.viewerUid,
                   linkEnabled: false,
                 ),
+              if (obligations.isNotEmpty) ...[
+                const SectionGap(),
+                SectionHeader(title: l10n.economyObligationsTitle),
+                SaldaCardList(
+                  children: [
+                    for (final obligation in obligations)
+                      ListTile(
+                        title: Text(
+                          obligation.entry.ticketName.isEmpty
+                              ? l10n.spaceTicketUntitled
+                              : obligation.entry.ticketName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: obligation.declaration == null
+                            ? null
+                            : Text(l10n.economyDeclaredByPayer),
+                        trailing: MoneyText(
+                          obligation.remaining,
+                          size: MoneySize.small,
+                          currency: obligation.entry.currency,
+                          tone: MoneyTone.positive,
+                        ),
+                        onTap: () => openTicket(
+                          context,
+                          sessionId: obligation.entry.sessionId,
+                          ticketId: obligation.entry.ticketId,
+                        ),
+                      ),
+                  ],
+                ),
+                if (settleable != null) ...[
+                  const SizedBox(height: TokenSpacing.md),
+                  FilledButton.icon(
+                    onPressed: () => openObligationSettlement(
+                      context,
+                      debtorActor: settleable.debtorUid!,
+                      creditorActor: settleable.creditorUid!,
+                      currency: settleable.currency,
+                      spaceId: spaceId,
+                    ),
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: Text(l10n.economyConfirmPayment),
+                  ),
+                ],
+              ],
             ],
           );
         },

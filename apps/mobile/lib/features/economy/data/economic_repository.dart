@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../auth/data/auth_repository.dart';
+import '../../spaces/data/spaces_repository.dart';
 import '../domain/economic_models.dart';
 
 enum EconomicFailureCode {
@@ -25,10 +26,23 @@ class EconomicFailure implements Exception {
   final String? technicalCode;
 }
 
+/// Petición de liquidación contra UNA obligación.
+///
+/// [amount] ausente = su pendiente completo, que es el 99 % de los casos: el
+/// camino normal no obliga a teclear un importe. Indicarlo es el pago
+/// parcial, y pertenece a esta obligación, no al saldo global.
+class EntrySettlementRequest {
+  const EntrySettlementRequest(this.entryId, {this.amount});
+
+  final String entryId;
+  final Money? amount;
+}
+
 abstract interface class EconomicFunctionsGateway {
   Future<void> rebuildMyRelations();
   Future<void> createPayment(Map<String, Object> data);
   Future<void> resolvePayment(Map<String, Object> data);
+  Future<void> settleEntries(Map<String, Object> data);
 }
 
 class FirebaseEconomicFunctionsGateway implements EconomicFunctionsGateway {
@@ -49,6 +63,11 @@ class FirebaseEconomicFunctionsGateway implements EconomicFunctionsGateway {
   @override
   Future<void> resolvePayment(Map<String, Object> data) async {
     await functions.httpsCallable('resolveEconomicPayment').call<void>(data);
+  }
+
+  @override
+  Future<void> settleEntries(Map<String, Object> data) async {
+    await functions.httpsCallable('settleEconomicEntries').call<void>(data);
   }
 }
 
@@ -107,6 +126,29 @@ class EconomicRepository {
       .snapshots()
       .map(_sortedPayments);
 
+  /// Deudas de un espacio en las que participa alguien SIN cuenta.
+  ///
+  /// Solo las autoriza Rules a quien administra ese espacio (ADR-038), y el
+  /// filtro por `hasManualParty` no es cosmético: sin él la consulta
+  /// arrastraría deudas entre dos cuentas y sería denegada entera, que es
+  /// justo la garantía de que un administrador no las ve.
+  Stream<List<EconomicEntryView>> watchRepresentableEntries(String spaceId) =>
+      firestore
+          .collection('economicEntries')
+          .where('spaceId', isEqualTo: spaceId)
+          .where('hasManualParty', isEqualTo: true)
+          .snapshots()
+          .map((snapshot) => [for (final doc in snapshot.docs) _entry(doc)]);
+
+  Stream<List<EconomicPaymentView>> watchRepresentablePayments(
+    String spaceId,
+  ) => firestore
+      .collection('economicPayments')
+      .where('spaceId', isEqualTo: spaceId)
+      .where('hasManualParty', isEqualTo: true)
+      .snapshots()
+      .map(_sortedPayments);
+
   List<EconomicPaymentView> _sortedPayments(
     QuerySnapshot<Map<String, dynamic>> snapshot,
   ) {
@@ -141,8 +183,54 @@ class EconomicRepository {
     );
   }
 
-  Future<void> confirmPayment(String paymentId) =>
-      _resolve(paymentId, 'confirm');
+  /// Liquida obligaciones CONCRETAS (ADR-038).
+  ///
+  /// El caso normal —cobrado todo— no pide importe: cada deuda se salda por
+  /// su pendiente. Confirmar varias a la vez es comodidad de la interfaz;
+  /// cada una conserva su liquidación y su ticket.
+  Future<void> settleEntries(List<EntrySettlementRequest> entries) async {
+    _requireAccount();
+    if (entries.isEmpty) {
+      throw const EconomicFailure(EconomicFailureCode.invalidAmount);
+    }
+    if (entries.any((entry) => (entry.amount ?? const Money(1)).cents <= 0)) {
+      throw const EconomicFailure(EconomicFailureCode.invalidAmount);
+    }
+    await _guard(
+      () => functions.settleEntries({
+        'entries': [
+          for (final entry in entries)
+            {
+              'entryId': entry.entryId,
+              if (entry.amount != null) 'amount': entry.amount!.cents,
+            },
+        ],
+        'idempotencyKey': idempotencyKey(),
+      }),
+    );
+  }
+
+  /// Confirma la recepción de un pago ya declarado.
+  ///
+  /// Un pago legado NO vive en P5 (la callable lo rechaza por diseño): vive
+  /// en la liquidación de su sesión, y allí es donde hay que escribir. Antes
+  /// la pantalla de Economía ofrecía el botón igualmente y la acción moría
+  /// con un error genérico.
+  Future<void> confirmPayment(EconomicPaymentView payment) async {
+    _requireAccount();
+    if (!payment.isLegacy) return _resolve(payment.id, 'confirm');
+    final sessionId = payment.sourceSessionId;
+    final settlementId = payment.settlementId;
+    if (sessionId == null || settlementId == null) {
+      throw const EconomicFailure(EconomicFailureCode.notAllowed);
+    }
+    await _guard(
+      () =>
+          firestore.doc('sessions/$sessionId/settlements/$settlementId').update(
+            {'state': 'confirmed', 'updatedAt': FieldValue.serverTimestamp()},
+          ),
+    );
+  }
 
   Future<void> cancelPayment(String paymentId) => _resolve(paymentId, 'cancel');
 
@@ -215,6 +303,10 @@ class EconomicRepository {
       ),
       createdAt: _date(data['createdAt']),
       confirmedAt: _date(data['confirmedAt']),
+      sourceSessionId: data['sourceSessionId'] as String?,
+      settlementId: data['settlementId'] as String?,
+      spaceId: data['spaceId'] as String?,
+      onBehalfOfManualId: data['onBehalfOfManualId'] as String?,
     );
   }
 }
@@ -332,6 +424,71 @@ final spaceEconomicOverviewProvider = Provider.autoDispose
           .watch(readableEconomicOverviewProvider)
           .whenData((overview) => overview.withinSpace(spaceId)),
     );
+
+/// Deudas del espacio con una parte SIN cuenta, que quien lo administra puede
+/// representar (ADR-038). Solo se suscribe si de verdad administra: para
+/// cualquier otra persona la consulta sería denegada, y con razón.
+final representableEconomicEntriesProvider = StreamProvider.autoDispose
+    .family<List<EconomicEntryView>, String>((ref, spaceId) {
+      if (!ref.watch(iAdministerSpaceProvider(spaceId))) {
+        return Stream.value(const []);
+      }
+      return ref
+          .watch(economicRepositoryProvider)
+          .watchRepresentableEntries(spaceId);
+    });
+
+final representableEconomicPaymentsProvider = StreamProvider.autoDispose
+    .family<List<EconomicPaymentView>, String>((ref, spaceId) {
+      if (!ref.watch(iAdministerSpaceProvider(spaceId))) {
+        return Stream.value(const []);
+      }
+      return ref
+          .watch(economicRepositoryProvider)
+          .watchRepresentablePayments(spaceId);
+    });
+
+/// Economía del espacio TAL Y COMO puede gestionarla quien mira: lo suyo,
+/// más lo de las identidades sin cuenta que representa.
+///
+/// Deliberadamente NO alimenta el resumen global: quien administra no es
+/// parte de esas deudas y sumarlas a su "te deben" sería falso.
+final spaceManageableEconomicOverviewProvider = Provider.autoDispose
+    .family<AsyncValue<EconomicOverview>, String>((ref, spaceId) {
+      // Parte de la proyección que corresponde al ROL de quien mira (cuenta o
+      // invitado), igual que hacían antes estas pantallas.
+      final own = ref
+          .watch(participantEconomicOverviewProvider)
+          .whenData((overview) => overview.withinSpace(spaceId));
+      final entries = ref.watch(representableEconomicEntriesProvider(spaceId));
+      final payments = ref.watch(
+        representableEconomicPaymentsProvider(spaceId),
+      );
+      if (own.isLoading || entries.isLoading || payments.isLoading) {
+        return const AsyncLoading();
+      }
+      if (own.hasError) return AsyncError(own.error!, own.stackTrace!);
+      final base = own.value!;
+      final extraEntries = entries.value ?? const <EconomicEntryView>[];
+      if (extraEntries.isEmpty) return AsyncData(base);
+      final known = {for (final entry in base.entries) entry.id};
+      final knownPayments = {for (final payment in base.payments) payment.id};
+      return AsyncData(
+        EconomicOverview.compute(
+          viewerUid: base.viewerUid,
+          entries: [
+            ...base.entries,
+            for (final entry in extraEntries)
+              if (!known.contains(entry.id)) entry,
+          ],
+          payments: [
+            ...base.payments,
+            for (final payment in payments.value ?? const [])
+              if (!knownPayments.contains(payment.id)) payment,
+          ],
+        ),
+      );
+    });
 
 /// Materializa una sola vez las sesiones históricas accesibles por la cuenta.
 /// La marca autoritativa vive en `users/{uid}` y hace idempotentes las aperturas

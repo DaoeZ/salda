@@ -1452,7 +1452,70 @@ class AppLocalizationsEs extends AppLocalizations {
   String get economyInSpace => 'Espacio vinculado';
 
   @override
-  String get economyMarkPaid => 'Marcar como pagado';
+  String get economyMarkPaid => 'Ya he pagado';
+
+  @override
+  String get economyObligationsTitle => 'Deudas pendientes';
+
+  @override
+  String economyOwesTo(String debtor, String creditor) {
+    return '$debtor debe a $creditor';
+  }
+
+  @override
+  String economySettleTitle(String name) {
+    return 'Cobrar a $name';
+  }
+
+  @override
+  String economySettleSelected(int count) {
+    return 'Confirmar recepción ($count)';
+  }
+
+  @override
+  String get economySettleHint =>
+      'Marca lo que ya has recibido. Cada deuda se confirma por separado y conserva su ticket.';
+
+  @override
+  String get economyNoOpenObligations => 'No queda nada por cobrar.';
+
+  @override
+  String get economyDeclaredByPayer => 'Dice que ya te ha pagado';
+
+  @override
+  String get economyPartialPayment => 'Registrar pago parcial';
+
+  @override
+  String get economyPartialAmount => 'Importe recibido';
+
+  @override
+  String get economySettleSuccess => 'Cobro confirmado.';
+
+  @override
+  String economyRepresentingNotice(String name) {
+    return '$name no tiene cuenta en Salda: confirmas en su nombre.';
+  }
+
+  @override
+  String economyOnBehalfOf(String name) {
+    return 'Confirmado en nombre de $name';
+  }
+
+  @override
+  String get spaceMemberRoleAdmin => 'Administrador';
+
+  @override
+  String get spaceMemberRoleMember => 'Miembro';
+
+  @override
+  String get spaceMakeAdmin => 'Nombrar administrador';
+
+  @override
+  String get spaceRemoveAdmin => 'Retirar administrador';
+
+  @override
+  String get spaceAdminExplanation =>
+      'Un administrador gestiona el contexto y puede confirmar cobros de las personas sin cuenta. Nunca puede tocar el saldo de quien sí la tiene.';
 
   @override
   String get economyPaymentAmount => 'Importe pagado';
