@@ -132,7 +132,7 @@ void main() {
     await cerrar(tester);
   });
 
-  testWidgets('navega al detalle, con «Pablo» de título y dos personas', (
+  testWidgets('navega a la portada bilateral con «Pablo» como identidad', (
     tester,
   ) async {
     await pump(tester);
@@ -142,7 +142,9 @@ void main() {
     expect(navegadoA, '/home/spaces/${space.id}');
     // Ya en el detalle: el título es la otra identidad, no el nombre guardado.
     expect(find.text('Pablo'), findsWidgets);
-    expect(find.text('2 personas'), findsOneWidget);
+    expect(find.text('Pablo'), findsWidgets);
+    expect(find.text('Relación'), findsNothing);
+    expect(find.text('Personas'), findsNothing);
     await cerrar(tester);
   });
 

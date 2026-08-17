@@ -7,7 +7,7 @@ import 'package:salda_mobile/core/theme/app_theme.dart';
 import 'package:salda_mobile/features/home/home_screen.dart';
 import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
 import 'package:salda_mobile/features/spaces/domain/space_models.dart';
-import 'package:salda_mobile/features/spaces/presentation/space_detail_screen.dart';
+import 'package:salda_mobile/features/spaces/presentation/space_management_screen.dart';
 import 'package:salda_mobile/features/spaces/presentation/spaces_screen.dart';
 import 'package:salda_mobile/l10n/generated/app_localizations.dart';
 
@@ -270,7 +270,7 @@ void main() {
     ) async {
       final overflows = await pantalla(
         tester,
-        const SpaceDetailScreen(spaceId: 'g1'),
+        const SpaceManagementScreen(spaceId: 'g1'),
         firestore: await conReclamacion(),
         escala: escala,
       );
@@ -294,7 +294,7 @@ void main() {
   ) async {
     final overflows = await pantalla(
       tester,
-      const SpaceDetailScreen(spaceId: 'g1'),
+      const SpaceManagementScreen(spaceId: 'g1'),
       firestore: await conReclamacion(
         manual: 'Pablo Alberto de la Fuente Iglesias',
         quien: 'Pablo Alberto de la Fuente Iglesias y Manrique',

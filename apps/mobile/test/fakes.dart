@@ -109,6 +109,7 @@ List<Override> loggedInOverrides({
   String uid = 'owner',
   String displayName = 'Edgar',
   ManualLinkFunctionsGateway? manualLinkFunctionsGateway,
+  ManualLinkRepository? manualLinkRepository,
   AuthRepository? authRepository,
 }) {
   final fake = firestore ?? FakeFirebaseFirestore();
@@ -151,11 +152,12 @@ List<Override> loggedInOverrides({
     // Igual que el economico: sin override apuntaba a la instancia REAL, asi
     // que la bandeja de solicitudes de identidad quedaba sin probar.
     manualLinkRepositoryProvider.overrideWithValue(
-      ManualLinkRepository(
-        firestore: fake,
-        uid: () => uid,
-        functions: manualLinkFunctionsGateway ?? _NoopManualLinkGateway(),
-      ),
+      manualLinkRepository ??
+          ManualLinkRepository(
+            firestore: fake,
+            uid: () => uid,
+            functions: manualLinkFunctionsGateway ?? _NoopManualLinkGateway(),
+          ),
     ),
     // Sin esto el repositorio economico apuntaba a la instancia REAL de
     // Firestore, asi que en pruebas el balance nunca cargaba y las

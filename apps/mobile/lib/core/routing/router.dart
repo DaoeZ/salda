@@ -29,6 +29,8 @@ import '../../features/spaces/presentation/space_detail_screen.dart';
 import '../../features/spaces/presentation/create_relationship_screen.dart';
 import '../../features/spaces/presentation/join_space_screen.dart';
 import '../../features/spaces/presentation/space_link_screen.dart';
+import '../../features/spaces/presentation/space_management_screen.dart';
+import '../../features/spaces/presentation/space_cover_content.dart';
 import '../../features/spaces/presentation/spaces_screen.dart';
 import '../../l10n/generated/app_localizations.dart';
 
@@ -86,7 +88,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             location == '/home/people' ||
             location == '/home/people-search' ||
             location == '/home/personas' ||
-            location.startsWith('/home/person/');
+            location.startsWith('/home/person/') ||
+            RegExp(r'^/home/spaces/[^/]+/chat$').hasMatch(location);
         if (isAccountOnlyRoute) return '/home';
         if (location == '/register' ||
             isJoinLink ||
@@ -202,29 +205,51 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, state) =>
                 PublicProfileScreen(profileUid: state.pathParameters['uid']!),
           ),
+          GoRoute(path: 'spaces', builder: (_, _) => const SpacesScreen()),
+          // The list and a context cover are siblings: Home can open either
+          // directly without reconstructing the administrative list route.
           GoRoute(
-            path: 'spaces',
-            builder: (_, _) => const SpacesScreen(),
+            path: 'spaces/:sid',
+            builder: (_, state) =>
+                SpaceDetailScreen(spaceId: state.pathParameters['sid']!),
             routes: [
               GoRoute(
-                path: ':sid',
+                path: 'link',
                 builder: (_, state) =>
-                    SpaceDetailScreen(spaceId: state.pathParameters['sid']!),
+                    SpaceLinkScreen(spaceId: state.pathParameters['sid']!),
+              ),
+              GoRoute(
+                path: 'activity',
+                builder: (_, state) =>
+                    ActivityScreen(spaceId: state.pathParameters['sid']!),
+              ),
+              GoRoute(
+                path: 'chat',
+                builder: (_, state) =>
+                    ChatScreen(spaceId: state.pathParameters['sid']!),
+              ),
+              GoRoute(
+                path: 'manage',
+                builder: (_, state) => SpaceManagementScreen(
+                  spaceId: state.pathParameters['sid']!,
+                ),
+              ),
+              GoRoute(
+                path: 'tickets',
+                builder: (_, state) =>
+                    SpaceTicketsScreen(spaceId: state.pathParameters['sid']!),
+              ),
+              GoRoute(
+                path: 'balances',
+                builder: (_, state) =>
+                    SpaceBalancesScreen(spaceId: state.pathParameters['sid']!),
                 routes: [
                   GoRoute(
-                    path: 'link',
-                    builder: (_, state) =>
-                        SpaceLinkScreen(spaceId: state.pathParameters['sid']!),
-                  ),
-                  GoRoute(
-                    path: 'activity',
-                    builder: (_, state) =>
-                        ActivityScreen(spaceId: state.pathParameters['sid']!),
-                  ),
-                  GoRoute(
-                    path: 'chat',
-                    builder: (_, state) =>
-                        ChatScreen(spaceId: state.pathParameters['sid']!),
+                    path: ':uid',
+                    builder: (_, state) => SpaceBalanceDetailScreen(
+                      spaceId: state.pathParameters['sid']!,
+                      otherUid: state.pathParameters['uid']!,
+                    ),
                   ),
                 ],
               ),

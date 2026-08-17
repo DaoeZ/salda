@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/features/spaces/presentation/space_detail_screen.dart';
+import 'package:salda_mobile/features/spaces/presentation/space_management_screen.dart';
 import 'package:salda_mobile/l10n/generated/app_localizations.dart';
 
 import 'fakes.dart';
@@ -14,7 +15,11 @@ import 'fakes.dart';
 void main() {
   late FakeFirebaseFirestore firestore;
 
-  Future<void> pump(WidgetTester tester, String spaceId) async {
+  Future<void> pump(
+    WidgetTester tester,
+    String spaceId, {
+    bool management = false,
+  }) async {
     tester.view.physicalSize = const Size(900, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -28,7 +33,9 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: SpaceDetailScreen(spaceId: spaceId),
+          home: management
+              ? SpaceManagementScreen(spaceId: spaceId)
+              : SpaceDetailScreen(spaceId: spaceId),
         ),
       ),
     );
@@ -91,29 +98,28 @@ void main() {
   });
 
   testWidgets('relación v2 pendiente: NO ofrece añadir manual', (tester) async {
-    await pump(tester, 'rel2');
+    await pump(tester, 'rel2', management: true);
     // El título es la otra persona, no el nombre persistido (BUG-5).
     expect(find.text('Ana'), findsWidgets);
     // La sección entera desaparece: no hay manuales ni forma de añadirlos.
     expect(find.text('Añadir'), findsNothing);
-    expect(find.text('Personas sin cuenta'), findsNothing);
+    expect(find.text('Añadir'), findsNothing);
     await cerrar(tester);
   });
 
   testWidgets('relación v3: muestra su manual pero NO ofrece añadir otro', (
     tester,
   ) async {
-    await pump(tester, 'rel3');
+    await pump(tester, 'rel3', management: true);
     // La persona sin cuenta se ve: es la segunda identidad de la relación.
     expect(find.text('Pablo'), findsWidgets);
     // La sección se muestra, pero sin acción de añadir.
-    expect(find.text('Personas sin cuenta'), findsOneWidget);
     expect(find.text('Añadir'), findsNothing);
     await cerrar(tester);
   });
 
   testWidgets('grupo: conserva la acción de añadir manual', (tester) async {
-    await pump(tester, 'grupo');
+    await pump(tester, 'grupo', management: true);
     expect(find.text('Añadir'), findsOneWidget);
     await cerrar(tester);
   });

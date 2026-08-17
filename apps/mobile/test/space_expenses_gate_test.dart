@@ -2,7 +2,10 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salda_mobile/features/auth/data/auth_repository.dart';
+import 'package:salda_mobile/features/auth/data/guest_identity_repository.dart';
 import 'package:salda_mobile/features/spaces/presentation/space_detail_screen.dart';
+import 'package:salda_mobile/features/spaces/presentation/space_management_screen.dart';
 import 'package:salda_mobile/l10n/generated/app_localizations.dart';
 
 import 'fakes.dart';
@@ -37,12 +40,29 @@ void main() {
 
   setUp(() => firestore = FakeFirebaseFirestore());
 
-  Future<void> pump(WidgetTester tester, String spaceId) async {
+  Future<void> pump(
+    WidgetTester tester,
+    String spaceId, {
+    bool management = false,
+    AppUser user = const AppUser(uid: 'owner', emailVerified: true),
+  }) async {
     tester.view.physicalSize = const Size(900, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
-      overrides: loggedInOverrides(firestore: firestore),
+      overrides:
+          loggedInOverrides(
+            firestore: firestore,
+            uid: user.uid,
+            authRepository: FakeAuthRepository(user: user),
+          )..add(
+            guestIdentityRepositoryProvider.overrideWithValue(
+              GuestIdentityRepository(
+                firestore: firestore,
+                uid: () => user.uid,
+              ),
+            ),
+          ),
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -51,7 +71,9 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: SpaceDetailScreen(spaceId: spaceId),
+          home: management
+              ? SpaceManagementScreen(spaceId: spaceId)
+              : SpaceDetailScreen(spaceId: spaceId),
         ),
       ),
     );
@@ -90,7 +112,8 @@ void main() {
     await pump(tester, 'g2');
     expect(habilitado(tester), isTrue);
     expect(falta, findsNothing);
-    // Y la persona sin cuenta se ve como parte del grupo.
+    // La identidad manual se administra en segundo nivel, no en la portada.
+    await pump(tester, 'g2', management: true);
     expect(find.text('Pablo0'), findsWidgets);
     await cerrar(tester);
   });
@@ -191,6 +214,62 @@ void main() {
       'schemaVersion': 1,
     });
     await pump(tester, 'rel3');
+    expect(habilitado(tester), isTrue);
+    await cerrar(tester);
+  });
+
+  testWidgets('invitado operativo solo crea ticket con política de grupo', (
+    tester,
+  ) async {
+    await grupo('guest-group', cuentas: 2);
+    await firestore.doc('spaces/guest-group/members/uid-1').delete();
+    await firestore.doc('spaces/guest-group/members/guest').set({
+      'uid': 'guest',
+      'kind': 'guest',
+      'displayName': 'Inés',
+    });
+    await firestore.doc('guestIdentities/guest').set({'displayName': 'Inés'});
+    const guest = AppUser(uid: 'guest', isAnonymous: true);
+
+    await pump(tester, 'guest-group', user: guest);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await cerrar(tester);
+
+    await firestore.doc('spaces/guest-group').update({
+      'guestsCanCreateExpenses': true,
+    });
+    await pump(tester, 'guest-group', user: guest);
+    expect(habilitado(tester), isTrue);
+    await cerrar(tester);
+  });
+
+  testWidgets('invitado operativo conserva el gate en relación', (
+    tester,
+  ) async {
+    await firestore.doc('spaces/guest-relationship').set({
+      'name': 'Inés',
+      'ownerUid': 'owner',
+      'kind': 'relationship',
+      'relationshipUids': ['owner', 'guest'],
+      'status': 'active',
+      'guestsCanCreateExpenses': true,
+      'schemaVersion': 2,
+    });
+    await firestore.doc('spaces/guest-relationship/members/owner').set({
+      'uid': 'owner',
+    });
+    await firestore.doc('spaces/guest-relationship/members/guest').set({
+      'uid': 'guest',
+      'kind': 'guest',
+      'displayName': 'Inés',
+    });
+    await firestore.doc('guestIdentities/guest').set({'displayName': 'Inés'});
+
+    await pump(
+      tester,
+      'guest-relationship',
+      user: const AppUser(uid: 'guest', isAnonymous: true),
+    );
     expect(habilitado(tester), isTrue);
     await cerrar(tester);
   });

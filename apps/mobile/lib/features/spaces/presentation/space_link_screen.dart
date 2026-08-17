@@ -19,53 +19,155 @@ import '../domain/space_models.dart';
 /// ya sabe qué significa esta pantalla. La diferencia es el alcance — aquí
 /// se entra en el grupo, no en una cuenta suelta — y que el enlace es
 /// revocable y rotable en cualquier momento.
-class SpaceLinkScreen extends ConsumerWidget {
+class SpaceLinkScreen extends ConsumerStatefulWidget {
   const SpaceLinkScreen({super.key, required this.spaceId});
 
   final String spaceId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SpaceLinkScreen> createState() => _SpaceLinkScreenState();
+}
+
+class _SpaceLinkScreenState extends ConsumerState<SpaceLinkScreen> {
+  var _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final space = ref.watch(spaceProvider(spaceId)).value;
+    final spaceId = widget.spaceId;
+    final space = ref.watch(spaceProvider(spaceId));
     final link = ref.watch(spaceJoinLinkProvider(spaceId));
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.spaceLinkTitle)),
-      body: link.when(
+      body: space.when(
         loading: () => const ScreenBody(children: [SkeletonList(rows: 2)]),
         error: (_, _) => ScreenBody(
-          children: [ErrorStateView(message: l10n.spaceLinkError)],
-        ),
-        data: (active) => Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(TokenSpacing.xl),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: active == null
-                  ? _NoLink(spaceId: spaceId, spaceName: space?.name ?? '')
-                  : _ActiveLink(link: active, theme: theme),
+          children: [
+            ErrorStateView(
+              message: l10n.spacesLoadError,
+              onRetry: () => ref.invalidate(spaceProvider(spaceId)),
             ),
-          ),
+          ],
         ),
+        data: (resolvedSpace) {
+          if (resolvedSpace == null || !resolvedSpace.isActive) {
+            return ScreenBody(
+              children: [ErrorStateView(message: l10n.spaceActionError)],
+            );
+          }
+          return link.when(
+            loading: () => const ScreenBody(children: [SkeletonList(rows: 2)]),
+            error: (_, _) => ScreenBody(
+              children: [ErrorStateView(message: l10n.spaceLinkError)],
+            ),
+            data: (active) => Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(TokenSpacing.xl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: active == null
+                      ? _NoLink(
+                          busy: _busy,
+                          onCreate: (lifetime) =>
+                              _create(resolvedSpace, lifetime),
+                        )
+                      : _ActiveLink(
+                          link: active,
+                          theme: theme,
+                          busy: _busy,
+                          onRotate: () => _rotate(active),
+                          onRevoke: () => _revoke(active),
+                        ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
+
+  Future<void> _create(Space space, JoinLinkLifetime lifetime) => _mutate(
+    () => ref
+        .read(spacesRepositoryProvider)
+        .createJoinLink(space.id, space.name, lifetime: lifetime),
+  );
+
+  Future<void> _rotate(SpaceJoinLink link) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await _confirm(l10n.spaceLinkRotateConfirm);
+    if (!confirmed || !mounted) return;
+    await _mutate(
+      () => ref
+          .read(spacesRepositoryProvider)
+          .rotateJoinLink(
+            link.spaceId,
+            link.spaceName,
+            previousToken: link.token,
+          ),
+    );
+  }
+
+  Future<void> _revoke(SpaceJoinLink link) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await _confirm(l10n.spaceLinkRevokeConfirm);
+    if (!confirmed || !mounted) return;
+    await _mutate(
+      () => ref.read(spacesRepositoryProvider).revokeJoinLink(link.token),
+    );
+  }
+
+  Future<void> _mutate(Future<Object?> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context);
+    try {
+      await action();
+    } on Object {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<bool> _confirm(String message) async {
+    final l10n = AppLocalizations.of(context);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.commonConfirm),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
 }
 
-class _NoLink extends ConsumerStatefulWidget {
-  const _NoLink({required this.spaceId, required this.spaceName});
+class _NoLink extends StatefulWidget {
+  const _NoLink({required this.busy, required this.onCreate});
 
-  final String spaceId;
-  final String spaceName;
+  final bool busy;
+  final ValueChanged<JoinLinkLifetime> onCreate;
 
   @override
-  ConsumerState<_NoLink> createState() => _NoLinkState();
+  State<_NoLink> createState() => _NoLinkState();
 }
 
-class _NoLinkState extends ConsumerState<_NoLink> {
-  bool _working = false;
+class _NoLinkState extends State<_NoLink> {
   var _lifetime = JoinLinkLifetime.never;
 
   @override
@@ -83,7 +185,7 @@ class _NoLinkState extends ConsumerState<_NoLink> {
         ),
         const SizedBox(height: TokenSpacing.lg),
         FilledButton.icon(
-          onPressed: _working ? null : _create,
+          onPressed: widget.busy ? null : _create,
           icon: const Icon(Icons.add_link),
           label: Text(l10n.spaceLinkCreate),
         ),
@@ -91,19 +193,9 @@ class _NoLinkState extends ConsumerState<_NoLink> {
     );
   }
 
-  Future<void> _create() async {
-    setState(() => _working = true);
-    try {
-      await ref
-          .read(spacesRepositoryProvider)
-          .createJoinLink(
-            widget.spaceId,
-            widget.spaceName,
-            lifetime: _lifetime,
-          );
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
+  void _create() {
+    if (widget.busy) return;
+    widget.onCreate(_lifetime);
   }
 }
 
@@ -150,14 +242,23 @@ class _LifetimePicker extends StatelessWidget {
   }
 }
 
-class _ActiveLink extends ConsumerWidget {
-  const _ActiveLink({required this.link, required this.theme});
+class _ActiveLink extends StatelessWidget {
+  const _ActiveLink({
+    required this.link,
+    required this.theme,
+    required this.busy,
+    required this.onRotate,
+    required this.onRevoke,
+  });
 
   final SpaceJoinLink link;
   final ThemeData theme;
+  final bool busy;
+  final VoidCallback onRotate;
+  final VoidCallback onRevoke;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final url = SpacesRepository.joinUrlFor(
       AppEnvironment.hostingDomain,
@@ -239,58 +340,17 @@ class _ActiveLink extends ConsumerWidget {
         // Revocar es la única forma de cerrar la puerta: quien ya tuviera el
         // enlace deja de poder entrar en cuanto se rota.
         TextButton.icon(
-          onPressed: () => _rotate(context, ref),
+          onPressed: busy ? null : onRotate,
           icon: const Icon(Icons.autorenew, size: 18),
           label: Text(l10n.spaceLinkRotate),
         ),
         TextButton.icon(
-          onPressed: () => _revoke(context, ref),
+          onPressed: busy ? null : onRevoke,
           icon: const Icon(Icons.link_off, size: 18),
           label: Text(l10n.spaceLinkRevoke),
           style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
         ),
       ],
     );
-  }
-
-  Future<void> _rotate(BuildContext context, WidgetRef ref) async {
-    final l10n = AppLocalizations.of(context);
-    final confirmed = await _confirm(context, l10n.spaceLinkRotateConfirm);
-    if (!confirmed) return;
-    await ref
-        .read(spacesRepositoryProvider)
-        .rotateJoinLink(
-          link.spaceId,
-          link.spaceName,
-          previousToken: link.token,
-        );
-  }
-
-  Future<void> _revoke(BuildContext context, WidgetRef ref) async {
-    final l10n = AppLocalizations.of(context);
-    final confirmed = await _confirm(context, l10n.spaceLinkRevokeConfirm);
-    if (!confirmed) return;
-    await ref.read(spacesRepositoryProvider).revokeJoinLink(link.token);
-  }
-
-  Future<bool> _confirm(BuildContext context, String message) async {
-    final l10n = AppLocalizations.of(context);
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.commonCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.commonConfirm),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
   }
 }

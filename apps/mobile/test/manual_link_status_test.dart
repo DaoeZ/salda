@@ -11,7 +11,7 @@ import 'package:salda_mobile/features/profile/data/profile_repository.dart';
 import 'package:salda_mobile/features/sessions/data/ticket_links_repository.dart';
 import 'package:salda_mobile/features/spaces/data/manual_link_repository.dart';
 import 'package:salda_mobile/features/sessions/presentation/linked_ticket_screen.dart';
-import 'package:salda_mobile/features/spaces/presentation/space_detail_screen.dart';
+import 'package:salda_mobile/features/spaces/presentation/space_management_screen.dart';
 import 'package:salda_mobile/features/spaces/domain/space_models.dart';
 import 'package:salda_mobile/l10n/generated/app_localizations.dart';
 
@@ -595,7 +595,7 @@ void main() {
           theme: AppTheme.light(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const SpaceDetailScreen(spaceId: 'sp1'),
+          home: const SpaceManagementScreen(spaceId: 'sp1'),
         ),
       ),
     );
@@ -645,7 +645,7 @@ void main() {
           theme: AppTheme.light(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const SpaceDetailScreen(spaceId: 'sp1'),
+          home: const SpaceManagementScreen(spaceId: 'sp1'),
         ),
       ),
     );
