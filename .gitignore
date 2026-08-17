@@ -43,6 +43,12 @@ storage-debug.log
 *-debug.log
 emulator-data/
 
+# --- Claude Code ---
+# Estado local de sesion (marcador de validacion pendiente del Stop hook)
+# y worktrees que Claude prepare para subagentes: no son codigo del proyecto.
+.claude/.validation-pending
+.claude/worktrees/
+
 # --- IDE / OS ---
 .idea/
 .vscode/

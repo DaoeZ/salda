@@ -12,6 +12,42 @@
 
 ---
 
+## 0. Reglas de trabajo para Claude Code (leer siempre, toda sesión)
+
+- El código existente es la fuente de verdad. Antes de implementar, inspecciona los
+  patrones ya usados en el módulo (o uno análogo) y síguelos.
+- Cambio mínimo correcto: KISS/YAGNI, estilo Ponytail. Sin abstracciones especulativas,
+  sin interfaces de una sola implementación, sin flexibilidad "por si acaso".
+- No introduzcas una segunda arquitectura ni cambies state management (Riverpod),
+  navegación (go_router), persistencia/offline, DI o el sistema de diseño (tokens +
+  Material 3) sin necesidad real del ticket. Si crees que hace falta, consúltalo primero
+  (ver §4: decisiones menores se toman solas, las de arquitectura se consultan).
+- Nada de refactors no relacionados con la tarea. Reutiliza componentes/paquetes
+  existentes en vez de crear los tuyos.
+- Preserva siempre: compatibilidad de datos (`schemaVersion`, migraciones), comportamiento
+  offline, sincronización con Firebase (agregados solo los escribe la function, spec §7),
+  el pipeline OCR, los proveedores de IA y sus fallbacks (M6), autenticación, y la
+  integridad económica de gastos/grupos/relaciones (motores de `domain`, ADR-029).
+- No añadas dependencias runtime nuevas sin necesidad demostrada (ver ladder de Ponytail:
+  ¿ya lo resuelve algo instalado, el stdlib de Dart/Node, o una línea?).
+- Bugs: entiende la causa raíz antes de tocar nada (grep todos los llamantes de la función
+  afectada), añade test de regresión cuando sea razonable, arregla la raíz — no el síntoma
+  en un único caller.
+- No modifiques un test válido solo para que pase; si el test está mal, dilo y corrígelo
+  con criterio, no lo silencies.
+- Features grandes o ambiguas → usa las skills de Superpowers (brainstorming, writing-plans,
+  TDD). Cambios pequeños y acotados → sin planificación de más, ve directo.
+- Subagentes solo cuando aporten valor real (paralelismo genuino, aislamiento de contexto).
+  Worktrees cuando varios agentes vayan a editar en paralelo. Los worktrees parten del HEAD
+  local, pero NO contienen modificaciones sin commit del working tree: antes de delegar a un
+  worktree una tarea que dependa de cambios locales sin commit, comprueba `git status` y no
+  asumas que el subagente podrá verlos.
+- No hagas `git commit` ni `git push` salvo petición explícita del usuario en ese turno.
+- No des una tarea por terminada con `dart analyze --fatal-infos`, tests o goldens
+  relevantes en rojo (ver §12 "Comandos de verificación por fase").
+
+---
+
 ## 1. Resumen del proyecto: qué es y estado general
 
 **Qué es:** app móvil (Android primero; iOS después desde la misma base Flutter) tipo
@@ -66,8 +102,8 @@ AiAnalysisController (imagen si visión — ScanService ahora conserva imagePath
 lastScanImageProvider —, reintento único en badResponse, sustituye el draft) y botón
 "Analizar con IA" de la revisión activo solo con proveedor configurado (DC-13).
 **TODAS las fases de la hoja de ruta están completas a nivel de código.**
-Entorno: SDK de Android instalado en C:\dev\android-sdk (cmdline-tools, licencias
-aceptadas, ANDROID_HOME de usuario). ·
+Entorno: SDK de Android instalado en `%LOCALAPPDATA%\Android\Sdk` (cmdline-tools,
+licencias aceptadas, ANDROID_HOME de usuario). ·
 Pendiente de usuario: proyectos Firebase reales, Android Studio/dispositivo, App Check.
 
 **M5 realizado:** Ajustes (tema persistido, métodos de pago en users/{uid} +
@@ -544,11 +580,17 @@ firebase CLI → keyring del SO del desarrollador.
   Versiones fijadas en `.fvmrc` (Flutter 3.44.8), `.nvmrc` (Node 22),
   `.java-version` (JDK 17 — Gradle usa JAVA_HOME, no el `java` del PATH) y
   `.tool-versions`.
-- **Entorno Windows de esta máquina**: Flutter en `C:\dev\flutter`; JDK Temurin 17
-  en `%JAVA_HOME%` (Program Files\Eclipse Adoptium) y un 21 en el PATH para el
-  emulador de Firestore. Android SDK en `%LOCALAPPDATA%\Android\Sdk`. Node 24,
-  Firebase CLI y gh (cuenta DaoeZ) globales. Keystore de desarrollo en
-  `C:\Users\Edgar\.salda\salda-dev.jks`, FUERA del repo.
+- **Entorno Windows de esta máquina**: Flutter en `C:\Users\Usuario\development\flutter`;
+  JDK Temurin 21 (`21.0.12`) en `%JAVA_HOME%` (Program Files\Eclipse Adoptium), sin
+  necesidad de un JDK 17 aparte — verificado ejecutando `gradlew.bat :app:help` desde
+  `apps/mobile/android`: Gradle Wrapper 9.1.0 + AGP 9.0.1 + Kotlin 2.3.20 configuran y
+  compilan sin problemas sobre JDK 21 (el `sourceCompatibility`/`jvmTarget = 17` de
+  `app/build.gradle.kts` fija el bytecode de salida, no el JDK que ejecuta Gradle).
+  Android SDK permanente en `%LOCALAPPDATA%\Android\Sdk` (`ANDROID_HOME` de usuario;
+  antes vivía en una carpeta temporal de Codex referenciada solo desde
+  `apps/mobile/android/local.properties`, ya corregido). Node 24,
+  Firebase CLI y gh (cuenta DaoeZ) globales. Keystore de desarrollo FUERA del repo
+  (ver `docs/ENTORNOS.md`, sección "Firma de desarrollo compartida").
   PowerShell 5.1: sin `&&`; primeras ejecuciones de flutter lentas (compila su tool).
 - **Comandos de verificación por fase** (ejecutarlos TODOS antes de dar una fase por
   cerrada): `dart analyze --fatal-infos` (raíz) · `dart test` en packages/domain y
