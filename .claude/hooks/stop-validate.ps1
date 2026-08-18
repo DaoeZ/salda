@@ -98,7 +98,7 @@ try {
     #    (firebase emulators:exec). Si falta el CLI, BLOQUEA (no es opcional).
     if (Test-Touched 'backend/firestore/') {
         $e = Invoke-Check -Tool 'firebase' -WorkDir $projectRoot -Label 'reglas de Firestore (emulador)' `
-            -Command { firebase emulators:exec --only firestore --project demo-salda "npm --prefix backend/firestore test" }
+            -Command { firebase emulators:exec --only firestore,storage --project demo-salda "npm --prefix backend/firestore test" }
         if ($e) { $errors += $e }
     }
 

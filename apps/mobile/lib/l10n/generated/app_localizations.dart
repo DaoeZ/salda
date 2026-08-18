@@ -1408,6 +1408,24 @@ abstract class AppLocalizations {
   /// **'Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.'**
   String get ticketPickHint;
 
+  /// No description provided for @ticketPickError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo guardar tu selección. Puede que la cuenta ya esté cerrada.'**
+  String get ticketPickError;
+
+  /// No description provided for @ticketSplitEqualHint.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{Este gasto se reparte a partes iguales. Los productos son el detalle de la compra, no el reparto.} other{Este gasto se reparte a partes iguales entre {count} personas. Los productos son el detalle de la compra, no el reparto.}}'**
+  String ticketSplitEqualHint(int count);
+
+  /// No description provided for @ticketSplitYourShare.
+  ///
+  /// In es, this message translates to:
+  /// **'Te corresponden {amount}.'**
+  String ticketSplitYourShare(String amount);
+
   /// No description provided for @lineForAll.
   ///
   /// In es, this message translates to:

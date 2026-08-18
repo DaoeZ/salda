@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Tests de la matriz de autorización (spec §13.2) contra el Emulator Suite. Ejecutar con: firebase emulators:exec --only firestore --project demo-salda \"npm --prefix backend/firestore test\" (desde la raíz).",
+  "description": "Tests de la matriz de autorización (spec §13.2) contra el Emulator Suite. Ejecutar con: firebase emulators:exec --only firestore,storage --project demo-salda \"npm --prefix backend/firestore test\" (desde la raíz).",
   "scripts": {
     "test": "node --test --test-concurrency=1 \"test/**/*.test.mjs\""
   },

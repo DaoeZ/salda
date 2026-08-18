@@ -115,7 +115,7 @@ jobs:
       - run: npm test # compila y ejecuta los vectores dorados (paridad con Dart)
 
   rules:
-    name: Reglas de Firestore (Emulator Suite)
+    name: Reglas de Firestore y Storage (Emulator Suite)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -137,5 +137,5 @@ jobs:
       - run: npm ci --prefix backend/firestore
       - name: Tests de la matriz de autorización (spec §13.2)
         run: >
-          firebase emulators:exec --only firestore --project demo-salda
+          firebase emulators:exec --only firestore,storage --project demo-salda
           "npm --prefix backend/firestore test"

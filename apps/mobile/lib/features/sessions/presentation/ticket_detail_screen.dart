@@ -48,13 +48,20 @@ class TicketDetailScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final t = ticket.ticket;
+    // Auditar no es intervenir (A11b): quien abre el ticket de otro lo ve
+    // entero, pero no se le ofrece ni una acción que las Rules le vayan a
+    // rechazar — compartirlo por enlace y vincularlo a un espacio son del
+    // dueño de la sesión.
+    final canEdit = ref.watch(canEditSessionProvider(ticket.sessionId));
 
     return Scaffold(
       appBar: AppBar(
         title: Text(t.merchantName),
         actions: [
-          _TicketLinkAction(ticketRef: ticket),
-          _SpaceLinkAction(ticket: t),
+          if (canEdit) ...[
+            _TicketLinkAction(ticketRef: ticket),
+            _SpaceLinkAction(ticket: t),
+          ],
         ],
       ),
       body: ScreenBody(
@@ -243,16 +250,57 @@ class _TicketLines extends ConsumerWidget {
     }
 
     final names = {for (final p in participants) p.id: p.name};
-    final ownerPid = participants
-        .where((p) => p.isOwner)
-        .map((p) => p.id)
-        .firstOrNull;
+    // Editar el ticket y elegir MI consumo son dos autoridades distintas.
+    // La segunda no depende de ser dueño de la sesión: depende de tener un
+    // participante reclamado por mi UID, que es EXACTAMENTE lo que
+    // comprueban las Rules (`claimedBy(pid) == uid`). Un miembro del grupo
+    // que abre el ticket de otro elige lo que consumió sin tocar nada más.
+    //
+    // Repliegue por `isOwner` para las sesiones antiguas, donde el
+    // participante del anfitrión pudo quedar sin reclamar: ahí el dueño
+    // sigue eligiendo como siempre.
+    final myUid = ref.watch(currentUserIdFromSpacesProvider);
+    final canEdit = ref.watch(canEditSessionProvider(ticketRef.sessionId));
+    final myPid =
+        (myUid.isEmpty
+            ? null
+            : participants
+                  .where((p) => p.claimedByDevice == myUid)
+                  .map((p) => p.id)
+                  .firstOrNull) ??
+        (canEdit
+            ? participants.where((p) => p.isOwner).map((p) => p.id).firstOrNull
+            : null);
     final mode =
         ticket.splitModeOverride ?? detail?.splitModeDefault ?? SplitMode.equal;
+    // El estado de la sesión vive en un documento que el miembro NO puede
+    // leer (shareCode). Quien sí lo lee exige `open` como siempre; para
+    // quien no, mandan las Rules: si estuviera cerrada, la escritura se
+    // rechaza y la pantalla lo dice.
     final canPick =
-        ownerPid != null &&
+        myPid != null &&
         mode == SplitMode.byItem &&
-        detail?.summary.status == SessionStatus.open;
+        (!canEdit || detail?.summary.status == SessionStatus.open);
+
+    // «A partes iguales» no mira las líneas: repartirlo es dividir el total
+    // entre quienes participan. Sin decirlo, la pantalla mentía — cada
+    // producto salía rotulado «sin reclamar (para Alba)», que es la lectura
+    // del OTRO modo, y quien audita concluía que no le tocaba nada.
+    //
+    // El importe se pide al MISMO motor que usa recompute, con el mismo
+    // universo de participantes (activos, en su orden): es el número que ya
+    // existe, no un cálculo nuevo.
+    final activePids = [
+      for (final p in participants)
+        if (p.active) p.id,
+    ];
+    final myShare = mode == SplitMode.byItem || activePids.isEmpty
+        ? null
+        : SplitEngine.splitTicket(
+            participantIds: activePids,
+            mode: SplitMode.equal,
+            ticket: SplitTicketInput(grandTotal: ticket.grandTotal),
+          )[myPid];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,13 +309,29 @@ class _TicketLines extends ConsumerWidget {
           Text(l10n.ticketPickHint, style: theme.textTheme.bodySmall),
           const SizedBox(height: TokenSpacing.sm),
         ],
+        if (mode == SplitMode.equal) ...[
+          Text(
+            l10n.ticketSplitEqualHint(activePids.length),
+            style: theme.textTheme.bodySmall,
+          ),
+          if (myShare != null) ...[
+            const SizedBox(height: TokenSpacing.xs),
+            Text(
+              l10n.ticketSplitYourShare(formatMoney(myShare)),
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          const SizedBox(height: TokenSpacing.sm),
+        ],
         SaldaCardList(
           children: [
             for (final line in lines)
               _LineTile(
                 line: line,
-                ownerPid: ownerPid,
+                myPid: myPid,
                 canPick: canPick,
+                canEdit: canEdit,
+                showAssignment: mode == SplitMode.byItem,
                 names: names,
                 payerName: ticketRef.payerName,
               ),
@@ -281,15 +345,25 @@ class _TicketLines extends ConsumerWidget {
 class _LineTile extends ConsumerWidget {
   const _LineTile({
     required this.line,
-    required this.ownerPid,
+    required this.myPid,
     required this.canPick,
+    required this.canEdit,
+    required this.showAssignment,
     required this.names,
     required this.payerName,
   });
 
   final TicketLine line;
-  final String? ownerPid;
+  final String? myPid;
   final bool canPick;
+
+  /// Cambiar la FORMA de la línea (pasarla al modelo de unidades) es tocar
+  /// el ticket, no elegir consumo: eso sigue siendo del dueño de la sesión.
+  final bool canEdit;
+
+  /// Quién consume cada unidad solo significa algo en «cada uno lo suyo».
+  /// A partes iguales, esos rótulos describían un reparto que no se aplica.
+  final bool showAssignment;
   final Map<String, String> names;
   final String payerName;
 
@@ -297,19 +371,33 @@ class _LineTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final pid = ownerPid;
+    final pid = myPid;
     final myUnits = pid == null ? 0 : line.weightOf(pid);
     final mine = myUnits > 0;
     final interactive = canPick && line.assignmentType != 'all';
 
-    Future<void> toggleUnit(int unit) => ref
-        .read(sessionRepositoryProvider)
-        .setUnitConsumer(
-          line.path,
-          unit: unit,
-          participantId: pid!,
-          selected: !line.unitIsMine(unit, pid),
-        );
+    // La selección ya no es siempre del dueño: para un miembro del grupo la
+    // autoridad la deciden las Rules (sesión abierta, modo por líneas), y el
+    // cliente no puede saber el estado de la sesión. Si la rechazan, se dice.
+    Future<void> guard(Future<void> Function() action) async {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await action();
+      } on Object {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.ticketPickError)));
+      }
+    }
+
+    Future<void> toggleUnit(int unit) => guard(
+      () => ref
+          .read(sessionRepositoryProvider)
+          .setUnitConsumer(
+            line.path,
+            unit: unit,
+            participantId: pid!,
+            selected: !line.unitIsMine(unit, pid),
+          ),
+    );
 
     Future<void> convertToUnits() async {
       final confirmed =
@@ -345,9 +433,11 @@ class _LineTile extends ConsumerWidget {
       // Mapa completo deseado; 0 elimina la entrada (contrato del repo).
       final weights = Map<String, int>.from(line.weights);
       weights[pid!] = units;
-      return ref
-          .read(sessionRepositoryProvider)
-          .setLineAssignment(line.path, weights, editorPid: pid);
+      return guard(
+        () => ref
+            .read(sessionRepositoryProvider)
+            .setLineAssignment(line.path, weights, editorPid: pid),
+      );
     }
 
     final others = pid == null ? const <String>[] : line.othersThan(pid);
@@ -373,7 +463,9 @@ class _LineTile extends ConsumerWidget {
               ),
           ]
         : const <String>[];
-    final effectiveSubtitle = line.usesUnitModel
+    final effectiveSubtitle = !showAssignment
+        ? null
+        : line.usesUnitModel
         ? (line.units <= 4
               ? unitDescriptions.join('\n')
               : l10n.unitCompactSummary(
@@ -497,7 +589,9 @@ class _LineTile extends ConsumerWidget {
                     ),
                   ),
           ),
-        if (interactive && line.units > 1 && !line.usesUnitModel)
+        // Migrar la línea al modelo de unidades reescribe su asignación
+        // entera: es edición del ticket, no selección propia.
+        if (canEdit && interactive && line.units > 1 && !line.usesUnitModel)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               TokenSpacing.lg,

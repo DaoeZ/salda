@@ -179,6 +179,7 @@ class FirestoreSessionRepository implements SessionRepository {
       ticket: input.ticket,
       payerPid: 'p${input.payerIndex}',
       spaceId: input.spaceId,
+      splitMode: input.splitModeDefault,
     );
 
     batch.set(sessionRef.collection('activity').doc(), {
@@ -200,6 +201,7 @@ class FirestoreSessionRepository implements SessionRepository {
   }) async {
     final sessionRef = _sessions.doc(sessionId);
     final accounts = await sessionRef.collection('accounts').get();
+    final session = await sessionRef.get();
     final batch = firestore.batch();
     final ticketPath = _writeAccountWithTicket(
       batch,
@@ -209,6 +211,9 @@ class FirestoreSessionRepository implements SessionRepository {
       ticket: ticket,
       payerPid: payerPid,
       spaceId: spaceId,
+      splitMode: SplitMode.values.byName(
+        (session.data()?['splitModeDefault'] as String?) ?? 'equal',
+      ),
     );
     batch.update(sessionRef, {
       // Con más de una cuenta la sesión es conceptualmente multi (DC-6).
@@ -235,6 +240,7 @@ class FirestoreSessionRepository implements SessionRepository {
     required NewTicketInput ticket,
     required String payerPid,
     String? spaceId,
+    SplitMode? splitMode,
   }) {
     final accountRef = sessionRef.collection('accounts').doc('a$accountIndex');
     batch.set(accountRef, {
@@ -263,7 +269,18 @@ class FirestoreSessionRepository implements SessionRepository {
       'grandTotal': ticket.grandTotal.cents,
       ...?spaceId == null
           ? null
-          : <String, Object?>{'spaceId': spaceId, 'contextModelVersion': 1},
+          : <String, Object?>{
+              'spaceId': spaceId,
+              'contextModelVersion': 1,
+              // Modo efectivo EN EL TICKET (A11b). Un miembro del grupo
+              // audita el ticket pero NO puede leer `sessions/{sid}` —ahí
+              // vive el shareCode—, así que sin esto no sabría si el gasto
+              // se reparte por líneas y no podría elegir su consumo. El
+              // campo ya existía y recompute ya le da precedencia sobre el
+              // valor de la sesión: escribir el mismo valor no cambia un
+              // solo céntimo, solo lo hace visible a quien participa.
+              if (splitMode != null) 'splitModeOverride': splitMode.name,
+            },
       'createdAt': FieldValue.serverTimestamp(),
     });
 

@@ -727,6 +727,28 @@ class AppLocalizationsEs extends AppLocalizations {
       'Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.';
 
   @override
+  String get ticketPickError =>
+      'No se pudo guardar tu selección. Puede que la cuenta ya esté cerrada.';
+
+  @override
+  String ticketSplitEqualHint(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Este gasto se reparte a partes iguales entre $count personas. Los productos son el detalle de la compra, no el reparto.',
+      one:
+          'Este gasto se reparte a partes iguales. Los productos son el detalle de la compra, no el reparto.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String ticketSplitYourShare(String amount) {
+    return 'Te corresponden $amount.';
+  }
+
+  @override
   String get lineForAll => 'Para todos';
 
   @override

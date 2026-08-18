@@ -254,6 +254,11 @@
   "manualConceptHint": "Taxi, entradas, gasolina…",
 
   "ticketPickHint": "Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.",
+  "ticketPickError": "No se pudo guardar tu selección. Puede que la cuenta ya esté cerrada.",
+  "ticketSplitEqualHint": "{count, plural, =1{Este gasto se reparte a partes iguales. Los productos son el detalle de la compra, no el reparto.} other{Este gasto se reparte a partes iguales entre {count} personas. Los productos son el detalle de la compra, no el reparto.}}",
+  "@ticketSplitEqualHint": { "placeholders": { "count": { "type": "int" } } },
+  "ticketSplitYourShare": "Te corresponden {amount}.",
+  "@ticketSplitYourShare": { "placeholders": { "amount": { "type": "String" } } },
   "lineForAll": "Para todos",
   "lineSharedWith": "Compartido con {names}",
   "@lineSharedWith": { "placeholders": { "names": { "type": "String" } } },

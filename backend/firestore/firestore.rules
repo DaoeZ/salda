@@ -14,6 +14,8 @@ rules_version = '2';
 //  - lines: SOLO su propia entrada en assignment.participants (modo byItem,
 //    sesión abierta). El cliente declara assignment.lastEditorPid y la regla
 //    verifica que (a) solo cambió esa clave y (b) ese pid está reclamado por él.
+//    Desde A11b esa MISMA puerta la usa el miembro del grupo dentro del que
+//    nació la sesión: elegir lo que uno consumió no es editar el ticket.
 //  - settlements: SOLO pending→marked en liquidaciones donde él es `from`.
 //
 // Agregados (totals/balances/computeVersion) son SOLO-LECTURA para todos los
@@ -234,6 +236,34 @@ service cloud.firestore {
 
     function canRead(sid) {
       return ownsSession(sid) || hasGuestAccess(sid);
+    }
+
+    // ── Auditoría del gasto por el grupo (A11b) ─────────────────────────
+    // Una sesión que NACE dentro de un contexto (`contextModelVersion: 1`,
+    // ADR-030) es del GRUPO, no de quien la escribió: la foto, las líneas y
+    // el reparto son la EVIDENCIA con la que cualquier miembro comprueba de
+    // dónde sale su deuda —que el OCR no se equivocó, que el precio es el
+    // del ticket, que el consumo es el que fue—. Sin esto, verificar
+    // dependía de la buena fe de quien subió la foto.
+    //
+    // Es lectura y SOLO lectura: ninguna escritura se apoya en esta
+    // función. Y deliberadamente NO abre `sessions/{sid}`: ese documento
+    // guarda el `shareCode`, que es la credencial de invitado —leerlo
+    // permitiría fabricarse un `guestAccess` y con él editar líneas y
+    // marcar pagos—. Ampliar la lectura no puede ampliar la escritura por
+    // la puerta de atrás.
+    //
+    // Solo GRUPOS: una relación es una pareja simétrica y su modelo no se
+    // toca aquí. Un ticket LEGACY vinculado a mano (sesión sin contexto)
+    // tampoco entra: la política del archivo en Storage solo puede resolver
+    // el espacio de la SESIÓN, y media auditoría no es auditoría.
+    function auditableByGroup(sid) {
+      return canParticipate()
+        && sessionData(sid).get('contextModelVersion', 0) == 1
+        && sessionData(sid).get('spaceId', '') != ''
+        && exists(/databases/$(database)/documents/spaces/$(sessionData(sid).spaceId))
+        && spaceData(sessionData(sid).spaceId).get('kind', 'group') == 'group'
+        && isSpaceMember(sessionData(sid).spaceId);
     }
 
     function claimedBy(sid, pid) {
@@ -1637,8 +1667,9 @@ service cloud.firestore {
       match /participants/{pid} {
         // El enlace de ticket NO abre los participantes: los nombres de los
         // demás no son suyos. Rules sí los consulta internamente con get()
-        // para validar una identificación.
-        allow read: if canRead(sid);
+        // para validar una identificación. El GRUPO sí los ve: sin el
+        // nombre detrás de cada `pid` el reparto es ilegible (A11b).
+        allow read: if canRead(sid) || auditableByGroup(sid);
         allow create: if isOwner(sid) && isOpen(sid);
         allow delete: if isOwner(sid) && isOpen(sid);
         allow update: if
@@ -1660,7 +1691,10 @@ service cloud.firestore {
 
       // ── Cuentas ────────────────────────────────────────────────────────
       match /accounts/{aid} {
-        allow read: if canRead(sid);
+        // El grupo las lee para LLEGAR al ticket: un ticket vive en
+        // `accounts/{aid}/tickets/{tid}` y las superficies que enlazan a él
+        // solo tienen `sessionId` + `ticketId` (A11b).
+        allow read: if canRead(sid) || auditableByGroup(sid);
         allow create: if isOwner(sid) && isOpen(sid)
           && !('totals' in request.resource.data);
         allow update: if isOwner(sid) && isOpen(sid)
@@ -1671,7 +1705,8 @@ service cloud.firestore {
         match /tickets/{tid} {
           // Enlace de ticket: SOLO el ticket del enlace. Ni los demás
           // tickets de la sesión, ni la sesión, ni el espacio.
-          allow read: if canRead(sid) || hasTicketAccessTo(sid, tid);
+          allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
+            || auditableByGroup(sid);
           // spaceId (P4): un ticket pertenece a UN espacio como máximo y
           // solo puede vincularlo el dueño de la sesión a un espacio del
           // que sea miembro. '' o ausente = sin espacio (compatibilidad).
@@ -1688,11 +1723,15 @@ service cloud.firestore {
           allow delete: if isOwner(sid) && isOpen(sid);
 
           match /lines/{lid} {
-            allow read: if canRead(sid) || hasTicketAccessTo(sid, tid);
+            // Productos, cantidades, precios y reparto: el cuerpo de la
+            // auditoría. El grupo LEE; escribir sigue siendo del dueño de
+            // la sesión o del invitado sobre SU propia asignación (A11b).
+            allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
+              || auditableByGroup(sid);
             allow create, delete: if isOwner(sid) && isOpen(sid);
             allow update: if (isOwner(sid) && isOpen(sid))
-              || guestCanEditLine(sid, aid, tid)
-              || guestCanEditUnit(sid, aid, tid);
+              || canPickOwnShare(sid, aid, tid)
+              || canPickOwnUnit(sid, aid, tid);
           }
         }
       }
@@ -1747,10 +1786,25 @@ service cloud.firestore {
       }
     }
 
-    // Autoasignación de línea por invitado (ver cabecera del archivo).
-    // P2.1: el peso son UNIDADES reclamadas (1..unidades de la línea, según
-    // quantityMilli entero); en líneas de una unidad sigue siendo 1.
-    function guestCanEditLine(sid, aid, tid) {
+    // ── Elegir MI propio consumo ────────────────────────────────────────
+    // Autoasignación de línea (ver cabecera del archivo). P2.1: el peso son
+    // UNIDADES reclamadas (1..unidades de la línea, según quantityMilli
+    // entero); en líneas de una unidad sigue siendo 1.
+    //
+    // Quién puede: quien participa en el reparto de ese gasto. Eso es el
+    // invitado del enlace (siempre lo fue) y, desde A11b, el miembro del
+    // grupo dentro del cual nació la sesión: puede abrir el ticket ajeno,
+    // así que debe poder decir qué consumió, igual que diría «esto lo pedí
+    // yo» en la mesa. NO es permiso de edición: el resto de la función lo
+    // acota a una sola cosa —cambiar SU entrada del mapa, y solo del campo
+    // `assignment`— y la identidad se comprueba contra el mismo criterio de
+    // siempre: `claimedBy(pid) == mi uid`. Un participante MANUAL, que no
+    // reclama nada, sigue sin poder ser elegido por nadie.
+    function participatesInSplit(sid) {
+      return hasGuestAccess(sid) || auditableByGroup(sid);
+    }
+
+    function canPickOwnShare(sid, aid, tid) {
       let session = sessionData(sid);
       let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
       let mode = ticket.get('splitModeOverride', session.splitModeDefault);
@@ -1759,7 +1813,7 @@ service cloud.firestore {
       let newParts = request.resource.data.assignment.get('participants', {});
       let weight = newParts.get(editor, 1);
       let quantityMilli = request.resource.data.get('quantityMilli', 1000);
-      return hasGuestAccess(sid)
+      return participatesInSplit(sid)
         && session.status == 'open'
         && mode == 'byItem'
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -1781,7 +1835,7 @@ service cloud.firestore {
     // P2.2: un invitado cambia únicamente SU pertenencia a UNA unidad. El
     // mapa anidado permite que dos dispositivos compartan la misma unidad sin
     // sobrescribirse; unitIds limita los identificadores creados por el owner.
-    function guestCanEditUnit(sid, aid, tid) {
+    function canPickOwnUnit(sid, aid, tid) {
       let session = sessionData(sid);
       let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
       let mode = ticket.get('splitModeOverride', session.splitModeDefault);
@@ -1793,7 +1847,7 @@ service cloud.firestore {
       let oldMembers = oldUnits.get(unitKey, {});
       let newMembers = newUnits.get(unitKey, {});
       let selected = newMembers.get(editor, false);
-      return hasGuestAccess(sid)
+      return participatesInSplit(sid)
         && session.status == 'open'
         && mode == 'byItem'
         && resource.data.assignment.get('schemaVersion', 0) == 2
