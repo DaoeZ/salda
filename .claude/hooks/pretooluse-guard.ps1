@@ -16,9 +16,9 @@ try {
 if ([string]::IsNullOrWhiteSpace($cmd)) { exit 0 }
 
 # Excepcion ACOTADA (autorizada por el usuario): publicar en DESARROLLO las
-# reglas e indices de Firestore, o las Functions. Es la unica forma de que la
-# autoridad del backend llegue al proyecto donde se prueba, y NO abre hosting,
-# ni storage, ni produccion.
+# reglas e indices de Firestore, las Functions o las reglas de Storage. Es la
+# unica forma de que la autoridad del backend llegue al proyecto donde se
+# prueba, y NO abre hosting ni produccion.
 #
 # Se valida por TOKENS, no por substring: cualquier bandera desconocida, un
 # objetivo fuera de la lista, otro proyecto, o un intento de
@@ -26,9 +26,9 @@ if ([string]::IsNullOrWhiteSpace($cmd)) { exit 0 }
 # vuelve a estar bloqueado. Mas vale rechazar una variante legitima que
 # aceptar una que no lo sea.
 #
-# `functions` solo se admite como objetivo UNICO: mezclarlo con otros amplia
-# el alcance de un despliegue que se pidio acotado, y nada obliga a hacerlo
-# en la misma orden.
+# `functions` y `storage` solo se admiten como objetivo UNICO: mezclarlos con
+# otros amplia el alcance de un despliegue que se pidio acotado, y nada obliga
+# a hacerlo en la misma orden.
 function Test-AllowedFirestoreDeploy([string]$command) {
     # Un unico comando: nada de `;`, `&&`, tuberias, redirecciones ni `$(...)`.
     if ($command -match '[;&|`$><]') { return $false }
@@ -49,12 +49,22 @@ function Test-AllowedFirestoreDeploy([string]$command) {
             $i++
             $targets = @($tokens[$i] -split ',' | Where-Object { $_ -ne '' })
             if ($targets.Count -eq 0) { return $false }
-            # Dos combinaciones, y ninguna se mezcla con la otra: reglas e
-            # indices de Firestore, o Functions a solas.
-            $soloFunctions = $targets.Count -eq 1 -and $targets[0] -eq 'functions'
-            if (-not $soloFunctions) {
+            # Tres combinaciones, y ninguna se mezcla con otra: reglas e
+            # indices de Firestore juntos, Functions a solas, o Storage a
+            # solas. Storage se abre en A11b: la foto del ticket es la
+            # evidencia del gasto y su politica vive en storage.rules, asi
+            # que sin publicarla la autoridad queda a medias en desarrollo.
+            #
+            # Comparacion SENSIBLE a mayusculas (`-ccontains`): `-contains` no
+            # lo es, y colaba `--only STORAGE`. La excepcion tiene que
+            # reconocer exactamente la orden que se autorizo, no una variante
+            # parecida.
+            $objetivosUnicos = @('functions', 'storage')
+            $esObjetivoUnico = $targets.Count -eq 1 `
+                -and $objetivosUnicos -ccontains $targets[0]
+            if (-not $esObjetivoUnico) {
                 foreach ($target in $targets) {
-                    if ($firestoreTargets -notcontains $target) { return $false }
+                    if ($firestoreTargets -cnotcontains $target) { return $false }
                 }
             }
             $sawOnly = $true
@@ -62,7 +72,7 @@ function Test-AllowedFirestoreDeploy([string]$command) {
         elseif ($tokens[$i] -eq '--project') {
             if ($i + 1 -ge $tokens.Count) { return $false }
             $i++
-            if ($allowedProjects -notcontains $tokens[$i]) { return $false }
+            if ($allowedProjects -cnotcontains $tokens[$i]) { return $false }
             $sawProject = $true
         }
         else {
@@ -81,7 +91,7 @@ $allowedDeploy = Test-AllowedFirestoreDeploy $cmd
 # pedidos; ampliar aquí si aparece una variante nueva que se cuele.
 $patterns = @(
     @{ Pattern = 'salda-prod'; Reason = 'Referencia operativa a salda-prod (produccion). Cualquier comando que seleccione, modifique o despliegue produccion esta bloqueado hasta la ventana de promocion explicita.' }
-    @{ Name = 'firebase-deploy'; Pattern = 'firebase(\.cmd|\.exe)?\s+.*\bdeploy\b'; Reason = 'firebase deploy bloqueado: solo se admite `firebase deploy --only firestore:rules[,firestore:indexes] --project dev` o `--only functions --project dev`.' }
+    @{ Name = 'firebase-deploy'; Pattern = 'firebase(\.cmd|\.exe)?\s+.*\bdeploy\b'; Reason = 'firebase deploy bloqueado: solo se admite `firebase deploy --only firestore:rules[,firestore:indexes] --project dev`, `--only functions --project dev` o `--only storage --project dev`.' }
     @{ Pattern = 'git\s+push\b.*(--force(-with-lease)?\b|(^|\s)-f(\s|$))'; Reason = 'git push --force / --force-with-lease / -f bloqueado.' }
     @{ Pattern = 'git\s+reset\b.*--hard\b'; Reason = 'git reset --hard bloqueado: descarta trabajo sin confirmar.' }
     @{ Pattern = 'git\s+clean\b.*-[a-zA-Z]*f'; Reason = 'git clean con -f (borrado forzado de no versionados) bloqueado.' }
