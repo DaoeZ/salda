@@ -910,21 +910,22 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
     final name = member.isGuest
         ? member.displayName ?? l10n.guestBadge
         : profile?.displayName ?? '…';
+    // Un miembro normal no lleva etiqueta: se distingue por ausencia, sin
+    // llenar la lista de insignias.
+    final roleLabel = member.uid == space.ownerUid
+        ? l10n.spaceOwnerBadge
+        : member.isGuest
+        ? l10n.guestBadge
+        : member.isAdmin
+        ? l10n.spaceMemberRoleAdmin
+        : null;
     return ListTile(
       minTileHeight: 48,
       leading: member.isGuest
           ? const CircleAvatar(child: Icon(Icons.person_outline))
           : ProfileAvatar(seed: member.uid, displayName: name, radius: 16),
       title: Text(name),
-      subtitle: Text(
-        member.uid == space.ownerUid
-            ? l10n.spaceOwnerBadge
-            : member.isGuest
-            ? l10n.guestBadge
-            : member.isAdmin
-            ? l10n.spaceMemberRoleAdmin
-            : '',
-      ),
+      subtitle: roleLabel == null ? null : Text(roleLabel),
       trailing:
           owner &&
               member.uid != me &&

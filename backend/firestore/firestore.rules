@@ -1038,10 +1038,13 @@ service cloud.firestore {
             (request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['removedBy'])
               && request.resource.data.removedBy == request.auth.uid)
+            // Los roles existen SOLO en grupos: una relación es una pareja
+            // simétrica de dos identidades y no adquiere jerarquía interna.
             || (request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['role'])
               && request.resource.data.role in ['member', 'admin']
-              && resource.data.get('kind', 'account') == 'account')
+              && resource.data.get('kind', 'account') == 'account'
+              && spaceData(spaceId).get('kind', 'group') == 'group')
           );
 
         // Salir (nunca el owner: antes transfiere o archiva) o expulsión

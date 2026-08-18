@@ -1704,6 +1704,59 @@ describe('economic permissions', () => {
       { role: 'superadmin' }));
   });
 
+  it('un grupo admite varios administradores a la vez', async () => {
+    const owner = db(SOCIAL_OUTSIDER);
+    await assertSucceeds(updateDoc(
+      doc(owner, `spaces/sp1/members/${OWNER}`), { role: 'admin' }));
+    await assertSucceeds(updateDoc(
+      doc(owner, `spaces/sp1/members/${STRANGER}`), { role: 'admin' }));
+    await assertSucceeds(getDoc(doc(db(OWNER), 'economicEntries/eManual')));
+    await assertSucceeds(getDoc(doc(db(STRANGER), 'economicEntries/eManual')));
+  });
+
+  it('un administrador NO nombra ni retira administradores', async () => {
+    await makeAdmin(OWNER);
+    // Ni asciende a un miembro normal…
+    await assertFails(updateDoc(
+      doc(db(OWNER), `spaces/sp1/members/${STRANGER}`), { role: 'admin' }));
+    // …ni degrada a otro administrador.
+    await makeAdmin(STRANGER);
+    await assertFails(updateDoc(
+      doc(db(OWNER), `spaces/sp1/members/${STRANGER}`), { role: 'member' }));
+  });
+
+  it('quien no tiene cuenta no puede ser administrado ni administrar',
+      async () => {
+    // Un MANUAL no es miembro: no hay documento de membresía que ascender, y
+    // su propio documento no admite el campo.
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/mpj'),
+      { role: 'admin' }));
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${MANUAL}`),
+      { uid: MANUAL, joinedAt: serverTimestamp(), role: 'admin' }));
+  });
+
+  it('una RELACIÓN no entra en el sistema de roles', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/rel1'), {
+        name: 'Pedro y Edgar', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+        kind: 'relationship', relationshipUids: [OWNER, SOCIAL_OUTSIDER].sort(),
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+      for (const uid of [SOCIAL_OUTSIDER, OWNER]) {
+        await setDoc(doc(f, `spaces/rel1/members/${uid}`), {
+          uid, joinedAt: serverTimestamp(),
+        });
+      }
+    });
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/rel1/members/${OWNER}`),
+      { role: 'admin' }));
+  });
+
   it('un INVITADO no administra el contexto', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), `spaces/sp1/members/${OTHER}`), {
