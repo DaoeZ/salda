@@ -225,13 +225,22 @@ describe('A11b: el grupo audita el ticket', () => {
   });
 
   // ── La otra mitad del contrato: leer NO es escribir ──────────────────
+  // Ojo al alcance: desde A11c, quien ADMINISTRA el grupo sí corrige el
+  // contenido del ticket (su autoridad y sus límites están en
+  // group_ticket_correction.test.mjs). Lo que A11b fija es que auditar, por
+  // sí solo, no escribe nada: eso se comprueba con el miembro normal.
   it('el auditor no toca una sola línea del ticket ajeno', async () => {
-    for (const uid of [JORGE, JEFA, ADMIN]) {
-      const f = db(uid);
-      await assertFails(updateDoc(doc(f, `${T}/lines/l1`), { totalPrice: 1 }));
-      await assertFails(updateDoc(doc(f, `${T}/lines/l1`), { name: 'Otro' }));
-      await assertFails(deleteDoc(doc(f, `${T}/lines/l1`)));
-      await assertFails(setDoc(doc(f, `${T}/lines/nueva`), {
+    const f = db(JORGE);
+    await assertFails(updateDoc(doc(f, `${T}/lines/l1`), { totalPrice: 1 }));
+    await assertFails(updateDoc(doc(f, `${T}/lines/l1`), { name: 'Otro' }));
+    await assertFails(deleteDoc(doc(f, `${T}/lines/l1`)));
+    await assertFails(setDoc(doc(f, `${T}/lines/nueva`), {
+      name: 'Inventada', totalPrice: 100,
+    }));
+    // Y ni siquiera el administrador puede INVENTAR un producto: añadir
+    // líneas sigue siendo del dueño de la sesión.
+    for (const uid of [JEFA, ADMIN]) {
+      await assertFails(setDoc(doc(db(uid), `${T}/lines/nueva`), {
         name: 'Inventada', totalPrice: 100,
       }));
     }

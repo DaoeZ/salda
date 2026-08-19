@@ -1420,6 +1420,54 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Este gasto se reparte a partes iguales. Los productos son el detalle de la compra, no el reparto.} other{Este gasto se reparte a partes iguales entre {count} personas. Los productos son el detalle de la compra, no el reparto.}}'**
   String ticketSplitEqualHint(int count);
 
+  /// No description provided for @ticketCorrectAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Corregir gasto'**
+  String get ticketCorrectAction;
+
+  /// No description provided for @ticketCorrectDone.
+  ///
+  /// In es, this message translates to:
+  /// **'Terminar corrección'**
+  String get ticketCorrectDone;
+
+  /// No description provided for @ticketCorrectBanner.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás corrigiendo el gasto. Los cambios recalculan los balances y quedan firmados con tu nombre.'**
+  String get ticketCorrectBanner;
+
+  /// No description provided for @ticketCorrectHeaderTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Corregir el ticket'**
+  String get ticketCorrectHeaderTitle;
+
+  /// No description provided for @ticketCorrectImpactTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Se perderán asignaciones'**
+  String get ticketCorrectImpactTitle;
+
+  /// No description provided for @ticketCorrectImpactBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{names} dejará de tener consumo asignado aquí. No se traslada a nadie más y los balances se recalculan. Los pagos ya registrados se mantienen.'**
+  String ticketCorrectImpactBody(String names);
+
+  /// No description provided for @ticketCorrectError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.'**
+  String get ticketCorrectError;
+
+  /// No description provided for @ticketCorrectedBy.
+  ///
+  /// In es, this message translates to:
+  /// **'Corregido por {name} · {date}'**
+  String ticketCorrectedBy(String name, DateTime date);
+
   /// No description provided for @ticketSplitYourShare.
   ///
   /// In es, this message translates to:

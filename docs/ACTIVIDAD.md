@@ -27,16 +27,41 @@ usa para calcular balances, permisos, membresías ni estados.
 | invite_sent | invitación (o reenvío) | emisor |
 | member_joined | aceptar invitación | el propio miembro |
 | member_left / member_removed | salida / expulsión | miembro / owner |
-| ticket_created / updated / deleted | ticket (edición RELEVANTE: comercio, total, fecha, pagador) | dueño de la sesión |
+| ticket_created / deleted | alta y baja del ticket | dueño de la sesión |
+| ticket_updated | edición RELEVANTE (comercio, total, fecha, pagador) **o** corrección administrativa firmada (A11c, incluida la que solo toca productos) | dueño de la sesión, o **quien firma la corrección** |
 | ticket_linked / unlinked | vínculo con espacio | dueño de la sesión |
 | payment_marked / confirmed | settlements humanos del flujo antiguo (marked/confirmed) | deudor / receptor reales |
 | payment_marked / confirmed / cancelled | pagos P5 `source: user` | del `stateHistory` |
 
-Sin eventos: rechazos/cancelaciones de invitación (privados), cambios de
-línea/asignación (ruido técnico; una edición atómica del ticket = un evento),
+Sin eventos: rechazos/cancelaciones de invitación (privados), documentos
+`line` uno a uno (ruido técnico: NO hay trigger sobre líneas ni asignaciones),
 settlements `pending` (sugerencia del motor, no un hecho humano) y pagos
 `legacySettlement` (su hecho ya se registra desde el settlement: el mismo
 hecho jamás se duplica entre el sistema antiguo y P5).
+
+### Correcciones administrativas (A11c)
+
+Corregir el gasto de otro es un hecho que el grupo debe poder leer, y quien
+lo hace no tiene por qué ser el dueño de la sesión. La señal es la FIRMA que
+la corrección escribe en el propio ticket (`lastEditedByUid` +
+`lastEditedAt`), en el mismo batch que los cambios de sus líneas:
+
+- **Actor**: quien firma. Se compara la firma de `before` con la de `after`,
+  así que solo cuenta la corrección que ocurre EN esa escritura; una
+  escritura posterior no firmada conserva su actor de siempre y jamás hereda
+  al último que corrigió.
+- **Granularidad**: una operación toca el ticket una vez, así que produce UN
+  evento aunque haya cambiado el comercio, el total y tres productos. Y una
+  corrección que solo toca productos también cuenta, porque la firma cambia
+  aunque `merchant`/`grandTotal`/`date`/`paidBy` no lo hagan.
+- **Idempotencia**: el id deriva de la firma (`uid@instante`), estable ante
+  reintentos del mismo write y distinta entre dos correcciones, de modo que
+  volver a un importe anterior (30 → 3 → 30) ya no se descarta como
+  duplicado. Las escrituras no firmadas conservan su id de siempre.
+
+Esto NO es un historial de cambios: no guarda antes/después, ni qué línea se
+tocó, ni qué asignaciones desaparecieron. Registra quién corrigió qué ticket
+y cuándo. Un historial detallado, si alguna vez hace falta, es otro modelo.
 
 ## Modelo
 

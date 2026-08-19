@@ -257,6 +257,31 @@ service cloud.firestore {
     // toca aquí. Un ticket LEGACY vinculado a mano (sesión sin contexto)
     // tampoco entra: la política del archivo en Storage solo puede resolver
     // el espacio de la SESIÓN, y media auditoría no es auditoría.
+    // ── Corrección administrativa del gasto (A11c) ──────────────────────
+    // Quien administra el GRUPO corrige el ticket de otro: el precio mal
+    // leído, el nombre del producto, la cantidad. Es autoridad propia, NO
+    // una extensión de `auditableByGroup` —eso es lectura (A11b)— y NO da
+    // nada sobre el dinero: confirmar un cobro sigue siendo del receptor
+    // (ADR-038/P2.1) y esta función no aparece en ninguna regla de pagos.
+    //
+    // Se apoya en `isSpaceAdminOf` (propietario o `role: admin`) con una
+    // condición añadida: solo GRUPOS. Sin ella una relación habría heredado
+    // la figura por la puerta de atrás, porque también tiene `ownerUid`.
+    function managesGroupOf(spaceId) {
+      return spaceId != ''
+        && exists(/databases/$(database)/documents/spaces/$(spaceId))
+        && spaceData(spaceId).get('kind', 'group') == 'group'
+        && isSpaceAdminOf(spaceId);
+    }
+
+    // El espacio manda desde el TICKET, no desde la sesión: es el documento
+    // que declara a qué grupo pertenece ese gasto.
+    function managesTicket(sid, aid, tid) {
+      return managesGroupOf(
+        get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid))
+          .data.get('spaceId', ''));
+    }
+
     function auditableByGroup(sid) {
       return canParticipate()
         && sessionData(sid).get('contextModelVersion', 0) == 1
@@ -1720,6 +1745,29 @@ service cloud.firestore {
             && (request.resource.data.get('spaceId', '') == ''
               || (request.resource.data.spaceId is string
                 && isSpaceMember(request.resource.data.spaceId)));
+
+          // A11c: quien administra el grupo CORRIGE el ticket ajeno, y solo
+          // eso. Lista blanca estrecha: comercio, fecha, hora, total y la
+          // firma de la corrección. Fuera quedan `spaceId` (mover el gasto
+          // de grupo), `paidByParticipantId` (decidir quién pagó) y
+          // cualquier campo que no sea el contenido que se corrige.
+          //
+          // La firma es obligatoria y no se puede falsear: el actor es
+          // quien escribe y la fecha la pone el servidor. Sin esto, un
+          // gasto podía cambiar de importe sin que nadie pudiera explicar
+          // después quién lo cambió.
+          allow update: if request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['merchant', 'date', 'time', 'grandTotal',
+                  'lastEditedByUid', 'lastEditedAt'])
+            && request.resource.data.lastEditedByUid == request.auth.uid
+            && request.resource.data.lastEditedAt == request.time
+            && request.resource.data.spaceId == resource.data.spaceId
+            && request.resource.data.grandTotal is int
+            && request.resource.data.grandTotal >= 0
+            && isOpen(sid)
+            && managesGroupOf(resource.data.get('spaceId', ''));
+
           allow delete: if isOwner(sid) && isOpen(sid);
 
           match /lines/{lid} {
@@ -1728,10 +1776,18 @@ service cloud.firestore {
             // la sesión o del invitado sobre SU propia asignación (A11b).
             allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
               || auditableByGroup(sid);
-            allow create, delete: if isOwner(sid) && isOpen(sid);
+            allow create: if isOwner(sid) && isOpen(sid);
+
+            // Retirar un producto que no estaba (A11c). Con él se van sus
+            // asignaciones —el documento entero desaparece—, y por eso la
+            // app lo pregunta antes; aquí solo se comprueba la autoridad.
+            allow delete: if (isOwner(sid) && isOpen(sid))
+              || (isOpen(sid) && managesTicket(sid, aid, tid));
+
             allow update: if (isOwner(sid) && isOpen(sid))
               || canPickOwnShare(sid, aid, tid)
-              || canPickOwnUnit(sid, aid, tid);
+              || canPickOwnUnit(sid, aid, tid)
+              || canCorrectLine(sid, aid, tid);
           }
         }
       }
@@ -1813,11 +1869,15 @@ service cloud.firestore {
       let newParts = request.resource.data.assignment.get('participants', {});
       let weight = newParts.get(editor, 1);
       let quantityMilli = request.resource.data.get('quantityMilli', 1000);
-      return participatesInSplit(sid)
+      // Discriminante BARATO primero: elegir consumo solo toca
+      // `assignment`. Sin esto, una corrección de A11c recorría entera esta
+      // función —con sus get()— antes de morir, y la evaluación de la regla
+      // se quedaba sin presupuesto de expresiones.
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['assignment'])
+        && participatesInSplit(sid)
         && session.status == 'open'
         && mode == 'byItem'
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['assignment'])
         // Solo cambió SU entrada del mapa de participantes…
         && editor != ''
         && newParts.diff(oldParts).affectedKeys().hasOnly([editor])
@@ -1847,12 +1907,12 @@ service cloud.firestore {
       let oldMembers = oldUnits.get(unitKey, {});
       let newMembers = newUnits.get(unitKey, {});
       let selected = newMembers.get(editor, false);
-      return participatesInSplit(sid)
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['assignment'])
+        && participatesInSplit(sid)
         && session.status == 'open'
         && mode == 'byItem'
         && resource.data.assignment.get('schemaVersion', 0) == 2
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['assignment'])
         && assignment.keys().hasOnly([
           'type', 'schemaVersion', 'units', 'lastEditorPid', 'lastEditedUnit'
         ])
@@ -1865,6 +1925,48 @@ service cloud.firestore {
         && newMembers.diff(oldMembers).affectedKeys().hasOnly([editor])
         && selected is bool
         && claimedBy(sid, editor) == request.auth.uid;
+    }
+
+    // ── Corregir el CONTENIDO de un producto (A11c) ──────────────────────
+    // Quien administra el grupo arregla lo que se leyó mal: el nombre, la
+    // cantidad, el precio. Lo que NO puede es repartir el consumo de los
+    // demás —eso sería A10 y no existe—, así que el reparto solo puede
+    // PERDER las unidades que dejan de existir; las que siguen vivas quedan
+    // intactas y nadie entra ni sale del consumo ajeno por esta vía.
+    function canCorrectLine(sid, aid, tid) {
+      let oldUnitIds = resource.data.get('unitIds', []);
+      let newUnitIds = request.resource.data.get('unitIds', []);
+      let oldUnits = resource.data.assignment.get('units', {});
+      let newUnits = request.resource.data.assignment.get('units', {});
+      // Igual que en las funciones de selección: primero lo barato. Una
+      // corrección SIEMPRE toca contenido (nombre, cantidad o importe), así
+      // que una autoasignación —que solo escribe `assignment`— se descarta
+      // aquí sin gastar una sola lectura.
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'quantityMilli', 'unitPrice', 'totalPrice',
+            'unitIds', 'assignment'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['name', 'quantityMilli', 'unitPrice', 'totalPrice',
+              'unitIds'])
+        && isOpen(sid)
+        && managesTicket(sid, aid, tid)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.totalPrice is int
+        && request.resource.data.totalPrice >= 0
+        && request.resource.data.get('quantityMilli', 1000) is int
+        && request.resource.data.get('quantityMilli', 1000) > 0
+        // Ni cambia de modelo de reparto ni inventa unidades.
+        && request.resource.data.assignment.get('type', '')
+            == resource.data.assignment.get('type', '')
+        && request.resource.data.assignment.get('schemaVersion', 0)
+            == resource.data.assignment.get('schemaVersion', 0)
+        && newUnits.keys().hasOnly(newUnitIds)
+        && newUnits.diff(oldUnits).affectedKeys()
+            .hasOnly(oldUnitIds.removeAll(newUnitIds))
+        // El reparto histórico por pesos no se toca en absoluto.
+        && request.resource.data.assignment.get('participants', {})
+            == resource.data.assignment.get('participants', {});
     }
   }
 }

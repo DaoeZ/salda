@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../spaces/data/spaces_repository.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
 
@@ -46,6 +47,21 @@ final accountTicketsProvider = StreamProvider.autoDispose
 final canEditSessionProvider = Provider.autoDispose.family<bool, String>(
   (ref, sid) => ref.watch(sessionDetailProvider(sid)).hasValue,
 );
+
+/// ¿Puedo CORREGIR este gasto? (A11c)
+///
+/// Dos caminos distintos que acaban en la misma pantalla: el creador de la
+/// sesión —que ya podía— y quien administra el GRUPO del que nació el
+/// ticket. La autoridad real la aplican las Rules; esto solo decide qué se
+/// ofrece. Una relación nunca entra: no tiene administradores.
+final canCorrectTicketProvider = Provider.autoDispose
+    .family<bool, ({String sessionId, String spaceId})>((ref, key) {
+      if (ref.watch(canEditSessionProvider(key.sessionId))) return true;
+      if (key.spaceId.isEmpty) return false;
+      final space = ref.watch(spaceProvider(key.spaceId)).value;
+      if (space == null || space.isRelationship) return false;
+      return ref.watch(iAdministerSpaceProvider(key.spaceId));
+    });
 
 /// Líneas vivas de un ticket (P2.1): el creador ve elegir y elige él mismo.
 final ticketLinesProvider = StreamProvider.autoDispose

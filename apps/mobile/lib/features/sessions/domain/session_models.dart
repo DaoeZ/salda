@@ -171,6 +171,8 @@ class SessionTicket {
     this.splitModeOverride,
     this.spaceId,
     this.contextModelVersion = 0,
+    this.lastEditedByUid,
+    this.lastEditedAt,
   });
 
   final String id;
@@ -193,6 +195,12 @@ class SessionTicket {
   /// participantes, asignaciones, balances ni pagos.
   final String? spaceId;
   final int contextModelVersion;
+
+  /// Firma de la última corrección (A11c): quién la hizo y cuándo. Se
+  /// conserva aunque quien corrige no sea el creador — si no, un gasto
+  /// podría cambiar de importe sin poder explicar después quién lo cambió.
+  final String? lastEditedByUid;
+  final DateTime? lastEditedAt;
 
   bool get hasSpace => spaceId != null && spaceId!.isNotEmpty;
   bool get isContextual => contextModelVersion >= 1;

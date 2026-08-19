@@ -69,6 +69,35 @@ abstract interface class SessionRepository {
   /// Registra la ruta de Storage de la foto del ticket.
   Future<void> setTicketImage(String ticketPath, String storagePath);
 
+  /// Corrige la cabecera del ticket (A11c): comercio, fecha y total. Firma
+  /// la corrección con actor y fecha del servidor — sin eso, un gasto podría
+  /// cambiar de importe sin que nadie pudiera explicar después quién lo hizo.
+  Future<void> correctTicketHeader(
+    String ticketPath, {
+    required String merchantName,
+    String? date,
+    required Money grandTotal,
+  });
+
+  /// Corrige el contenido de un producto y ajusta el total del ticket con la
+  /// diferencia, para que el gasto siga cuadrando.
+  ///
+  /// [removedUnitIds] son las unidades que dejan de existir: se borran una a
+  /// una, por su ruta. Las que sobreviven no se reescriben —así nadie puede
+  /// acabar en una unidad que no eligió— y las Rules comprueban justo eso.
+  Future<void> correctLine(
+    String linePath, {
+    required String name,
+    required int quantityMilli,
+    required Money totalPrice,
+    List<String> removedUnitIds = const [],
+    List<String>? unitIds,
+  });
+
+  /// Retira un producto del ticket y descuenta su importe del total. Sus
+  /// asignaciones se van con él: el documento entero desaparece.
+  Future<void> removeLine(String linePath);
+
   Future<void> updateSettlementState(
     String sessionId,
     String settlementId,

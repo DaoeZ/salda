@@ -9,11 +9,13 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/badges.dart';
 import '../../../core/ui/money_text.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../profile/data/profile_repository.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../spaces/data/spaces_repository.dart';
 import '../../spaces/presentation/space_title_text.dart';
@@ -22,6 +24,7 @@ import '../data/session_repository.dart';
 import '../data/ticket_links_repository.dart';
 import '../domain/session_models.dart';
 import '../domain/ticket_link_models.dart';
+import 'ticket_correction_sheets.dart';
 
 /// Datos de navegación al detalle de un ticket (van como `extra` de la ruta).
 class TicketRef {
@@ -38,26 +41,53 @@ class TicketRef {
 
 /// Detalle de un ticket del historial (RF-83): foto original, líneas OCR,
 /// quién pagó, fecha e importe.
-class TicketDetailScreen extends ConsumerWidget {
+class TicketDetailScreen extends ConsumerStatefulWidget {
   const TicketDetailScreen({super.key, required this.ticket});
 
   final TicketRef ticket;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TicketDetailScreen> createState() => _TicketDetailScreenState();
+}
+
+class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
+  /// Corregir el gasto y elegir lo que consumí son cosas distintas y no
+  /// pueden compartir el mismo toque sobre la misma fila (A11c). El modo lo
+  /// deja explícito: fuera de él, la pantalla es la de siempre.
+  var _correcting = false;
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final ticket = widget.ticket;
     final t = ticket.ticket;
     // Auditar no es intervenir (A11b): quien abre el ticket de otro lo ve
     // entero, pero no se le ofrece ni una acción que las Rules le vayan a
     // rechazar — compartirlo por enlace y vincularlo a un espacio son del
     // dueño de la sesión.
     final canEdit = ref.watch(canEditSessionProvider(ticket.sessionId));
+    // Corregir el CONTENIDO sí lo puede quien administra el grupo (A11c).
+    final canCorrect = ref.watch(
+      canCorrectTicketProvider((
+        sessionId: ticket.sessionId,
+        spaceId: t.spaceId ?? '',
+      )),
+    );
+    if (_correcting && !canCorrect) _correcting = false;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(t.merchantName),
         actions: [
+          if (canCorrect)
+            IconButton(
+              tooltip: _correcting
+                  ? l10n.ticketCorrectDone
+                  : l10n.ticketCorrectAction,
+              icon: Icon(_correcting ? Icons.check : Icons.edit_outlined),
+              onPressed: () => setState(() => _correcting = !_correcting),
+            ),
           if (canEdit) ...[
             _TicketLinkAction(ticketRef: ticket),
             _SpaceLinkAction(ticket: t),
@@ -66,6 +96,10 @@ class TicketDetailScreen extends ConsumerWidget {
       ),
       body: ScreenBody(
         children: [
+          if (_correcting) ...[
+            Text(l10n.ticketCorrectBanner, style: theme.textTheme.bodySmall),
+            const SizedBox(height: TokenSpacing.md),
+          ],
           SaldaCard(
             padding: const EdgeInsets.all(TokenSpacing.xl),
             child: Column(
@@ -92,6 +126,33 @@ class TicketDetailScreen extends ConsumerWidget {
                   const SizedBox(height: TokenSpacing.sm),
                   _TicketFact(icon: Icons.event_outlined, label: t.date!),
                 ],
+                // Quién tocó este gasto por última vez. Importa sobre todo
+                // cuando NO fue quien lo subió (A11c).
+                if (t.lastEditedByUid != null) ...[
+                  const SizedBox(height: TokenSpacing.sm),
+                  _CorrectionSignature(ticket: t),
+                ],
+                if (_correcting) ...[
+                  const SizedBox(height: TokenSpacing.md),
+                  // El total y la suma de los productos son cosas distintas
+                  // —impuestos, propina y descuentos viven en la diferencia—,
+                  // así que al corregir se enseñan las dos. Que no cuadren no
+                  // es necesariamente un error, pero esconderlo sí lo sería.
+                  _LineSumCheck(ticketPath: t.path, grandTotal: t.grandTotal),
+                  const SizedBox(height: TokenSpacing.md),
+                  OutlinedButton.icon(
+                    onPressed: () => showTicketHeaderCorrection(
+                      context,
+                      ref,
+                      ticketPath: t.path,
+                      merchantName: t.merchantName,
+                      date: t.date,
+                      grandTotal: t.grandTotal,
+                    ),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: Text(l10n.ticketCorrectHeaderTitle),
+                  ),
+                ],
               ],
             ),
           ),
@@ -102,7 +163,7 @@ class TicketDetailScreen extends ConsumerWidget {
           ],
           const SectionGap(),
           SectionHeader(title: l10n.reviewLines),
-          _TicketLines(ticketRef: ticket),
+          _TicketLines(ticketRef: ticket, correcting: _correcting),
         ],
       ),
     );
@@ -223,10 +284,78 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
 /// líneas de una unidad, stepper de unidades en las de varias — y ve en
 /// tiempo real lo que eligen los demás. Lo no reclamado recae en el pagador
 /// (residual), así que la selección explícita nunca duplica importes.
+/// Suma de los productos frente al total del ticket, con el mismo lenguaje
+/// que la revisión previa al guardado: «cuadra» o «descuadre de X».
+///
+/// Es informativo a propósito. Un ticket con impuestos o propina descuadra
+/// por construcción y sigue siendo correcto; quien corrige necesita ver los
+/// dos números para decidir si lo que está mal es un producto o el total.
+class _LineSumCheck extends ConsumerWidget {
+  const _LineSumCheck({required this.ticketPath, required this.grandTotal});
+
+  final String ticketPath;
+  final Money grandTotal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final lines = ref.watch(ticketLinesProvider(ticketPath)).value;
+    if (lines == null) return const SizedBox.shrink();
+
+    var sum = Money.zero;
+    for (final line in lines) {
+      sum += line.totalPrice;
+    }
+    final delta = sum - grandTotal;
+    // Misma tolerancia que la revisión: el 1 % del total, mínimo 2 céntimos.
+    final tolerance = grandTotal.abs().cents ~/ 100;
+    final balanced = delta.abs().cents <= (tolerance > 2 ? tolerance : 2);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TicketFact(
+          icon: Icons.functions_outlined,
+          label: '${l10n.reviewComputedTotal}: ${formatMoney(sum)}',
+        ),
+        const SizedBox(height: TokenSpacing.sm),
+        StatusBadge(
+          balanced
+              ? l10n.reviewBalanced
+              : l10n.reviewMismatch(formatMoney(delta.abs())),
+          tone: balanced ? BadgeTone.positive : BadgeTone.warning,
+          icon: balanced ? Icons.check_rounded : Icons.error_outline_rounded,
+        ),
+      ],
+    );
+  }
+}
+
+/// Firma de la última corrección, con el nombre público de quien la hizo.
+class _CorrectionSignature extends ConsumerWidget {
+  const _CorrectionSignature({required this.ticket});
+
+  final SessionTicket ticket;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final profile = ref.watch(publicProfileProvider(ticket.lastEditedByUid!));
+    return _TicketFact(
+      icon: Icons.history_edu_outlined,
+      label: l10n.ticketCorrectedBy(
+        profile.value?.displayName ?? '…',
+        (ticket.lastEditedAt ?? DateTime.now()).toLocal(),
+      ),
+    );
+  }
+}
+
 class _TicketLines extends ConsumerWidget {
-  const _TicketLines({required this.ticketRef});
+  const _TicketLines({required this.ticketRef, required this.correcting});
 
   final TicketRef ticketRef;
+  final bool correcting;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -277,7 +406,10 @@ class _TicketLines extends ConsumerWidget {
     // leer (shareCode). Quien sí lo lee exige `open` como siempre; para
     // quien no, mandan las Rules: si estuviera cerrada, la escritura se
     // rechaza y la pantalla lo dice.
+    // En modo corrección la fila sirve para arreglar el producto, no para
+    // elegir consumo: un mismo toque no puede significar dos cosas (A11c).
     final canPick =
+        !correcting &&
         myPid != null &&
         mode == SplitMode.byItem &&
         (!canEdit || detail?.summary.status == SessionStatus.open);
@@ -331,8 +463,9 @@ class _TicketLines extends ConsumerWidget {
                 myPid: myPid,
                 canPick: canPick,
                 canEdit: canEdit,
-                showAssignment: mode == SplitMode.byItem,
+                correcting: correcting,
                 names: names,
+                showAssignment: mode == SplitMode.byItem,
                 payerName: ticketRef.payerName,
               ),
           ],
@@ -348,10 +481,14 @@ class _LineTile extends ConsumerWidget {
     required this.myPid,
     required this.canPick,
     required this.canEdit,
+    required this.correcting,
     required this.showAssignment,
     required this.names,
     required this.payerName,
   });
+
+  /// Modo corrección (A11c): la fila abre el arreglo del producto.
+  final bool correcting;
 
   final TicketLine line;
   final String? myPid;
@@ -506,12 +643,21 @@ class _LineTile extends ConsumerWidget {
       children: [
         ListTile(
           dense: true,
-          onTap: interactive && line.units == 1
+          onTap: correcting
+              ? () => showLineCorrection(
+                  context,
+                  ref,
+                  line: line,
+                  names: names,
+                )
+              : interactive && line.units == 1
               ? line.usesUnitModel
                     ? () => toggleUnit(0)
                     : () => setUnits(mine ? 0 : 1)
               : null,
-          leading: interactive && line.units == 1
+          leading: correcting
+              ? const Icon(Icons.edit_outlined)
+              : interactive && line.units == 1
               ? Icon(
                   (line.usesUnitModel ? line.unitIsMine(0, pid!) : mine)
                       ? Icons.check_circle

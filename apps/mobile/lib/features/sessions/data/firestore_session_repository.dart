@@ -472,6 +472,80 @@ class FirestoreSessionRepository implements SessionRepository {
   Future<void> setTicketImage(String ticketPath, String storagePath) =>
       firestore.doc(ticketPath).update({'imagePath': storagePath});
 
+  /// Firma de la corrección (A11c). El actor lo pone quien escribe y la
+  /// fecha el servidor: las Rules comprueban ambas cosas, así que no se
+  /// puede corregir un gasto ajeno de forma anónima.
+  Map<String, Object?> get _correctionSignature => {
+    'lastEditedByUid': uid(),
+    'lastEditedAt': FieldValue.serverTimestamp(),
+  };
+
+  @override
+  Future<void> correctTicketHeader(
+    String ticketPath, {
+    required String merchantName,
+    String? date,
+    required Money grandTotal,
+  }) => firestore.doc(ticketPath).update({
+    'merchant.name': merchantName,
+    ...?date == null ? null : <String, Object?>{'date': date},
+    'grandTotal': grandTotal.cents,
+    ..._correctionSignature,
+  });
+
+  @override
+  Future<void> correctLine(
+    String linePath, {
+    required String name,
+    required int quantityMilli,
+    required Money totalPrice,
+    List<String> removedUnitIds = const [],
+    List<String>? unitIds,
+  }) async {
+    final lineRef = firestore.doc(linePath);
+    final ticketRef = lineRef.parent.parent!;
+
+    final batch = firestore.batch();
+    batch.update(lineRef, {
+      'name': name,
+      'quantityMilli': quantityMilli,
+      'totalPrice': totalPrice.cents,
+      // El precio unitario deja de ser cierto en cuanto se corrige el
+      // importe o la cantidad, y nadie lo recalcula: se retira antes que
+      // conservar un dato falso (solo lo lee el backup).
+      'unitPrice': FieldValue.delete(),
+      ...?unitIds == null ? null : <String, Object?>{'unitIds': unitIds},
+      // Poda quirúrgica: se borra la entrada de la unidad que desaparece y
+      // NADA más. Reescribir el mapa entero habría sido más corto y habría
+      // permitido colar a alguien en una unidad ajena de paso.
+      for (final unit in removedUnitIds)
+        'assignment.units.$unit': FieldValue.delete(),
+    });
+    // El total NO se toca. `grandTotal` es el dinero REALMENTE pagado (tras
+    // impuestos, descuentos y propina) y las líneas son los PESOS con los
+    // que ese dinero se reparte (DC-11): por eso los vectores dorados tienen
+    // tickets donde la suma de líneas y el total difieren a propósito.
+    // Corregir un producto mal leído cambia el reparto —que es lo que debe
+    // cambiar— sin inventar que se pagó más. Si el total también está mal,
+    // se corrige aparte y a conciencia.
+    batch.update(ticketRef, _correctionSignature);
+    await batch.commit();
+  }
+
+  @override
+  Future<void> removeLine(String linePath) async {
+    final lineRef = firestore.doc(linePath);
+    final ticketRef = lineRef.parent.parent!;
+
+    final batch = firestore.batch();
+    batch.delete(lineRef);
+    // Retirar un producto que el OCR se inventó no devuelve dinero: lo
+    // pagado sigue siendo lo que pone el ticket. Lo que cambia es que ese
+    // importe pasa a repartirse entre los productos que sí existen.
+    batch.update(ticketRef, _correctionSignature);
+    await batch.commit();
+  }
+
   @override
   Future<void> updateSettlementState(
     String sessionId,

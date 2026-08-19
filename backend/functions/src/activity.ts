@@ -192,6 +192,31 @@ const relevantTicketFields = (data: Doc) => ({
   paidBy: (data?.paidByParticipantId as string) ?? '',
 });
 
+/**
+ * Firma de la corrección administrativa (A11c): `quién@cuándo`, o cadena
+ * vacía si el ticket no lleva ninguna.
+ *
+ * Es un VALOR, no un booleano, y ahí está la gracia: comparar la firma de
+ * `before` con la de `after` distingue «esta escritura ES una corrección»
+ * de «el ticket conserva la firma de una corrección anterior». Sin esa
+ * comparación, cualquier escritura posterior no firmada se atribuiría para
+ * siempre al último que corrigió, que es exactamente el error que P6 no
+ * puede permitirse: un actor inventado en un registro de auditoría.
+ */
+function correctionSignature(data: Doc): string {
+  const by = (data?.lastEditedByUid as string) ?? '';
+  const at = data?.lastEditedAt;
+  if (by === '' || at == null) return '';
+  const millis = at instanceof Date
+    ? at.getTime()
+    : typeof at === 'number'
+      ? at
+      : typeof (at as { toMillis?: () => number }).toMillis === 'function'
+        ? (at as { toMillis: () => number }).toMillis()
+        : Number.NaN;
+  return Number.isNaN(millis) ? '' : `${by}@${millis}`;
+}
+
 export function buildTicketEvents(
   sessionId: string,
   ticketId: string,
@@ -240,11 +265,35 @@ export function buildTicketEvents(
     });
   }
 
+  // ── Corrección administrativa firmada (A11c) ──────────────────────────
+  // La firma solo la renueva una corrección, y viaja en el MISMO batch que
+  // el cambio de las líneas. Por eso sirve de señal agregada: una operación
+  // toca el ticket una vez, deje o no rastro en `relevantTicketFields`, y
+  // produce UN evento — también cuando lo corregido fueron solo productos,
+  // que es justo lo que este feed no llegaba a contar.
+  const signature = correctionSignature(after);
+  if (signature !== '' && signature !== correctionSignature(before)) {
+    events.push({
+      ...base,
+      // El actor es quien firma ESTA corrección, no el dueño de la sesión:
+      // desde A11c ya no son necesariamente la misma persona.
+      actorUid: (after.lastEditedByUid as string),
+      // El id deriva de la firma (uid + instante), no del estado destino:
+      // reintentar el mismo write da el mismo id —idempotente— pero dos
+      // correcciones distintas que acaben en el mismo importe (30 → 3 → 30)
+      // ya no se pisan la una a la otra en el histórico.
+      id: `tk_${sessionId}_${ticketId}_upd_${hash12(signature)}`,
+      type: 'ticket_updated',
+    });
+    return events;
+  }
+
   const beforeRelevant = relevantTicketFields(before);
   const afterRelevant = relevantTicketFields(after);
   if (JSON.stringify(beforeRelevant) !== JSON.stringify(afterRelevant)) {
-    // UNA edición atómica = UN evento; el id deriva del estado destino, así
-    // que los reintentos del trigger no duplican nada.
+    // Escritura NO firmada (el dueño desde los flujos de siempre): actor y
+    // id se mantienen exactamente como estaban. El id deriva del estado
+    // destino, así que los reintentos del trigger no duplican nada.
     events.push({
       ...base,
       id: `tk_${sessionId}_${ticketId}_upd_${hash12(JSON.stringify(afterRelevant))}`,
@@ -448,6 +497,10 @@ export const activityOnTicketWrite = onDocumentWritten(
     const after = event.data?.after?.data();
 
     const uids = [context.ownerUid, ...context.registered.values()];
+    // Quien corrige puede no ser participante del gasto (A11c): entra en la
+    // audiencia para que su propio hecho no le quede invisible.
+    const signer = (after?.lastEditedByUid as string) ?? '';
+    if (signer) uids.push(signer);
     const spaceId = ((after ?? before)?.spaceId as string) || '';
     if (spaceId) {
       try {
@@ -462,7 +515,10 @@ export const activityOnTicketWrite = onDocumentWritten(
       tid,
       before,
       after,
-      context.ownerUid, // solo el dueño de la sesión escribe tickets (Rules)
+      // Actor POR DEFECTO. Una corrección firmada (A11c) lo sustituye por
+      // quien la firma: desde entonces el dueño de la sesión ya no es el
+      // único que puede escribir un ticket.
+      context.ownerUid,
       activityAudience(uids),
       context.name,
     ));

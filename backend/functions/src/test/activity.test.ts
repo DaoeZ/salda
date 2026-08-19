@@ -190,6 +190,120 @@ test('vincular y desvincular de un espacio', () => {
   assert.equal(unlinked[0].spaceId, 'sp1');
 });
 
+// ── Correcciones administrativas firmadas (A11c) ──────────────────────────
+// La firma la renueva SOLO una corrección, y viaja en el mismo batch que el
+// cambio de las líneas. De ahí salen las tres propiedades que se fijan aquí:
+// actor real, un evento por operación, y ninguna atribución heredada.
+
+/// Firma tal y como llega del trigger: un Timestamp de Firestore.
+const firma = (uid: string, millis: number) => ({
+  lastEditedByUid: uid,
+  lastEditedAt: { toMillis: () => millis },
+});
+
+test('A11c corrección de cabecera: el actor es quien firma, no el dueño',
+    () => {
+  const eventos = buildTicketEvents('s1', 't0',
+    ticket(),
+    ticket({ grandTotal: 6000, ...firma('edgar', 1000) }),
+    'ana', ['ana', 'edgar'], 'Cena');
+
+  assert.equal(eventos.length, 1);
+  assert.equal(eventos[0].type, 'ticket_updated');
+  assert.equal(eventos[0].actorUid, 'edgar');
+});
+
+test('A11c corrección SOLO de líneas: la firma basta para contar el hecho',
+    () => {
+  // Ni el comercio, ni el total, ni la fecha, ni el pagador cambian: lo
+  // corregido fueron productos. Antes esto no dejaba rastro ninguno.
+  const eventos = buildTicketEvents('s1', 't0',
+    ticket(),
+    ticket(firma('edgar', 1000)),
+    'ana', ['ana', 'edgar'], 'Cena');
+
+  assert.equal(eventos.length, 1);
+  assert.equal(eventos[0].type, 'ticket_updated');
+  assert.equal(eventos[0].actorUid, 'edgar');
+});
+
+test('A11c el creador corrigiendo lo suyo sigue siendo el actor', () => {
+  const eventos = buildTicketEvents('s1', 't0',
+    ticket(),
+    ticket({ grandTotal: 6000, ...firma('ana', 1000) }),
+    'ana', ['ana'], 'Cena');
+
+  assert.equal(eventos[0].actorUid, 'ana');
+});
+
+test('A11c una operación con varios cambios NO produce spam de eventos', () => {
+  // Comercio + total + fecha + pagador + líneas, todo en la misma escritura
+  // firmada: sigue siendo UN hecho, «Edgar corrigió el ticket».
+  const eventos = buildTicketEvents('s1', 't0',
+    ticket(),
+    ticket({
+      merchant: { name: 'Familycash' },
+      grandTotal: 6000,
+      date: '2026-08-19',
+      paidByParticipantId: 'p1',
+      ...firma('edgar', 1000),
+    }),
+    'ana', ['ana', 'edgar'], 'Cena');
+
+  assert.equal(eventos.length, 1);
+  assert.equal(eventos[0].actorUid, 'edgar');
+});
+
+test('A11c dos correcciones distintas que acaban igual son DOS hechos', () => {
+  // 30 € → 3 € y, más tarde, 3 € → 30 €. Con el id derivado del estado
+  // destino la segunda se perdía como si fuera un reintento de la primera.
+  const bajada = buildTicketEvents('s1', 't0',
+    ticket({ grandTotal: 3000 }),
+    ticket({ grandTotal: 300, ...firma('edgar', 1000) }),
+    'ana', ['ana'], 'Cena');
+  const subida = buildTicketEvents('s1', 't0',
+    ticket({ grandTotal: 300, ...firma('edgar', 1000) }),
+    ticket({ grandTotal: 3000, ...firma('edgar', 2000) }),
+    'ana', ['ana'], 'Cena');
+
+  assert.notEqual(bajada[0].id, subida[0].id);
+});
+
+test('A11c reintentar la MISMA corrección da el mismo id (idempotente)', () => {
+  const run = () => buildTicketEvents('s1', 't0',
+    ticket(),
+    ticket({ grandTotal: 6000, ...firma('edgar', 1000) }),
+    'ana', ['ana'], 'Cena');
+
+  assert.equal(run()[0].id, run()[0].id);
+});
+
+test('A11c una escritura POSTERIOR sin firmar no se atribuye a quien '
+    + 'corrigió antes', () => {
+  // El ticket conserva la firma de Edgar, pero esta escritura no la renueva:
+  // es otro flujo (el dueño). Heredar el actor sería inventarse un culpable.
+  const corregido = ticket({ grandTotal: 6000, ...firma('edgar', 1000) });
+  const eventos = buildTicketEvents('s1', 't0',
+    corregido,
+    { ...corregido, date: '2026-09-01' },
+    'ana', ['ana', 'edgar'], 'Cena');
+
+  assert.equal(eventos.length, 1);
+  assert.equal(eventos[0].actorUid, 'ana');
+});
+
+test('A11c un ticket sin firma se comporta exactamente como antes', () => {
+  const eventos = buildTicketEvents('s1', 't0',
+    ticket(), ticket({ grandTotal: 6000 }), 'ana', ['ana'], 'Cena');
+
+  assert.equal(eventos.length, 1);
+  assert.equal(eventos[0].actorUid, 'ana');
+  // Mismo id de siempre: el esquema del flujo no firmado no se toca.
+  assert.equal(eventos[0].id,
+    buildTicketEvents('s1', 't0', ticket(), ticket({ grandTotal: 6000 }),
+      'ana', ['ana'], 'Cena')[0].id);
+});
+
 // ── Settlements humanos (flujo antiguo) ───────────────────────────────────
 
 const resolver = (map: Record<string, string>) => (pid: string) => map[pid];

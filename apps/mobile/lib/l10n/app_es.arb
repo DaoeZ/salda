@@ -257,6 +257,21 @@
   "ticketPickError": "No se pudo guardar tu selección. Puede que la cuenta ya esté cerrada.",
   "ticketSplitEqualHint": "{count, plural, =1{Este gasto se reparte a partes iguales. Los productos son el detalle de la compra, no el reparto.} other{Este gasto se reparte a partes iguales entre {count} personas. Los productos son el detalle de la compra, no el reparto.}}",
   "@ticketSplitEqualHint": { "placeholders": { "count": { "type": "int" } } },
+  "ticketCorrectAction": "Corregir gasto",
+  "ticketCorrectDone": "Terminar corrección",
+  "ticketCorrectBanner": "Estás corrigiendo el gasto. Los cambios recalculan los balances y quedan firmados con tu nombre.",
+  "ticketCorrectHeaderTitle": "Corregir el ticket",
+  "ticketCorrectImpactTitle": "Se perderán asignaciones",
+  "ticketCorrectImpactBody": "{names} dejará de tener consumo asignado aquí. No se traslada a nadie más y los balances se recalculan. Los pagos ya registrados se mantienen.",
+  "@ticketCorrectImpactBody": { "placeholders": { "names": { "type": "String" } } },
+  "ticketCorrectError": "No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.",
+  "ticketCorrectedBy": "Corregido por {name} · {date}",
+  "@ticketCorrectedBy": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "date": { "type": "DateTime", "format": "yMMMd" }
+    }
+  },
   "ticketSplitYourShare": "Te corresponden {amount}.",
   "@ticketSplitYourShare": { "placeholders": { "amount": { "type": "String" } } },
   "lineForAll": "Para todos",

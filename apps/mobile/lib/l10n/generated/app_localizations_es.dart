@@ -744,6 +744,39 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get ticketCorrectAction => 'Corregir gasto';
+
+  @override
+  String get ticketCorrectDone => 'Terminar corrección';
+
+  @override
+  String get ticketCorrectBanner =>
+      'Estás corrigiendo el gasto. Los cambios recalculan los balances y quedan firmados con tu nombre.';
+
+  @override
+  String get ticketCorrectHeaderTitle => 'Corregir el ticket';
+
+  @override
+  String get ticketCorrectImpactTitle => 'Se perderán asignaciones';
+
+  @override
+  String ticketCorrectImpactBody(String names) {
+    return '$names dejará de tener consumo asignado aquí. No se traslada a nadie más y los balances se recalculan. Los pagos ya registrados se mantienen.';
+  }
+
+  @override
+  String get ticketCorrectError =>
+      'No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.';
+
+  @override
+  String ticketCorrectedBy(String name, DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return 'Corregido por $name · $dateString';
+  }
+
+  @override
   String ticketSplitYourShare(String amount) {
     return 'Te corresponden $amount.';
   }
