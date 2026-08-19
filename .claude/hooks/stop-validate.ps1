@@ -61,7 +61,12 @@ $errors = @()
 try {
     # 1) Analisis estatico del workspace completo (dart analyze, NO dart
     #    test) si se toco algun paquete Dart o la app.
-    if (Test-Touched 'packages/' -or Test-Touched 'apps/mobile/') {
+    # PARENTESIS OBLIGATORIOS: sin ellos PowerShell no ve un operador, sino
+    # una llamada `Test-Touched 'packages/' '-or' 'Test-Touched' 'apps/...'`
+    # con argumentos de sobra, y la condicion se reducia SOLO al primero.
+    # Efecto real: con cambios unicamente en apps/mobile, `dart analyze` no
+    # llegaba a ejecutarse nunca.
+    if ((Test-Touched 'packages/') -or (Test-Touched 'apps/mobile/')) {
         $e = Invoke-Check -Tool 'dart' -WorkDir $projectRoot -Label 'dart analyze --fatal-infos' `
             -Command { dart analyze --fatal-infos }
         if ($e) { $errors += $e }
@@ -81,7 +86,7 @@ try {
     # 3) flutter test en apps/mobile: si se toco la app directamente, o si
     #    se toco cualquier packages/* del que mobile depende (un cambio ahi
     #    puede romper la app aunque su propio `dart test` haya pasado).
-    if (Test-Touched 'apps/mobile/' -or Test-Touched 'packages/') {
+    if ((Test-Touched 'apps/mobile/') -or (Test-Touched 'packages/')) {
         $e = Invoke-Check -Tool 'flutter' -WorkDir (Join-Path $projectRoot 'apps/mobile') -Label 'flutter test (apps/mobile)' `
             -Command { flutter test }
         if ($e) { $errors += $e }

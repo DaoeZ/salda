@@ -82,7 +82,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \".claude/hooks/pretooluse-guard.ps1\"",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-guard.ps1\"",
             "timeout": 15,
             "statusMessage": "Comprobando que el comando no toque produccion ni sea destructivo..."
           }
@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \".claude/hooks/posttooluse-write-edit.ps1\"",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/posttooluse-write-edit.ps1\"",
             "timeout": 30,
             "statusMessage": "Formateando .dart y anotando validacion pendiente..."
           }
@@ -107,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \".claude/hooks/stop-validate.ps1\"",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-validate.ps1\"",
             "timeout": 600,
             "statusMessage": "Validando SALDA antes de terminar (analyze/tests solo si hubo cambios relevantes)..."
           }
