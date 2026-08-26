@@ -14,6 +14,7 @@ import {
   buildSettlementEvents,
   buildSpaceEvents,
   buildTicketEvents,
+  membershipCycleId,
 } from '../activity.js';
 
 const ts = (millis: number) => ({ toMillis: () => millis });
@@ -88,25 +89,75 @@ test('incorporación: actor = el propio miembro', () => {
   assert.equal(events[0].id, 'mb_sp1_carla_join_500');
 });
 
-test('salida voluntaria vs expulsión (marcador removedBy del owner)', () => {
+// A11d: la distinción ya NO la da un marcador escrito sobre el documento
+// que se va a borrar, sino la evidencia inmutable del ciclo.
+test('salida voluntaria vs expulsión (evidencia del ciclo)', () => {
   const left = buildMemberEvents('sp1', 'carla',
     { uid: 'carla', joinedAt: ts(500) }, undefined, 'Viaje', ['ana']);
   assert.equal(left[0].type, 'member_left');
   assert.equal(left[0].actorUid, 'carla');
+  assert.equal(left[0].at, undefined); // sin documento que feche el hecho
 
   const removed = buildMemberEvents('sp1', 'carla',
-    { uid: 'carla', joinedAt: ts(500), removedBy: 'ana' }, undefined,
-    'Viaje', ['ana']);
+    { uid: 'carla', joinedAt: ts(500) }, undefined, 'Viaje', ['ana'],
+    { uid: 'carla', membershipJoinedAt: ts(500), removedBy: 'ana',
+      removedAt: ts(900) });
   assert.equal(removed[0].type, 'member_removed');
   assert.equal(removed[0].actorUid, 'ana');
+  // El instante del hecho es el de la expulsión, no el del proceso: un
+  // trigger retrasado no puede colocarlo donde no ocurrió.
+  assert.equal((removed[0].at as { toMillis(): number }).toMillis(), 900);
   // El expulsado conserva el hecho en su audiencia.
   assert.ok(removed[0].memberUids.includes('carla'));
+  // Mismo id: el tipo va en el campo, nunca en la identidad del hecho.
+  assert.equal(removed[0].id, left[0].id);
 });
 
-test('actualizar la membresía (solo el marcador) no genera eventos', () => {
+test('la identidad del ciclo se deriva del joinedAt inmutable', () => {
+  assert.equal(membershipCycleId('carla', ts(500)), 'carla_500');
+  assert.notEqual(
+    membershipCycleId('carla', ts(500)), membershipCycleId('carla', ts(900)));
+});
+
+// La carrera que motivó ADR-039: el evento del ciclo A se procesa cuando el
+// grupo ya pasó por el ciclo B. La clasificación solo mira la evidencia de
+// SU ciclo, así que el resultado no depende de por dónde vaya la persona.
+test('un evento retrasado del ciclo A no lo falsifica un ciclo B posterior',
+  () => {
+    const evidenciaA = { uid: 'carla', membershipJoinedAt: ts(500),
+      removedBy: 'ana', removedAt: ts(900) };
+    const eventoA = () => buildMemberEvents('sp1', 'carla',
+      { uid: 'carla', joinedAt: ts(500) }, undefined, 'Viaje', ['ana'],
+      evidenciaA);
+
+    // Reprocesarlo N veces da SIEMPRE el mismo hecho, id incluido.
+    for (let i = 0; i < 5; i++) {
+      assert.equal(eventoA()[0].type, 'member_removed');
+      assert.equal(eventoA()[0].actorUid, 'ana');
+      assert.equal(eventoA()[0].id, 'mb_sp1_carla_left_500');
+      assert.equal(
+        (eventoA()[0].at as { toMillis(): number }).toMillis(), 900);
+    }
+
+    // Y el desenlace del ciclo B es un hecho propio, con su id propio.
+    const salidaB = buildMemberEvents('sp1', 'carla',
+      { uid: 'carla', joinedAt: ts(1500) }, undefined, 'Viaje', ['ana']);
+    assert.equal(salidaB[0].type, 'member_left');
+    assert.equal(salidaB[0].id, 'mb_sp1_carla_left_1500');
+
+    const expulsionB = buildMemberEvents('sp1', 'carla',
+      { uid: 'carla', joinedAt: ts(1500) }, undefined, 'Viaje', ['ana'],
+      { uid: 'carla', membershipJoinedAt: ts(1500), removedBy: 'ana',
+        removedAt: ts(1900) });
+    assert.equal(expulsionB[0].type, 'member_removed');
+    assert.equal(expulsionB[0].id, 'mb_sp1_carla_left_1500');
+    assert.notEqual(expulsionB[0].id, eventoA()[0].id);
+  });
+
+test('cambiar el rol de la membresía no genera eventos', () => {
   const events = buildMemberEvents('sp1', 'carla',
     { uid: 'carla', joinedAt: ts(500) },
-    { uid: 'carla', joinedAt: ts(500), removedBy: 'ana' }, 'Viaje', ['ana']);
+    { uid: 'carla', joinedAt: ts(500), role: 'admin' }, 'Viaje', ['ana']);
   assert.deepEqual(events, []);
 });
 

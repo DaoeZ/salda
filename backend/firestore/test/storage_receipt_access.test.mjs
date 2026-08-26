@@ -31,6 +31,7 @@ const EXTERNO = 'uid-externo'; // sin relación alguna
 const PAREJA = 'uid-pareja'; // la otra mitad de una relación
 
 const FOTO = 'receipts/sg1/t1/original.jpg';
+const FOTO_OTRO = 'receipts/sg1/t2/original.jpg'; // otro ticket del grupo
 const FOTO_REL = 'receipts/sr1/t1/original.jpg';
 const FOTO_LEGACY = 'receipts/sl1/t1/original.jpg';
 
@@ -105,9 +106,16 @@ beforeEach(async () => {
       ownerUid: ALBA, status: 'open', shareCode: 'SECRET-CODE-16CHARS',
     });
 
+    // A11d: Jorge participó económicamente en t1, no en t2.
+    await setDoc(doc(f, `sessions/sg1/ticketEntitlements/t1_${JORGE}`), {
+      uid: JORGE, ticketId: 't1', accountId: 'a1',
+      participantNames: { p1: 'Alba', p2: 'Jorge' },
+      grantedAt: serverTimestamp(), schemaVersion: 1,
+    });
+
     const s = ctx.storage();
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-    for (const ruta of [FOTO, FOTO_REL, FOTO_LEGACY]) {
+    for (const ruta of [FOTO, FOTO_OTRO, FOTO_REL, FOTO_LEGACY]) {
       await uploadBytes(ref(s, ruta), bytes, { contentType: 'image/jpeg' });
     }
   });
@@ -143,12 +151,56 @@ describe('A11b: la foto del ticket como evidencia del grupo', () => {
       { contentType: 'image/jpeg' },
     )));
 
-  it('quien deja de ser miembro deja de verla', async () => {
-    await assertSucceeds(getBytes(ref(auth(JORGE).storage(), FOTO)));
+  it('un miembro activo ve también la foto de un ticket suyo y de otro',
+    async () => {
+      await assertSucceeds(getBytes(ref(auth(JORGE).storage(), FOTO)));
+      await assertSucceeds(getBytes(ref(auth(JORGE).storage(), FOTO_OTRO)));
+    });
+});
+
+// A11d: la foto es parte de la auditoría de una deuda concreta. Expulsar
+// corta la auditoría GENERAL del grupo, no la del gasto propio — y esta es
+// la mitad de Storage de esa misma frontera.
+describe('A11d: la foto tras la expulsión', () => {
+  const expulsar = async (uid) => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       const { deleteDoc } = await import('firebase/firestore');
-      await deleteDoc(doc(ctx.firestore(), `spaces/gr1/members/${JORGE}`));
+      await deleteDoc(doc(ctx.firestore(), `spaces/gr1/members/${uid}`));
     });
+  };
+
+  it('el ex-miembro conserva la foto del ticket en el que participó',
+    async () => {
+      await expulsar(JORGE);
+      await assertSucceeds(getBytes(ref(auth(JORGE).storage(), FOTO)));
+    });
+
+  it('pero pierde la de los tickets en los que no participó', async () => {
+    await expulsar(JORGE);
+    await assertFails(getBytes(ref(auth(JORGE).storage(), FOTO_OTRO)));
+  });
+
+  it('sin derecho histórico no conserva ninguna', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const { deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(doc(ctx.firestore(),
+        `sessions/sg1/ticketEntitlements/t1_${JORGE}`));
+    });
+    await expulsar(JORGE);
     await assertFails(getBytes(ref(auth(JORGE).storage(), FOTO)));
+  });
+
+  it('un externo sigue sin ver nada, tenga quien tenga derecho', async () => {
+    await assertFails(getBytes(ref(auth(EXTERNO).storage(), FOTO)));
+    await assertFails(getBytes(ref(auth(AJENA).storage(), FOTO)));
+  });
+
+  it('el derecho histórico no habilita a SUSTITUIR la foto', async () => {
+    await expulsar(JORGE);
+    await assertFails(uploadBytes(
+      ref(auth(JORGE).storage(), FOTO),
+      new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+      { contentType: 'image/jpeg' },
+    ));
   });
 });

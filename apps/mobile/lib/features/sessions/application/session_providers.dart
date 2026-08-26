@@ -36,6 +36,35 @@ final accountTicketsProvider = StreamProvider.autoDispose
           ref.watch(sessionRepositoryProvider).watchTickets(key.sid, key.aid),
     );
 
+/// Ticket alcanzado por DERECHO HISTÓRICO (A11d), si lo hay.
+///
+/// Dos lecturas deterministas: el derecho —que guarda la cuenta— y el
+/// ticket. Es el ÚNICO camino que funciona para quien ya no es miembro del
+/// grupo, porque a un ex-miembro no se le permite listar las cuentas.
+final historicTicketProvider = FutureProvider.autoDispose
+    .family<HistoricTicket?, ({String sid, String tid})>(
+      (ref, key) => ref
+          .watch(sessionRepositoryProvider)
+          .fetchHistoricTicket(key.sid, key.tid),
+    );
+
+/// Nombres del reparto de un ticket: `pid → nombre`.
+///
+/// Prioriza los participantes VIVOS de la sesión, que es lo que ve quien
+/// tiene acceso normal. Para quien solo conserva el derecho histórico se
+/// repliega al snapshot congelado del ticket: sin nombres detrás de cada
+/// `pid` el reparto es ilegible, y abrirle el censo entero de la sesión
+/// sería mucho más de lo que necesita para auditar SU deuda.
+final ticketParticipantNamesProvider = Provider.autoDispose
+    .family<Map<String, String>, ({String sid, String tid})>((ref, key) {
+      final live = ref.watch(participantsProvider(key.sid)).value;
+      if (live != null && live.isNotEmpty) {
+        return {for (final p in live) p.id: p.name};
+      }
+      return ref.watch(historicTicketProvider(key)).value?.participantNames ??
+          const {};
+    });
+
 /// ¿Puedo INTERVENIR en esta sesión, o solo auditarla? (A11b)
 ///
 /// Un miembro del grupo lee el ticket entero —foto, líneas, reparto— pero no

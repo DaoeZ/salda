@@ -194,6 +194,20 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/sessions/$(sid)/ticketParticipants/$(tid + '_' + pid));
     }
 
+    // ── Derecho histórico por ticket (A11d) ────────────────────────────
+    // Proyección MONOTÓNICA que escribe recompute (Admin): demuestra que un
+    // UID tuvo participación económica en ESE ticket alguna vez. A
+    // diferencia de `ticketParticipants` —que es la foto del reparto VIVO y
+    // se borra en cuanto alguien deja de consumir— esta jamás se retira: es
+    // la única prueba que sobrevive a una corrección A11c posterior, y sin
+    // ella expulsar a alguien le arrancaría el ticket que explica su propia
+    // deuda. Concede lectura de UN ticket: ni la sesión (shareCode), ni el
+    // resto de tickets, ni ninguna capacidad de escritura.
+    function hasTicketHistory(sid, tid) {
+      return canParticipate()
+        && exists(/databases/$(database)/documents/sessions/$(sid)/ticketEntitlements/$(tid + '_' + request.auth.uid));
+    }
+
     // Señal AUTORITATIVA de que la proyección del ticket está completa. La
     // escribe recompute en el MISMO batch que las entradas, así que nunca
     // marca como lista una proyección a medias. Distingue «el ticket todavía
@@ -272,6 +286,16 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/spaces/$(spaceId))
         && spaceData(spaceId).get('kind', 'group') == 'group'
         && isSpaceAdminOf(spaceId);
+    }
+
+    // ── Expulsión administrativa (A11d, ADR-039) ───────────────────────
+    // El CICLO de membresía se identifica por (uid, instante de alta). Ese
+    // instante viaja en el `before` INMUTABLE del evento de borrado, así que
+    // P6 puede reconstruir esta misma ruta cuando le llegue el evento —tarde,
+    // reintentado o después de otro ciclo— sin consultar ningún documento
+    // que haya podido cambiar de significado entretanto.
+    function membershipCycleId(uid, joinedAt) {
+      return uid + '_' + string(joinedAt.toMillis());
     }
 
     // El espacio manda desde el TICKET, no desde la sesión: es el documento
@@ -1063,50 +1087,156 @@ service cloud.firestore {
             // obligatorio desde que hay una tercera vía: sin él, entrar por
             // enlace moría con "Null value error" al leer una invitación
             // que no existe (mismo fallo que corrigió `ce61bdd` al leer).
+            // A11d: si hay una expulsión VIGENTE, solo readmite una decisión
+            // POSTERIOR a ella, y el bloqueo se levanta en este mismo commit
+            // (así no existe «readmitido pero todavía bloqueado»).
             || (existsAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
               && spaceData(spaceId).status == 'active'
               && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
-                  .data.status == 'accepted')
+                  .data.status == 'accepted'
+              && (!exists(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid))
+                || (getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
+                      .data.createdAt
+                    > get(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid))
+                      .data.blockedAt
+                  && !existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid)))))
             // (c) Enlace de grupo (ADR-035): la prueba de conocimiento del
             // token viaja en el MISMO batch, y aquí se revalida que el
             // enlace siga vivo y siga siendo de este grupo. Una relación
             // nunca se abre por enlace: su pareja de UID es inmutable.
+            // A11d: el enlace es una credencial de DIFUSIÓN. Una expulsión
+            // vigente lo cierra para esa persona: volver exige una decisión
+            // explícita del propietario, no acertar otra vez con el enlace.
             || (existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/joinGrants/$(request.auth.uid))
               && spaceData(spaceId).status == 'active'
               && spaceData(spaceId).get('kind', 'group') == 'group'
+              && !exists(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid))
               && spaceLinkOpensGroup(
                 getAfter(/databases/$(database)/documents/spaces/$(spaceId)/joinGrants/$(request.auth.uid)).data.token,
                 spaceId))
           );
 
-        // Dos mutaciones, ambas exclusivas del propietario:
-        //  (a) `removedBy` en el MISMO batch del borrado (P6 distingue así
-        //      expulsión de salida voluntaria; Rules garantiza que el
-        //      marcador es él y nunca el propio expulsado);
-        //  (b) `role`: nombrar o retirar administradores (ADR-038). Un
-        //      INVITADO nunca administra —no tiene cuenta ni identidad
-        //      pública (ADR-034)—, y el propietario no se administra a sí
-        //      mismo porque ya lo es por `ownerUid`.
+        // Una sola mutación: `role`, nombrar o retirar administradores
+        // (ADR-038). Un INVITADO nunca administra —no tiene cuenta ni
+        // identidad pública (ADR-034)—, y el propietario no se administra a
+        // sí mismo porque ya lo es por `ownerUid`. Los roles existen SOLO en
+        // grupos: una relación es una pareja simétrica de dos identidades y
+        // no adquiere jerarquía interna.
+        //
+        // A11d retiró el marcador `removedBy`: la expulsión ya no se
+        // anunciaba escribiendo en el documento que se va a borrar. Ver
+        // `removals` más abajo.
         allow update: if isSpaceOwner(spaceId)
           && memberUid != request.auth.uid
-          && (
-            (request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['removedBy'])
-              && request.resource.data.removedBy == request.auth.uid)
-            // Los roles existen SOLO en grupos: una relación es una pareja
-            // simétrica de dos identidades y no adquiere jerarquía interna.
-            || (request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['role'])
-              && request.resource.data.role in ['member', 'admin']
-              && resource.data.get('kind', 'account') == 'account'
-              && spaceData(spaceId).get('kind', 'group') == 'group')
-          );
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['role'])
+          && request.resource.data.role in ['member', 'admin']
+          && resource.data.get('kind', 'account') == 'account'
+          && spaceData(spaceId).get('kind', 'group') == 'group';
 
-        // Salir (nunca el owner: antes transfiere o archiva) o expulsión
-        // por el owner. Solo borra el acceso social futuro.
-        allow delete: if canUseSocial()
-          && resource.data.uid != spaceData(spaceId).ownerUid
-          && (memberUid == request.auth.uid || isSpaceOwner(spaceId));
+        // Dos bajas con naturalezas distintas (A11d):
+        //
+        //  (a) SALIR: acto propio, sin rastro administrativo. Su alcance no
+        //      se toca aquí (A3 se ocupará del ciclo de vida completo).
+        //
+        //  (b) EXPULSAR: acto de quien administra el GRUPO. Exige, en el
+        //      MISMO commit, la evidencia inmutable de ESTE ciclo y el
+        //      bloqueo de reentrada. Sin las dos, el borrado se deniega: no
+        //      existe una expulsión a medias, ni un borrado administrativo
+        //      que P6 no pueda clasificar después.
+        //
+        //      `managesGroupOf` la reserva a los GRUPOS, así que una
+        //      relación deja de tener expulsión administrativa: su
+        //      propietario ya no puede retirar a la otra mitad y dejar un
+        //      contexto de una sola identidad.
+        allow delete: if
+          (canUseSocial()
+            && resource.data.uid != spaceData(spaceId).ownerUid
+            && memberUid == request.auth.uid)
+          || (managesGroupOf(spaceId)
+            && memberUid != request.auth.uid
+            && resource.data.uid != spaceData(spaceId).ownerUid
+            // Un administrador no toca a otro administrador; el propietario
+            // sí, porque la delegación es suya.
+            && (isSpaceOwner(spaceId)
+              || resource.data.get('role', 'member') != 'admin')
+            && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/removals/$(membershipCycleId(memberUid, resource.data.joinedAt)))
+            && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(memberUid)));
+      }
+
+      // ── Evidencia HISTÓRICA de expulsión, una por CICLO (A11d) ────────
+      // Append-only y con identidad `{uid}_{joinedAtMillis}`: la expulsión
+      // del ciclo A jamás puede convertirse en la del ciclo B. Es lo que
+      // permite que P6 clasifique un evento retrasado o reintentado sin
+      // consultar nada mutable (ADR-039). No concede ninguna autoridad ni
+      // ninguna lectura del grupo: solo constata un hecho.
+      match /removals/{removalId} {
+        // Lo ven los miembros actuales y la propia persona expulsada.
+        allow read: if canParticipate()
+          && (isSpaceMember(spaceId) || resource.data.uid == request.auth.uid);
+
+        allow create: if managesGroupOf(spaceId)
+          && request.resource.data.keys().hasOnly([
+            'uid', 'membershipJoinedAt', 'removedBy', 'removedAt',
+            'schemaVersion'])
+          && request.resource.data.keys().hasAll([
+            'uid', 'membershipJoinedAt', 'removedBy', 'removedAt',
+            'schemaVersion'])
+          && request.resource.data.uid != request.auth.uid
+          // El id no puede mentir sobre el ciclo que documenta.
+          && removalId == membershipCycleId(
+            request.resource.data.uid, request.resource.data.membershipJoinedAt)
+          // Estaba dentro ANTES, con ESE ciclo, y fuera DESPUÉS: ni evidencia
+          // sin expulsión, ni veto preventivo a quien nunca fue miembro.
+          && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.uid))
+          && get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.uid))
+              .data.joinedAt == request.resource.data.membershipJoinedAt
+          && !existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.uid))
+          // Actor y hora del hecho, anclados: un registro de auditoría no
+          // puede aceptar un actor ni una fecha que aporte el cliente.
+          && request.resource.data.removedBy == request.auth.uid
+          && request.resource.data.removedAt == request.time
+          && request.resource.data.schemaVersion == 1;
+
+        // Inmutable para siempre: es la única fuente que P6 puede consultar
+        // con la certeza de que sigue describiendo el hecho que clasifica.
+        allow update, delete: if false;
+      }
+
+      // ── Bloqueo VIGENTE de reentrada por enlace (A11d) ────────────────
+      // Pregunta distinta de la anterior y con otra vida: «¿esta persona
+      // está bloqueada AHORA?». Nace con la expulsión y muere con la
+      // readmisión explícita. NO es credencial, no concede lectura y no es
+      // historial: fusionarlo con `removals` reintroduciría la carrera que
+      // documenta ADR-039.
+      match /entryBlocks/{blockedUid} {
+        allow read: if canParticipate()
+          && (isSpaceMember(spaceId) || blockedUid == request.auth.uid);
+
+        allow create: if managesGroupOf(spaceId)
+          && blockedUid != request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'uid', 'membershipJoinedAt', 'blockedAt', 'schemaVersion'])
+          && request.resource.data.keys().hasAll([
+            'uid', 'membershipJoinedAt', 'blockedAt', 'schemaVersion'])
+          && request.resource.data.uid == blockedUid
+          && request.resource.data.blockedAt == request.time
+          && request.resource.data.schemaVersion == 1
+          && !existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(blockedUid))
+          // Solo nace junto a una expulsión con evidencia de ESE ciclo.
+          && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/removals/$(membershipCycleId(blockedUid, request.resource.data.membershipJoinedAt)));
+
+        // Se crea o se retira; nunca se retoca.
+        allow update: if false;
+
+        // Se levanta SOLO readmitiendo de verdad: en el mismo commit hay
+        // membresía nueva y una invitación POSTERIOR al bloqueo.
+        allow delete: if blockedUid == request.auth.uid
+          && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(blockedUid))
+          && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + blockedUid))
+              .data.status == 'accepted'
+          && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + blockedUid))
+              .data.createdAt > resource.data.blockedAt;
       }
 
       // A3: reserva determinista `uid → manualId` dentro del espacio. Su ID
@@ -1434,7 +1564,10 @@ service cloud.firestore {
             in futureSpaceData(request.resource.data.spaceId).relationshipUids)
         && request.resource.data.spaceName is string
         && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt is timestamp
+        // A11d: anclada al servidor. `createdAt` dejó de ser un adorno: es
+        // lo que demuestra que una readmisión responde a una decisión
+        // POSTERIOR a la expulsión, así que no puede aportarlo el cliente.
+        && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt is timestamp
         // El destino debe existir como identidad: cuenta con perfil público
         // o INVITADO (ADR-034). El invitado no es buscable, así que el
@@ -1445,22 +1578,32 @@ service cloud.firestore {
 
       allow update: if canParticipate()
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'updatedAt'])
+            .hasOnly(['status', 'updatedAt', 'createdAt'])
         && request.resource.data.updatedAt is timestamp
         && (
           // El RECEPTOR acepta (junto al alta de miembro en el batch,
           // validada arriba) o rechaza. Cancelada ya no se puede aceptar.
+          // Nunca toca `createdAt`: aceptar no es una decisión nueva del
+          // anfitrión, y esa fecha es la que fecha SU decisión.
           (resource.data.toUid == request.auth.uid
             && resource.data.status == 'pending'
-            && request.resource.data.status in ['accepted', 'rejected'])
-          // El owner cancela una pendiente o reenvía tras rechazo o
-          // cancelación (reutiliza el doc: sigue sin haber duplicados).
+            && request.resource.data.status in ['accepted', 'rejected']
+            && request.resource.data.createdAt == resource.data.createdAt)
           || (isSpaceOwner(resource.data.spaceId)
             && (
+              // Cancelar una pendiente.
               (resource.data.status == 'pending'
-                && request.resource.data.status == 'cancelled')
-              || (resource.data.status in ['rejected', 'cancelled']
+                && request.resource.data.status == 'cancelled'
+                && request.resource.data.createdAt == resource.data.createdAt)
+              // REENVIAR a quien no es miembro (reutiliza el doc: sigue sin
+              // haber duplicados). A11d añade `accepted` al origen —así se
+              // vuelve a invitar a alguien expulsado, que es como se
+              // readmite— y renueva `createdAt`, porque reenviar es una
+              // decisión NUEVA y tiene que poder demostrarse posterior al
+              // bloqueo vigente.
+              || (resource.data.status in ['rejected', 'cancelled', 'accepted']
                 && request.resource.data.status == 'pending'
+                && request.resource.data.createdAt == request.time
                 && spaceData(resource.data.spaceId).status == 'active'
                 && !exists(/databases/$(database)/documents/spaces/$(resource.data.spaceId)/members/$(resource.data.toUid)))
             ))
@@ -1689,6 +1832,20 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Derecho histórico por ticket (A11d). La escribe SOLO recompute
+      // (Admin) y NUNCA la retira: es la prueba de que un UID participó
+      // económicamente en ese ticket alguna vez. Lleva `accountId` para que
+      // quien ya no es miembro pueda llegar al ticket por GET determinista
+      // —sin listar las cuentas del grupo— y `participantNames` con los
+      // nombres de ESE ticket, porque un reparto sin nombres detrás de cada
+      // `pid` es ilegible y abrir el censo entero de la sesión sería mucho
+      // más de lo que necesita para auditar SU deuda.
+      match /ticketEntitlements/{entitlementId} {
+        allow read: if canRead(sid)
+          || (canParticipate() && resource.data.uid == request.auth.uid);
+        allow write: if false;
+      }
+
       match /participants/{pid} {
         // El enlace de ticket NO abre los participantes: los nombres de los
         // demás no son suyos. Rules sí los consulta internamente con get()
@@ -1730,8 +1887,10 @@ service cloud.firestore {
         match /tickets/{tid} {
           // Enlace de ticket: SOLO el ticket del enlace. Ni los demás
           // tickets de la sesión, ni la sesión, ni el espacio.
+          // A11d: y quien ya no es miembro conserva EXACTAMENTE los tickets
+          // en los que participó económicamente, ni uno más.
           allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
-            || auditableByGroup(sid);
+            || auditableByGroup(sid) || hasTicketHistory(sid, tid);
           // spaceId (P4): un ticket pertenece a UN espacio como máximo y
           // solo puede vincularlo el dueño de la sesión a un espacio del
           // que sea miembro. '' o ausente = sin espacio (compatibilidad).
@@ -1775,7 +1934,7 @@ service cloud.firestore {
             // auditoría. El grupo LEE; escribir sigue siendo del dueño de
             // la sesión o del invitado sobre SU propia asignación (A11b).
             allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
-              || auditableByGroup(sid);
+              || auditableByGroup(sid) || hasTicketHistory(sid, tid);
             allow create: if isOwner(sid) && isOpen(sid);
 
             // Retirar un producto que no estaba (A11c). Con él se van sus

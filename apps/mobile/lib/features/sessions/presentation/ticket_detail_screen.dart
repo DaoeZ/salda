@@ -378,7 +378,15 @@ class _TicketLines extends ConsumerWidget {
       );
     }
 
-    final names = {for (final p in participants) p.id: p.name};
+    // A11d: quien solo conserva el derecho histórico no puede leer el censo
+    // de la sesión, así que los nombres del reparto salen del snapshot del
+    // propio ticket. Para todos los demás, nada cambia.
+    final names = ref.watch(
+      ticketParticipantNamesProvider((
+        sid: ticketRef.sessionId,
+        tid: ticket.id,
+      )),
+    );
     // Editar el ticket y elegir MI consumo son dos autoridades distintas.
     // La segunda no depende de ser dueño de la sesión: depende de tener un
     // participante reclamado por mi UID, que es EXACTAMENTE lo que
@@ -644,12 +652,7 @@ class _LineTile extends ConsumerWidget {
         ListTile(
           dense: true,
           onTap: correcting
-              ? () => showLineCorrection(
-                  context,
-                  ref,
-                  line: line,
-                  names: names,
-                )
+              ? () => showLineCorrection(context, ref, line: line, names: names)
               : interactive && line.units == 1
               ? line.usesUnitModel
                     ? () => toggleUnit(0)

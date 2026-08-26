@@ -33,6 +33,17 @@ abstract interface class SessionRepository {
 
   Stream<List<SessionTicket>> watchTickets(String sessionId, String accountId);
 
+  /// Abre UN ticket por derecho histórico (A11d), sin listar nada.
+  ///
+  /// Existe porque la resolución normal recorre las cuentas de la sesión, y
+  /// a quien ya no es miembro no se le permite —deliberadamente— listarlas.
+  /// El derecho histórico guarda la cuenta, así que el ticket se alcanza con
+  /// dos lecturas deterministas. Devuelve null si no hay derecho.
+  Future<HistoricTicket?> fetchHistoricTicket(
+    String sessionId,
+    String ticketId,
+  );
+
   /// Líneas de un ticket (lectura puntual para el detalle).
   Future<List<LineExport>> fetchTicketLines(String ticketPath);
 

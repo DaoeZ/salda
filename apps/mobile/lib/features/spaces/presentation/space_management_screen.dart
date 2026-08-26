@@ -15,6 +15,7 @@ import '../../friends/domain/friendship.dart';
 import '../data/manual_link_repository.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_models.dart';
+import 'space_access_revoked.dart';
 import 'space_title_text.dart';
 import 'space_cover_content.dart';
 
@@ -34,17 +35,21 @@ class SpaceManagementScreen extends ConsumerWidget {
         .when(
           loading: () =>
               const Scaffold(body: Center(child: CircularProgressIndicator())),
-          error: (_, _) => Scaffold(
-            appBar: AppBar(),
-            body: ScreenBody(
-              children: [
-                ErrorStateView(
-                  message: l10n.spacesLoadError,
-                  onRetry: () => ref.invalidate(spaceProvider(spaceId)),
+          // A11d: perder la membresía con la gestión abierta no es un fallo
+          // que se reintente; es un cambio de estado que hay que contar.
+          error: (error, _) => isSpaceAccessRevoked(error)
+              ? const SpaceAccessRevokedScreen()
+              : Scaffold(
+                  appBar: AppBar(),
+                  body: ScreenBody(
+                    children: [
+                      ErrorStateView(
+                        message: l10n.spacesLoadError,
+                        onRetry: () => ref.invalidate(spaceProvider(spaceId)),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
           data: (space) => space == null
               ? Scaffold(
                   appBar: AppBar(),
@@ -919,6 +924,18 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
         : member.isAdmin
         ? l10n.spaceMemberRoleAdmin
         : null;
+    // A11d: cada acción tiene su autoridad. Expulsar la puede ofrecer
+    // también un administrador (sobre miembros normales), mientras que
+    // transferir la propiedad y delegar la administración siguen siendo
+    // exclusivas del propietario.
+    final canRemove = ref.watch(
+      canRemoveMemberProvider((spaceId: space.id, memberUid: member.uid)),
+    );
+    final ownerActions =
+        owner &&
+        member.uid != me &&
+        member.uid != space.ownerUid &&
+        space.isActive;
     return ListTile(
       minTileHeight: 48,
       leading: member.isGuest
@@ -926,11 +943,7 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
           : ProfileAvatar(seed: member.uid, displayName: name, radius: 16),
       title: Text(name),
       subtitle: roleLabel == null ? null : Text(roleLabel),
-      trailing:
-          owner &&
-              member.uid != me &&
-              member.uid != space.ownerUid &&
-              space.isActive
+      trailing: ownerActions || canRemove
           ? PopupMenuButton<String>(
               enabled: !_busy,
               onSelected: (action) => switch (action) {
@@ -969,13 +982,14 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
                 ),
               },
               itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'transfer',
-                  child: Text(l10n.spaceTransferTitle),
-                ),
+                if (ownerActions)
+                  PopupMenuItem(
+                    value: 'transfer',
+                    child: Text(l10n.spaceTransferTitle),
+                  ),
                 // Un INVITADO no administra: no tiene cuenta con la que
                 // hacerlo y Rules lo deniega igualmente.
-                if (!member.isGuest)
+                if (ownerActions && !member.isGuest)
                   PopupMenuItem(
                     value: 'role',
                     child: Text(
@@ -984,10 +998,11 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
                           : l10n.spaceMakeAdmin,
                     ),
                   ),
-                PopupMenuItem(
-                  value: 'remove',
-                  child: Text(l10n.spaceRemoveMemberTitle),
-                ),
+                if (canRemove)
+                  PopupMenuItem(
+                    value: 'remove',
+                    child: Text(l10n.spaceRemoveMemberTitle),
+                  ),
               ],
             )
           : null,

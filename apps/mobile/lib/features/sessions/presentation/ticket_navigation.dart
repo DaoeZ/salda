@@ -62,11 +62,19 @@ void resetTicketNavigationDebounce() {
 ///
 /// Un ticket vive en `sessions/{sid}/accounts/{aid}/tickets/{tid}`, pero las
 /// superficies que enlazan a él casi nunca saben el `aid`: la actividad
-/// guarda `sessionId` + `ticketId`, y el resumen económico lo mismo. Se
-/// recorren las cuentas de la sesión —son pocas y ya están en caché— en vez
-/// de obligar a cada llamante a arrastrar la ruta completa.
+/// guarda `sessionId` + `ticketId`, y el resumen económico lo mismo.
+///
+/// Se intenta PRIMERO el camino determinista del derecho histórico: además
+/// de ser el único que sirve a un ex-miembro, cuesta dos lecturas en vez de
+/// recorrer todas las cuentas. El repliegue por cuentas queda para lo que no
+/// tiene proyección (sesiones anteriores a A11d).
 final sessionTicketProvider = Provider.autoDispose
     .family<AsyncValue<SessionTicket?>, ({String sid, String tid})>((ref, key) {
+      final historic = ref.watch(historicTicketProvider(key));
+      if (historic.isLoading) return const AsyncValue.loading();
+      final granted = historic.value;
+      if (granted != null) return AsyncValue.data(granted.ticket);
+
       final accounts = ref.watch(accountsProvider(key.sid));
       if (accounts.isLoading) return const AsyncValue.loading();
       if (accounts.hasError) {
@@ -110,21 +118,16 @@ class TicketRoute extends ConsumerWidget {
     final ticket = ref.watch(
       sessionTicketProvider((sid: sessionId, tid: ticketId)),
     );
-    final participants =
-        ref.watch(participantsProvider(sessionId)).value ??
-        const <SessionParticipant>[];
+    final names = ref.watch(
+      ticketParticipantNamesProvider((sid: sessionId, tid: ticketId)),
+    );
 
     return switch (ticket) {
       AsyncData(:final value?) => TicketDetailScreen(
         ticket: TicketRef(
           sessionId: sessionId,
           ticket: value,
-          payerName:
-              participants
-                  .where((p) => p.id == value.paidBy)
-                  .map((p) => p.name)
-                  .firstOrNull ??
-              '',
+          payerName: names[value.paidBy] ?? '',
         ),
       ),
       AsyncData() => Scaffold(

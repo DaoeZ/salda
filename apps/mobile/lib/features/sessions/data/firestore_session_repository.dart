@@ -310,6 +310,27 @@ class FirestoreSessionRepository implements SessionRepository {
     return ticketRef.path;
   }
 
+  static SessionTicket _ticketFrom(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    return SessionTicket(
+      id: doc.id,
+      path: doc.reference.path,
+      merchantName: ((data['merchant'] as Map?)?['name'] as String?) ?? '',
+      date: data['date'] as String?,
+      grandTotal: Money((data['grandTotal'] as int?) ?? 0),
+      paidBy: (data['paidByParticipantId'] as String?) ?? '',
+      kind: (data['kind'] as String?) ?? 'scanned',
+      imagePath: data['imagePath'] as String?,
+      splitModeOverride: switch (data['splitModeOverride'] as String?) {
+        'equal' => SplitMode.equal,
+        'byItem' => SplitMode.byItem,
+        _ => null,
+      },
+      spaceId: data['spaceId'] as String?,
+      contextModelVersion: (data['contextModelVersion'] as int?) ?? 0,
+    );
+  }
+
   @override
   Stream<List<SessionTicket>> watchTickets(
     String sessionId,
@@ -320,31 +341,45 @@ class FirestoreSessionRepository implements SessionRepository {
       .doc(accountId)
       .collection('tickets')
       .snapshots()
-      .map(
-        (snap) => [
-          for (final d in snap.docs)
-            SessionTicket(
-              id: d.id,
-              path: d.reference.path,
-              merchantName:
-                  ((d.data()['merchant'] as Map?)?['name'] as String?) ?? '',
-              date: d.data()['date'] as String?,
-              grandTotal: Money((d.data()['grandTotal'] as int?) ?? 0),
-              paidBy: (d.data()['paidByParticipantId'] as String?) ?? '',
-              kind: (d.data()['kind'] as String?) ?? 'scanned',
-              imagePath: d.data()['imagePath'] as String?,
-              splitModeOverride: switch (d.data()['splitModeOverride']
-                  as String?) {
-                'equal' => SplitMode.equal,
-                'byItem' => SplitMode.byItem,
-                _ => null,
-              },
-              spaceId: d.data()['spaceId'] as String?,
-              contextModelVersion:
-                  (d.data()['contextModelVersion'] as int?) ?? 0,
-            ),
-        ],
-      );
+      .map((snap) => [for (final d in snap.docs) _ticketFrom(d)]);
+
+  @override
+  Future<HistoricTicket?> fetchHistoricTicket(
+    String sessionId,
+    String ticketId,
+  ) async {
+    final viewer = uid();
+    if (viewer.isEmpty) return null;
+    // La ruta del derecho es determinista y la conocen tanto las Rules como
+    // recompute: `{ticketId}_{uid}`. Si no existe, no hay derecho — y no se
+    // intenta ninguna otra lectura.
+    final entitlement = await _sessions
+        .doc(sessionId)
+        .collection('ticketEntitlements')
+        .doc('${ticketId}_$viewer')
+        .get();
+    final data = entitlement.data();
+    if (data == null) return null;
+    final accountId = data['accountId'] as String?;
+    if (accountId == null || accountId.isEmpty) return null;
+    final ticket = await _sessions
+        .doc(sessionId)
+        .collection('accounts')
+        .doc(accountId)
+        .collection('tickets')
+        .doc(ticketId)
+        .get();
+    if (!ticket.exists) return null;
+    return HistoricTicket(
+      ticket: _ticketFrom(ticket),
+      participantNames: {
+        for (final entry
+            in (data['participantNames'] as Map?)?.entries ??
+                const <MapEntry<Object?, Object?>>[])
+          '${entry.key}': '${entry.value}',
+      },
+    );
+  }
 
   @override
   Future<List<LineExport>> fetchTicketLines(String ticketPath) async {

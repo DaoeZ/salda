@@ -5,6 +5,7 @@ import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../data/spaces_repository.dart';
+import 'space_access_revoked.dart';
 import 'space_group_cover.dart';
 import 'space_relationship_cover.dart';
 
@@ -23,17 +24,22 @@ class SpaceDetailScreen extends ConsumerWidget {
         .when(
           loading: () =>
               const Scaffold(body: Center(child: CircularProgressIndicator())),
-          error: (_, _) => Scaffold(
-            appBar: AppBar(),
-            body: ScreenBody(
-              children: [
-                ErrorStateView(
-                  message: l10n.spacesLoadError,
-                  onRetry: () => ref.invalidate(spaceProvider(spaceId)),
+          // A11d: si la membresía desaparece con la pantalla abierta, el
+          // listener muere con `permission-denied`. Reintentar no sirve, así
+          // que se dice lo que pasa y se ofrece la salida.
+          error: (error, _) => isSpaceAccessRevoked(error)
+              ? const SpaceAccessRevokedScreen()
+              : Scaffold(
+                  appBar: AppBar(),
+                  body: ScreenBody(
+                    children: [
+                      ErrorStateView(
+                        message: l10n.spacesLoadError,
+                        onRetry: () => ref.invalidate(spaceProvider(spaceId)),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
           data: (space) {
             if (space == null) {
               return Scaffold(

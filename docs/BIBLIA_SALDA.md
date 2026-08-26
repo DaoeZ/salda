@@ -1607,6 +1607,87 @@ escribir esos campos.
 **Revisión:** decidir si la actividad (P6) debe registrar la vinculación como
 un hecho más de la cronología.
 
+### ADR-039: Expulsión con evidencia por CICLO y bloqueo separado (A11d)
+**Estado:** Aceptada · **Fecha:** 2026-08-26 (A11d)
+**Contexto:** faltaba la expulsión real de un grupo. Dos problemas de fondo.
+(1) El protocolo existente —`update {removedBy}` y luego `delete`— admitía
+estados parciales, y agruparlo en un batch NO era la solución: se midió en el
+emulador y Firestore entrega al trigger el cambio NETO del commit, así que
+`removedBy` no llega a verse y **toda expulsión se registraba como abandono
+voluntario**. (2) Borrar la membresía cortaba también `auditableByGroup`
+(A11b), es decir, le arrancaba al expulsado el ticket que explica su propia
+deuda.
+**Decisión:** [HECHO] la expulsión es **un solo `WriteBatch` de tres
+escrituras** y deja **DOS documentos con vidas distintas**, más una tercera
+proyección que resuelve el acceso histórico:
+
+- `spaces/{id}/removals/{uid}_{joinedAtMillis}` — evidencia **HISTÓRICA**,
+  append-only e inmutable (`update, delete: if false`).
+- `spaces/{id}/entryBlocks/{uid}` — bloqueo **VIGENTE** del enlace general.
+  Nace con la expulsión, muere con la readmisión explícita.
+- `sessions/{sid}/ticketEntitlements/{tid}_{uid}` — derecho **MONOTÓNICO**
+  por ticket, escrito por `recompute` y jamás retirado.
+
+**Por qué las dos primeras NO pueden fusionarse.** Es la pregunta que va a
+volver: parecen redundantes. No lo son, y fusionarlas reintroduce una carrera
+REAL. Cloud Functions entrega los eventos de Firestore **at-least-once y sin
+orden garantizado**, y un trigger puede ejecutarse con horas de retraso o
+reintentarse. Con una única lápida mutable por UID, el evento del borrado del
+ciclo A —procesado cuando el grupo ya pasó por el ciclo B— encontraría la
+lápida de B, no coincidiría con `before.joinedAt`, y clasificaría una
+expulsión real como `member_left`. Y como `persistEvents` usa `create()` («el
+primero gana»), esa falsificación sería **permanente**. La evidencia tiene
+que ser inmutable y estar indexada por ciclo; el bloqueo tiene que ser
+mutable y estar indexado por persona. Dos preguntas, dos vidas, dos
+documentos. El guardián ejecutable es el test «un evento retrasado del ciclo
+A no lo falsifica un ciclo B posterior» (`activity.test.ts`).
+**Clasificación en P6:** el trigger deriva `{uid}_{before.joinedAt.toMillis()}`
+del payload **inmutable** del evento y lee esa ruta. Evidencia presente →
+`member_removed`, con `actorUid = removedBy` y `at = removedAt` (la hora del
+hecho, no la del proceso). Ausente → `member_left`, y es una respuesta
+DEFINITIVA porque Rules exige la evidencia en el mismo commit que el borrado:
+«no hay» significa «no la habrá». Los ids no cambian de formato: ya llevaban
+el ciclo dentro.
+**Autoridad:** solo GRUPOS (`managesGroupOf`). El propietario expulsa a
+miembros y a administradores; un administrador solo a miembros normales;
+nadie al propietario ni a sí mismo. Una **relación** deja de tener expulsión
+administrativa —cerrando el agujero por el que su propietario podía retirar a
+la otra mitad y dejar un contexto de una sola identidad—. Salir sigue siendo
+un acto propio y su alcance no se toca (A3).
+**Reentrada:** una expulsión cierra el enlace general para esa persona.
+Vuelve solo con una invitación **posterior al bloqueo**, demostrable porque
+`spaceInvites.createdAt` pasa a estar anclado a `request.time` y reenviar lo
+renueva. Aceptarla crea la membresía y levanta el bloqueo en el MISMO commit:
+ni readmitido-y-bloqueado, ni bloqueo levantado sin volver. Vuelve como
+miembro NUEVO (`joinedAt` fresco, sin `role`), así que un antiguo
+administrador no recupera nada y el chat no le devuelve el intervalo en el
+que estuvo fuera. Si después sale por su pie, el enlace vuelve a servirle; si
+lo vuelven a expulsar, se bloquea otra vez.
+**Acceso histórico:** el expulsado conserva EXACTAMENTE los tickets en los
+que participó económicamente —el ticket, sus líneas y su foto— y nada más:
+ni la sesión (ahí vive el `shareCode`), ni otros tickets, ni el listado, ni
+miembros, ni chat, ni administración. La proyección es monotónica **a
+propósito**: `ticketParticipants` es la foto del reparto vivo y se retira,
+esta constata que alguien participó alguna vez. Sin esa diferencia, una
+corrección A11c posterior le quitaría el ticket que explica la deuda que ya
+pagó. `recompute` no tiene bucle de borrado para ella, y su creación se
+comprueba ANTES del atajo `unchanged` —si no, faltaría justo en los tickets
+que llevan tiempo quietos—. El derecho lleva `accountId` (para llegar al
+ticket con un GET, sin listar cuentas) y los nombres de ESE reparto (un `pid`
+sin nombre no explica ninguna deuda; el censo entero de la sesión sería de
+más). Storage aplica la misma frontera sobre `receipts/{sid}/{tid}/`.
+**Consecuencias:** expulsar no borra ni cancela nada económico —`recompute`
+nunca leyó la membresía y las callables de pago tampoco—, así que deudas,
+pagos y liquidaciones sobreviven. Lo que sí se pierde de inmediato es la
+autoridad derivada de pertenecer: A11b general, A11c y la representación
+de identidades manuales de ese grupo. Sin backfill: los grupos existentes no
+tienen evidencias ni bloqueos, y quien fue expulsado antes de A11d puede
+volver por el enlace. Ventana de rollout: con las Rules nuevas publicadas, un
+cliente anterior no puede expulsar (su protocolo ya no se acepta).
+**Revisión:** la audiencia de los eventos se sigue calculando en el momento
+del trigger (limitación preexistente de P6, acotada a 30 UIDs); si algún día
+importa la composición exacta del instante del hecho, habrá que congelarla.
+
 ---
 
 <a name="parte-x"></a>

@@ -20,7 +20,11 @@ void main() {
     isFullAccount: () => true,
   );
 
-  Future<void> pump(WidgetTester tester, String spaceId, {String uid = 'owner'}) async {
+  Future<void> pump(
+    WidgetTester tester,
+    String spaceId, {
+    String uid = 'owner',
+  }) async {
     tester.view.physicalSize = const Size(900, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -86,7 +90,9 @@ void main() {
   testWidgets('la lista distingue propietario, admin, miembro y sin cuenta', (
     tester,
   ) async {
-    await repoFor('owner').setMemberRole('g1', 'uid-alba', SpaceMemberRole.admin);
+    await repoFor(
+      'owner',
+    ).setMemberRole('g1', 'uid-alba', SpaceMemberRole.admin);
     await pump(tester, 'g1');
 
     expect(find.text('Edgar'), findsOneWidget);
@@ -117,11 +123,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Nombrar administrador').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Nombrar administrador'));
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Nombrar administrador'),
+    );
     await tester.pumpAndSettle();
 
     expect(
-      (await firestore.doc('spaces/g1/members/uid-jorge').get()).data()!['role'],
+      (await firestore.doc('spaces/g1/members/uid-jorge').get())
+          .data()!['role'],
       'admin',
     );
     // Y se refleja sin recargar nada a mano.
@@ -132,7 +141,9 @@ void main() {
   testWidgets('el propietario retira el rol sin expulsar a nadie', (
     tester,
   ) async {
-    await repoFor('owner').setMemberRole('g1', 'uid-alba', SpaceMemberRole.admin);
+    await repoFor(
+      'owner',
+    ).setMemberRole('g1', 'uid-alba', SpaceMemberRole.admin);
     await pump(tester, 'g1');
 
     final fila = find.ancestor(
@@ -145,7 +156,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Retirar administrador').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Retirar administrador'));
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Retirar administrador'),
+    );
     await tester.pumpAndSettle();
 
     final member = await firestore.doc('spaces/g1/members/uid-alba').get();
@@ -198,15 +211,30 @@ void main() {
     await cerrar(tester);
   });
 
-  testWidgets('un administrador ve los roles pero no los cambia', (
+  // A11d: un administrador SÍ tiene una acción sobre los miembros normales
+  // —expulsarlos—, pero sigue sin poder tocar roles ni la propiedad.
+  testWidgets('un administrador expulsa, pero no cambia roles ni transfiere', (
     tester,
   ) async {
-    await repoFor('owner').setMemberRole('g1', 'uid-alba', SpaceMemberRole.admin);
+    await repoFor(
+      'owner',
+    ).setMemberRole('g1', 'uid-alba', SpaceMemberRole.admin);
     await pump(tester, 'g1', uid: 'uid-alba');
 
     expect(find.text('Propietario'), findsOneWidget);
     expect(find.text('Administrador'), findsOneWidget);
-    expect(find.byType(PopupMenuButton<String>), findsNothing);
+
+    final fila = find.ancestor(
+      of: find.text('Jorge'),
+      matching: find.byType(ListTile),
+    );
+    await tester.tap(
+      find.descendant(of: fila, matching: find.byType(PopupMenuButton<String>)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Expulsar del grupo'), findsOneWidget);
+    expect(find.text('Nombrar administrador'), findsNothing);
+    expect(find.text('Transferir propiedad'), findsNothing);
     await cerrar(tester);
   });
 
@@ -226,19 +254,17 @@ void main() {
       await repo.setMemberRole('g1', 'uid-jorge', SpaceMemberRole.admin);
 
       final members = await repo.watchMembers('g1').first;
-      expect(
-        members.where((m) => m.isAdmin).map((m) => m.uid).toSet(),
-        {'uid-alba', 'uid-jorge'},
-      );
+      expect(members.where((m) => m.isAdmin).map((m) => m.uid).toSet(), {
+        'uid-alba',
+        'uid-jorge',
+      });
     });
 
     test('nadie se nombra administrador a sí mismo', () async {
       expect(
-        () => repoFor('owner').setMemberRole(
-          'g1',
+        () => repoFor(
           'owner',
-          SpaceMemberRole.admin,
-        ),
+        ).setMemberRole('g1', 'owner', SpaceMemberRole.admin),
         throwsA(
           isA<SpaceFailure>().having(
             (e) => e.code,

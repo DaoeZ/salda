@@ -553,9 +553,47 @@ detalle del ticket, y lista en vivo en el detalle del espacio.
 - Invitar: owner de espacio activo, a cuenta con perfil que no es miembro,
   con ID canónico; aceptar/rechazar solo el receptor; cancelar/reenviar solo
   el owner; alta de miembro solo con invitación aceptada en el mismo batch.
-- Salir/expulsar: nunca al owner; el propio miembro o el owner.
+- Salir: acto propio, nunca el owner (antes transfiere o archiva).
+- Expulsar (A11d, solo GRUPOS): el propietario a miembros y administradores;
+  un administrador solo a miembros normales; nunca al owner ni a uno mismo.
+  Es un batch de tres escrituras y las tres se validan cruzadas: sin
+  evidencia del ciclo y bloqueo vigente el borrado se deniega.
 - Vincular ticket: dueño de la sesión + miembro del espacio.
 - Anónimos y no verificados: sin acceso a nada de lo anterior.
+
+## Expulsión y reentrada (A11d, ADR-039)
+
+Tres documentos, tres responsabilidades que **no** se pueden fusionar:
+
+| Documento | Qué responde | Vida |
+|---|---|---|
+| `spaces/{id}/removals/{uid}_{joinedAtMillis}` | «esta expulsión ocurrió» | append-only, inmutable |
+| `spaces/{id}/entryBlocks/{uid}` | «¿está bloqueado AHORA el enlace?» | nace al expulsar, muere al readmitir |
+| `sessions/{sid}/ticketEntitlements/{tid}_{uid}` | «participó económicamente en este ticket» | monotónica, la escribe `recompute` |
+
+La primera está indexada por CICLO de membresía porque P6 la consulta cuando
+le llega el evento del borrado, y ese evento puede llegar tarde, reintentado
+o cuando la persona ya va por otro ciclo: si el documento fuese mutable,
+encontraría el ciclo equivocado y registraría una expulsión real como
+abandono voluntario. El razonamiento completo está en ADR-039.
+
+**Reentrada.** Una expulsión cierra el enlace general para esa persona.
+Vuelve solo con una invitación posterior al bloqueo —`spaceInvites.createdAt`
+está anclado a `request.time` y reenviar lo renueva—, y aceptarla crea la
+membresía y levanta el bloqueo en el mismo commit. Vuelve como miembro NUEVO:
+`joinedAt` fresco (que es lo que gobierna la privacidad del chat) y sin
+`role`, así que un antiguo administrador no recupera nada. Si después sale
+por su pie, el enlace vuelve a servirle; si lo vuelven a expulsar, se bloquea
+otra vez y nace una evidencia nueva sin tocar la anterior.
+
+**Qué conserva el expulsado.** Sus deudas, sus pagos y sus liquidaciones
+—nada de eso dependía nunca de la membresía— y los tickets en los que
+participó económicamente: el ticket, sus líneas y su foto. Nada más: ni la
+sesión (`shareCode`), ni otros tickets, ni el listado, ni miembros, ni chat,
+ni administración. El derecho lleva la cuenta —para alcanzar el ticket con un
+GET, sin listar— y los nombres de ESE reparto, porque un `pid` sin nombre no
+explica ninguna deuda y el censo de la sesión sería mucho más de lo
+necesario. Storage aplica exactamente la misma frontera.
 
 Índices: dos `fieldOverrides` de collection group (members.uid,
 tickets.spaceId); las queries de invitaciones son de igualdad pura (sin
@@ -583,3 +621,14 @@ composites).
   invitaciones, transferencia, salida/expulsión, vínculo de tickets y
   compatibilidad con tickets sin espacio.
 - `spaces_screen_test.dart`: vacío, activos/archivados, aceptar invitación.
+- `group_member_removal.test.mjs` (A11d): 28 casos — matriz de autoridad,
+  atomicidad de las tres escrituras, inmutabilidad de la evidencia, veto
+  preventivo, bloqueo del enlace, invitación anterior vs posterior y dos
+  ciclos completos de entrada y salida.
+- `group_ticket_history.test.mjs` (A11d): 17 casos — qué conserva y qué
+  pierde un ex-miembro, y que el miembro activo no pierde nada de A11b.
+- `storage_receipt_access.test.mjs` (A11d): la foto sigue la misma frontera.
+- `ticketEntitlements.it.test.ts` (A11d): el derecho se persiste, sobrevive a
+  una corrección A11c y se crea aunque el recompute resulte «sin cambios».
+- `space_member_removal_test.dart` (A11d): batch atómico, readmisión, Mis
+  contextos, autoridad ofrecida y pérdida de acceso con la pantalla abierta.

@@ -1136,12 +1136,22 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get spaceRemoveMemberTitle => 'Eliminar del espacio';
+  String get spaceRemoveMemberTitle => 'Expulsar del grupo';
 
   @override
   String spaceRemoveMemberBody(String name) {
-    return '$name dejará de ver este espacio. Sus tickets, pagos e historial no se tocan.';
+    return '$name saldrá del grupo y dejará de ver el contenido nuevo. Sus deudas y pagos anteriores no desaparecen, y podrá seguir consultando los gastos en los que participó. Para que vuelva tendrás que invitarle otra vez.';
   }
+
+  @override
+  String get spaceAccessRevokedTitle => 'Ya no tienes acceso a este grupo';
+
+  @override
+  String get spaceAccessRevokedBody =>
+      'Alguien que administra el grupo te ha sacado, o has salido desde otro dispositivo. Tus deudas y pagos no han cambiado: siguen en Economía, junto a los gastos en los que participaste.';
+
+  @override
+  String get spaceAccessRevokedAction => 'Volver a mis contextos';
 
   @override
   String get spaceTicketsTitle => 'Tickets del espacio';

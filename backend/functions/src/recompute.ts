@@ -65,6 +65,8 @@ export function resolveParticipantUid(params: {
 
 export interface ParticipantDoc {
   id: string;
+  /** Nombre visible; solo se proyecta en el derecho histórico (A11d). */
+  name?: string;
   isOwner?: boolean;
   active?: boolean;
   order?: number;
@@ -181,8 +183,27 @@ export interface RecomputeResult {
    * ella esa condición dependería de un array escrito por el cliente.
    */
   ticketParticipants: TicketParticipantProjection[];
+  /**
+   * Derecho histórico por ticket (A11d). Proyección MONOTÓNICA: se concede
+   * cuando un UID participa económicamente en un ticket y NO se retira
+   * jamás, ni aunque una corrección A11c posterior le quite el consumo y
+   * recompute borre su `economicEntry`. Es lo único que permite que quien
+   * deja de ser miembro pueda seguir auditando la deuda que ya tenía.
+   */
+  ticketEntitlements: TicketEntitlementDraft[];
   /** Espejo de pagos legacy confirmados/pendientes con participantes UID. */
   legacyPayments: LegacyPaymentDraft[];
+}
+
+export interface TicketEntitlementDraft {
+  /** `{ticketId}_{uid}`: la ruta que las Rules reconstruyen sin consultas. */
+  id: string;
+  ticketId: string;
+  /** Un ticket vive bajo su cuenta; sin esto habría que LISTARLAS. */
+  accountId: string;
+  uid: string;
+  /** pid → nombre, SOLO de los participantes de ESE ticket. */
+  participantNames: Record<string, string>;
 }
 
 export interface EconomicEntryDraft {
@@ -262,10 +283,12 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
     if (resolved) actorByPid.set(participant.id, resolved);
   }
 
+  const manualAliases = s.manualAliases ?? {};
   const accountTotals: RecomputeResult['accountTotals'] = {};
   const contributions: TicketContribution[] = [];
   const economicEntries: EconomicEntryDraft[] = [];
   const ticketParticipants: TicketParticipantProjection[] = [];
+  const ticketEntitlements: TicketEntitlementDraft[] = [];
 
   for (const account of s.accounts) {
     let accountTotal = 0;
@@ -315,6 +338,14 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
       for (const [pid, amount] of Object.entries(consumption)) {
         if (amount > 0) participatingPids.add(pid);
       }
+      // Nombres de ESTE ticket, para que el reparto siga siendo legible sin
+      // abrir el censo de la sesión (A11d). Se congelan en el derecho
+      // histórico: un `pid` sin nombre detrás no explica ninguna deuda.
+      const participantNames: Record<string, string> = {};
+      for (const pid of [...participatingPids].sort()) {
+        const name = participants.find((p) => p.id === pid)?.name;
+        if (name) participantNames[pid] = name;
+      }
       for (const pid of participatingPids) {
         const participant = participants.find((p) => p.id === pid);
         if (!participant) continue;
@@ -325,6 +356,22 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
           ...(participant.claimedByDevice
             ? { claimedByDevice: participant.claimedByDevice }
             : {}),
+        });
+        // Solo identidades REALES: un `manual:{id}` sin vincular no tiene
+        // cuenta con la que leer nada. Un manual ya VINCULADO sí, y es la
+        // misma persona a la que ADR-037 reconoce como lectora.
+        const uid = participant.userUid ??
+          (participant.isOwner ? s.ownerUid : undefined) ??
+          (participant.manualId
+            ? manualAliases[participant.manualId]
+            : undefined);
+        if (!uid) continue;
+        ticketEntitlements.push({
+          id: `${ticket.id}_${uid}`,
+          ticketId: ticket.id,
+          accountId: account.id,
+          uid,
+          participantNames,
         });
       }
 
@@ -359,7 +406,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
           // Entre dos manuales no hay nadie que pueda leerla: esa deuda vive
           // en el balance de su sesión, no en la economía global.
           const readers = accountUidsOf(
-            [debtorActor, payerActor], s.manualAliases ?? {});
+            [debtorActor, payerActor], manualAliases);
           if (readers.length === 0) continue;
           economicEntries.push({
             id: `${account.id}_${ticket.id}_${
@@ -398,7 +445,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
     // Un pago que salda a un manual también reduce su deuda global; si nadie
     // puede leerlo (manual↔manual) se queda en el balance de la sesión.
     const readers = accountUidsOf(
-      [payerUid, receiverUid], s.manualAliases ?? {});
+      [payerUid, receiverUid], manualAliases);
     if (readers.length === 0) continue;
     legacyPayments.push({
       id: `legacy_${settlement.id}`,
@@ -475,6 +522,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
     settlementSync: { writes, untouched, removals },
     economicEntries,
     ticketParticipants,
+    ticketEntitlements,
     legacyPayments,
   };
 }
@@ -583,6 +631,7 @@ export async function recomputeSession(sid: string): Promise<void> {
     economicEntriesSnap,
     economicPaymentsSnap,
     externalPaymentsSnap,
+    ticketEntitlementsSnap,
   ] = await Promise.all([
     sessionRef.collection('participants').get(),
     sessionRef.collection('accounts').get(),
@@ -590,6 +639,11 @@ export async function recomputeSession(sid: string): Promise<void> {
     db.collection('economicEntries').where('sessionId', '==', sid).get(),
     db.collection('economicPayments').where('sourceSessionId', '==', sid).get(),
     db.collection('economicPayments').where('sessionIds', 'array-contains', sid).get(),
+    // A11d: se lee ANTES del atajo `unchanged`. Un derecho histórico que
+    // falte tiene que crearse aunque la economía no haya cambiado —si no, la
+    // proyección quedaría incompleta justo en los tickets que llevan tiempo
+    // quietos, que son precisamente los que alguien va a auditar después.
+    sessionRef.collection('ticketEntitlements').get(),
   ]);
 
   const accounts: AccountDoc[] = await Promise.all(
@@ -702,6 +756,7 @@ export async function recomputeSession(sid: string): Promise<void> {
       const claimed = p.data().claimedByDevice as string | undefined;
       return {
         id: p.id,
+        name: p.data().name as string | undefined,
         isOwner,
         active: p.data().active as boolean | undefined,
         order: p.data().order as number | undefined,
@@ -804,10 +859,47 @@ export async function recomputeSession(sid: string): Promise<void> {
         comparable(doc.data()) === comparable(desired);
     });
 
+  // Derecho histórico (A11d). Solo CRECE: una entrada concedida no se retira
+  // nunca, y los nombres se FUNDEN con los ya guardados en vez de sustituirse
+  // —quien dejó de consumir por una corrección posterior sigue teniendo que
+  // aparecer con su nombre en el reparto que se está auditando—.
+  const existingEntitlements = new Map(
+    ticketEntitlementsSnap.docs.map((doc) => [doc.id, doc.data()]),
+  );
+  const entitlementWrites = new Map<string, Record<string, unknown>>();
+  for (const entitlement of result.ticketEntitlements) {
+    const existing = existingEntitlements.get(entitlement.id);
+    const names = {
+      ...((existing?.participantNames as Record<string, string> | undefined) ??
+        {}),
+      ...entitlement.participantNames,
+    };
+    const desired = {
+      uid: entitlement.uid,
+      ticketId: entitlement.ticketId,
+      accountId: entitlement.accountId,
+      participantNames: names,
+      schemaVersion: 1,
+    };
+    const stored = existing === undefined ? undefined : {
+      uid: existing.uid,
+      ticketId: existing.ticketId,
+      accountId: existing.accountId,
+      participantNames: existing.participantNames,
+      schemaVersion: existing.schemaVersion,
+    };
+    if (stored && JSON.stringify(stored) === JSON.stringify(desired)) continue;
+    entitlementWrites.set(entitlement.id, {
+      ...desired,
+      grantedAt: existing?.grantedAt ?? FieldValue.serverTimestamp(),
+    });
+  }
+
   // ¿Cambió algo? Comparación con lo persistido para evitar escrituras
   // (y notificaciones/lecturas de listeners) innecesarias.
   const current = sessionSnap.data() ?? {};
   const unchanged =
+    entitlementWrites.size === 0 &&
     JSON.stringify(current.totals) === JSON.stringify(result.sessionTotals) &&
     JSON.stringify(current.balances) === JSON.stringify(result.balances) &&
     current.pendingSettlements === result.pendingSettlements &&
@@ -878,6 +970,15 @@ export async function recomputeSession(sid: string): Promise<void> {
         : {}),
     });
   }
+  // Derecho histórico por ticket (A11d). NO hay bucle de borrado y eso es
+  // deliberado: `ticketParticipants` (más abajo) es la foto del reparto vivo
+  // y se retira, esta es la prueba de que alguien participó ALGUNA VEZ. Si
+  // se retirase, una corrección A11c posterior dejaría a un ex-miembro sin
+  // el ticket que explica la deuda que ya pagó.
+  for (const [id, data] of entitlementWrites) {
+    batch.set(sessionRef.collection('ticketEntitlements').doc(id), data);
+  }
+
   // Proyección de participación por ticket (ADR-036). Derivada, idempotente
   // y escrita SOLO por Admin: es la fuente que las Rules consultan para
   // demostrar que un participante pertenece de verdad a un ticket. No

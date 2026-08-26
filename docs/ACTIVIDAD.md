@@ -26,7 +26,7 @@ usa para calcular balances, permisos, membresías ni estados.
 | space_transferred | transferencia | owner ANTERIOR |
 | invite_sent | invitación (o reenvío) | emisor |
 | member_joined | aceptar invitación | el propio miembro |
-| member_left / member_removed | salida / expulsión | miembro / owner |
+| member_left / member_removed | salida / expulsión | miembro / quien expulsa (owner o admin) |
 | ticket_created / deleted | alta y baja del ticket | dueño de la sesión |
 | ticket_updated | edición RELEVANTE (comercio, total, fecha, pagador) **o** corrección administrativa firmada (A11c, incluida la que solo toca productos) | dueño de la sesión, o **quien firma la corrección** |
 | ticket_linked / unlinked | vínculo con espacio | dueño de la sesión |
@@ -88,6 +88,16 @@ deriva de datos autoritativos: ownerUid, uid de la membresía, participantes
 con cuenta o `stateHistory` del pago). La expulsión se distingue de la
 salida con el marcador `removedBy` que el owner escribe justo antes del
 borrado y que Rules valida (solo el owner, nunca sobre sí mismo).
+
+La ruta de esa evidencia —`spaces/{id}/removals/{uid}_{joinedAtMillis}`— se
+deriva del `before` **inmutable** del evento, así que la clasificación no
+depende de cuándo llegue el trigger ni de por qué ciclo vaya ya la persona.
+Cloud Functions entrega at-least-once y sin orden: consultar un documento
+mutable habría convertido una expulsión real en `member_left` en cuanto
+hubiera una readmisión posterior. Cuando hay evidencia, el evento se sella
+con `removedAt` —la hora del hecho— en vez de la hora de proceso; y su
+ausencia es una respuesta definitiva, porque Rules exige escribirla en el
+mismo commit que el borrado.
 
 Los IDs son deterministas por hecho (`sp_{id}_created`,
 `mb_{spaceId}_{uid}_join_{joinedAt}`, `tk_{sid}_{tid}_upd_{hash(estado)}`,
@@ -151,7 +161,7 @@ accesibles desde sus pantallas aunque no tengan eventos.
   salida, ruido técnico ignorado, legacy/pending/recompute sin eventos.
 - `backend/firestore/test/rules.test.mjs` (bloque activityEvents): lectura
   por audiencia, anónimos/no verificados fuera, escrituras y suplantación
-  denegadas, query demostrable, marcador `removedBy`.
+  denegadas, query demostrable, y que ya no se escribe `removedBy`.
 - `apps/mobile/test/activity_test.dart`: repositorio (audiencia, orden,
   paginación sin duplicados, filtro por espacio, resumen congelado), textos
   por tipo, tiempo relativo, pantalla (vacío, filas, importes y nombres

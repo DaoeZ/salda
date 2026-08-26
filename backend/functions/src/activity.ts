@@ -52,7 +52,25 @@ export interface ActivityEventDraft {
   paymentId?: string;
   /** Datos visuales mínimos (rótulos e importes), jamás datos privados. */
   summary: Record<string, string | number>;
+  /**
+   * Instante REAL del hecho, cuando existe un documento autoritativo que lo
+   * fecha (A11d: `removals.removedAt`). Sin él se sella la hora de proceso,
+   * que para un trigger retrasado colocaría el hecho en el sitio equivocado
+   * de la cronología.
+   */
+  at?: unknown;
 }
+
+/**
+ * Identidad del CICLO de membresía (A11d): `{uid}_{joinedAtMillis}`.
+ *
+ * Se deriva del `before` INMUTABLE del evento, así que un trigger retrasado
+ * —o reintentado después de una readmisión, o después de una segunda
+ * expulsión— sigue apuntando al documento del ciclo que está clasificando.
+ * Debe coincidir exactamente con `membershipCycleId` de firestore.rules.
+ */
+export const membershipCycleId = (uid: string, joinedAt: unknown): string =>
+  `${uid}_${asMillis(joinedAt)}`;
 
 /** Máximo de UIDs por evento: techo documentado de escalabilidad. */
 export const activityAudienceLimit = 30;
@@ -128,6 +146,14 @@ export function buildSpaceEvents(
   return events;
 }
 
+/**
+ * [removal] es la evidencia INMUTABLE de la expulsión de ESTE ciclo
+ * (`spaces/{id}/removals/{uid}_{joinedAtMillis}`), o `undefined` si no
+ * existe. Es el único discriminador entre expulsión y salida voluntaria, y
+ * es seguro precisamente porque no puede envejecer: Rules exige escribirla
+ * en el MISMO commit que el borrado, así que «no hay evidencia» significa
+ * «no la habrá nunca», no «todavía no ha llegado» (A11d/ADR-039).
+ */
 export function buildMemberEvents(
   spaceId: string,
   memberUid: string,
@@ -135,6 +161,7 @@ export function buildMemberEvents(
   after: Doc,
   spaceName: string,
   audience: string[],
+  removal?: Doc,
 ): ActivityEventDraft[] {
   const summary = { spaceName };
   if (!before && after) {
@@ -148,16 +175,18 @@ export function buildMemberEvents(
     }];
   }
   if (before && !after) {
-    // La app marca `removedBy` (validado por Rules como el owner) en el
-    // mismo batch del borrado: distingue expulsión de salida voluntaria.
-    const removedBy = before.removedBy as string | undefined;
+    // El id conserva su formato histórico y ya lleva el ciclo dentro
+    // (`joinedAt`), así que dos entradas y dos salidas de la misma persona
+    // nunca se pisan. El TIPO va en el campo, no en el id: cambiarlo sería
+    // fabricar duplicados alrededor de despliegues y reintentos.
     return [{
       id: `mb_${spaceId}_${memberUid}_left_${asMillis(before.joinedAt)}`,
-      type: removedBy ? 'member_removed' : 'member_left',
-      actorUid: removedBy ?? memberUid,
+      type: removal ? 'member_removed' : 'member_left',
+      actorUid: (removal?.removedBy as string | undefined) ?? memberUid,
       memberUids: activityAudience([...audience, memberUid]),
       spaceId,
       summary,
+      ...(removal?.removedAt ? { at: removal.removedAt } : {}),
     }];
   }
   return [];
@@ -393,7 +422,7 @@ export async function persistEvents(
         ...(draft.ticketId ? { ticketId: draft.ticketId } : {}),
         ...(draft.paymentId ? { paymentId: draft.paymentId } : {}),
         summary: draft.summary,
-        at: FieldValue.serverTimestamp(),
+        at: draft.at ?? FieldValue.serverTimestamp(),
         schemaVersion: 1,
       });
     } catch (error) {
@@ -429,18 +458,30 @@ export const activityOnSpaceMember = onDocumentWritten(
   async (event) => {
     const { spaceId, memberUid } = event.params;
     const db = getFirestore();
-    const [space, audience] = await Promise.all([
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    // A11d: la ruta de la evidencia se deriva del payload del evento, no del
+    // estado actual del usuario. Da igual cuándo llegue este trigger ni por
+    // qué ciclo vaya ya la persona: siempre lee el documento de SU ciclo.
+    const removalRef = before && !after
+      ? db.doc(
+        `spaces/${spaceId}/removals/${
+          membershipCycleId(memberUid, before.joinedAt)}`)
+      : null;
+    const [space, audience, removal] = await Promise.all([
       db.doc(`spaces/${spaceId}`).get(),
       spaceAudience(spaceId),
+      removalRef ? removalRef.get() : Promise.resolve(null),
     ]);
     if (!space.exists) return; // limpieza huérfana: sin espacio no hay feed
     await persistEvents(buildMemberEvents(
       spaceId,
       memberUid,
-      event.data?.before?.data(),
-      event.data?.after?.data(),
+      before,
+      after,
       (space.data()?.name as string) ?? '',
       audience,
+      removal?.exists ? removal.data() : undefined,
     ));
   },
 );

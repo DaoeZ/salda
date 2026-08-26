@@ -44,11 +44,21 @@ service firebase.storage {
         && firestore.exists(/databases/(default)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
     }
 
+    // A11d: la foto es parte de la auditoría de UNA deuda, así que quien ya
+    // no es miembro la conserva exactamente para los tickets en los que
+    // participó económicamente. Espejo exacto de `hasTicketHistory` en
+    // firestore.rules — la ruta ya es por ticket, así que el permiso se
+    // acota solo. Ni un ticket más: `{tid}` viene de la ruta del archivo.
+    function hasTicketHistory(sid, tid) {
+      return firestore.exists(/databases/(default)/documents/sessions/$(sid)/ticketEntitlements/$(tid + '_' + request.auth.uid));
+    }
+
     match /receipts/{sid}/{tid}/{file} {
       allow read: if request.auth != null && (
         firestore.get(/databases/(default)/documents/sessions/$(sid)).data.ownerUid == request.auth.uid
         || firestore.exists(/databases/(default)/documents/sessions/$(sid)/guestAccess/$(request.auth.uid))
         || auditableByGroup(sid)
+        || hasTicketHistory(sid, tid)
       );
       allow write: if canUseCore()
         && firestore.get(/databases/(default)/documents/sessions/$(sid)).data.ownerUid == request.auth.uid

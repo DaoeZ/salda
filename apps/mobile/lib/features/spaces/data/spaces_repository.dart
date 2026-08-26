@@ -55,6 +55,15 @@ Never _rethrowAsSpaceFailure(String operation, Object error) {
   throw const SpaceFailure(SpaceFailureCode.notAllowed);
 }
 
+/// Identidad del CICLO de membresía (A11d): `{uid}_{joinedAtMillis}`.
+///
+/// Es la MISMA convención que reproducen `membershipCycleId` en
+/// firestore.rules y en `activity.ts`. Vive aquí porque es una regla de
+/// nombrado de documentos, no de dominio: quien la cambie en un sitio tiene
+/// que cambiarla en los tres o la evidencia deja de encontrarse.
+String membershipCycleId(String uid, Timestamp joinedAt) =>
+    '${uid}_${joinedAt.millisecondsSinceEpoch}';
+
 /// Cómo terminó `createRelationship`. Distinguirlo es lo que permite a la UI
 /// decir algo útil en vez de «no se pudo completar la acción».
 enum RelationshipOutcome {
@@ -708,7 +717,13 @@ class SpacesRepository {
 
   // ── Invitaciones ──────────────────────────────────────────────────────
 
-  /// Invita (o REENVÍA tras rechazo/cancelación: mismo doc determinista).
+  /// Invita, o REENVÍA sobre el mismo doc determinista.
+  ///
+  /// A11d: reenviar renueva `createdAt`, porque volver a invitar es una
+  /// decisión NUEVA y esa fecha es la que demuestra que es posterior a una
+  /// expulsión vigente. Y una invitación ya `accepted` vuelve a `pending`
+  /// cuando la persona ya no es miembro: así se readmite a un expulsado sin
+  /// inventar una acción administrativa aparte.
   Future<void> invite(String spaceId, String spaceName, String toUid) async {
     _requireAccount();
     if (toUid == uid()) throw const SpaceFailure(SpaceFailureCode.notAllowed);
@@ -726,11 +741,12 @@ class SpacesRepository {
       if (existing.exists) {
         final status = existing.data()?['status'] as String?;
         if (status == 'pending') return; // ya invitado: idempotente
-        if (status == 'accepted') {
-          throw const SpaceFailure(SpaceFailureCode.alreadyMember);
-        }
+        // `accepted` con la persona fuera del grupo = invitación gastada de
+        // una etapa anterior (salió o la expulsaron). Se reutiliza el mismo
+        // documento, como con un rechazo.
         transaction.update(doc, {
           'status': 'pending',
+          'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
         return;
@@ -932,10 +948,22 @@ class SpacesRepository {
   /// Aceptar crea la membresía y resuelve la invitación EN EL MISMO batch:
   /// una invitación cancelada ya no puede aceptarse (la regla exige
   /// pending → accepted).
+  ///
+  /// A11d: si existe un bloqueo de reentrada, se retira aquí mismo. Rules
+  /// exige las dos cosas juntas —membresía nueva y bloqueo levantado— así
+  /// que no hay «readmitido pero todavía bloqueado» ni «bloqueo levantado
+  /// sin volver a entrar». Se vuelve como miembro NUEVO: `joinedAt` fresco
+  /// (que es lo que gobierna la privacidad del chat) y sin `role`, así que
+  /// un antiguo administrador no recupera nada por el camino.
   Future<void> acceptInvite(SpaceInvite invite) async {
     // Aceptar es PARTICIPAR, no administrar: también lo hace un invitado.
     final guestName = guestDisplayName?.call();
     if (guestName == null) _requireAccount();
+    final blockRef = _spaces
+        .doc(invite.spaceId)
+        .collection('entryBlocks')
+        .doc(uid());
+    final blocked = (await blockRef.get()).exists;
     final batch = firestore.batch();
     batch.update(_invites.doc(invite.id), {
       'status': 'accepted',
@@ -947,6 +975,7 @@ class SpacesRepository {
       // Un invitado congela su nombre aquí porque no tiene perfil público.
       if (guestName != null) ...{'kind': 'guest', 'displayName': guestName},
     });
+    if (blocked) batch.delete(blockRef);
     await batch.commit();
   }
 
@@ -969,15 +998,66 @@ class SpacesRepository {
     await _spaces.doc(spaceId).collection('members').doc(uid()).delete();
   }
 
-  /// Expulsión por el owner. Mismo contrato: solo la membresía. El marcador
-  /// `removedBy` (validado por Rules: solo el owner y nunca sobre sí mismo)
-  /// precede al borrado para que la actividad (P6) distinga expulsión de
-  /// salida voluntaria. Si la app muriera entre ambas escrituras, el
-  /// marcador huérfano es inocuo y el reintento converge.
+  /// Expulsión administrativa (A11d). Mismo contrato económico que salir:
+  /// solo desaparece la membresía; tickets, asignaciones, obligaciones y
+  /// pagos quedan intactos.
+  ///
+  /// Es UN batch de tres escrituras, y tiene que serlo:
+  ///
+  ///  1. `removals/{uid}_{joinedAtMillis}` — evidencia INMUTABLE de ESTE
+  ///     ciclo de membresía. P6 la consulta más tarde para saber si la baja
+  ///     fue expulsión o salida, y por eso no puede vivir en un documento
+  ///     que una readmisión posterior sobrescriba (ADR-039).
+  ///  2. `entryBlocks/{uid}` — bloqueo VIGENTE del enlace general. Otra
+  ///     pregunta y otra vida: se levanta al readmitir.
+  ///  3. borrado de la membresía.
+  ///
+  /// El protocolo anterior (`update {removedBy}` y después `delete`) queda
+  /// descartado: además de admitir estados parciales, agruparlo en un batch
+  /// no era una salida —el trigger recibe el cambio NETO y `removedBy`
+  /// nunca llegaba a verse, así que toda expulsión se registraba como
+  /// abandono voluntario—.
+  ///
+  /// `membershipJoinedAt` se lee del servidor justo antes: Rules lo compara
+  /// con el `joinedAt` real, así que un dato rancio hace fallar la operación
+  /// en vez de escribir una evidencia que apunte al ciclo equivocado.
   Future<void> removeMember(String spaceId, String memberUid) async {
-    final member = _spaces.doc(spaceId).collection('members').doc(memberUid);
-    await member.update({'removedBy': uid()});
-    await member.delete();
+    _requireAccount();
+    try {
+      final memberRef = _spaces
+          .doc(spaceId)
+          .collection('members')
+          .doc(memberUid);
+      final member = await memberRef.get();
+      final joinedAt = member.data()?['joinedAt'] as Timestamp?;
+      if (!member.exists || joinedAt == null) {
+        throw const SpaceFailure(SpaceFailureCode.targetUnavailable);
+      }
+      final batch = firestore.batch();
+      batch.set(
+        _spaces
+            .doc(spaceId)
+            .collection('removals')
+            .doc(membershipCycleId(memberUid, joinedAt)),
+        {
+          'uid': memberUid,
+          'membershipJoinedAt': joinedAt,
+          'removedBy': uid(),
+          'removedAt': FieldValue.serverTimestamp(),
+          'schemaVersion': 1,
+        },
+      );
+      batch.set(_spaces.doc(spaceId).collection('entryBlocks').doc(memberUid), {
+        'uid': memberUid,
+        'membershipJoinedAt': joinedAt,
+        'blockedAt': FieldValue.serverTimestamp(),
+        'schemaVersion': 1,
+      });
+      batch.delete(memberRef);
+      await batch.commit();
+    } on Object catch (error) {
+      _rethrowAsSpaceFailure('removeMember', error);
+    }
   }
 
   /// Nombra o retira a un administrador (ADR-038).
@@ -1117,6 +1197,32 @@ final iAdministerSpaceProvider = Provider.autoDispose.family<bool, String>((
   final members = ref.watch(spaceMembersProvider(spaceId)).value;
   return members?.any((member) => member.uid == uid && member.isAdmin) ?? false;
 });
+
+/// ¿Puedo EXPULSAR a esta persona del grupo? (A11d)
+///
+/// Espejo exacto de la regla de borrado administrativo: solo grupos activos,
+/// nunca al propietario, nunca a uno mismo, y un administrador no toca a
+/// otro administrador (esa delegación es del propietario). La autoridad real
+/// la aplican las Rules; esto solo decide qué acción se OFRECE, para no
+/// enseñar un botón que terminaría en «permiso denegado».
+final canRemoveMemberProvider = Provider.autoDispose
+    .family<bool, ({String spaceId, String memberUid})>((ref, key) {
+      final space = ref.watch(spaceProvider(key.spaceId)).value;
+      if (space == null || space.isRelationship || !space.isActive) {
+        return false;
+      }
+      final me = ref.watch(currentUserIdFromSpacesProvider);
+      if (me.isEmpty || key.memberUid == me) return false;
+      if (key.memberUid == space.ownerUid) return false;
+      if (space.ownerUid == me) return true;
+      if (!ref.watch(iAdministerSpaceProvider(key.spaceId))) return false;
+      for (final member
+          in ref.watch(spaceMembersProvider(key.spaceId)).value ??
+              const <SpaceMember>[]) {
+        if (member.uid == key.memberUid) return !member.isAdmin;
+      }
+      return false;
+    });
 
 /// Participantes manuales del espacio (ADR-033), en vivo.
 final spaceManualParticipantsProvider = StreamProvider.autoDispose

@@ -1309,9 +1309,19 @@ describe('spaces', () => {
   it('rechazo del receptor, cancelación del owner y reenvío', async () => {
     await assertSucceeds(updateDoc(doc(db(THIRD), `spaceInvites/sp1_${THIRD}`),
       { status: 'rejected', updatedAt: serverTimestamp() }));
-    await assertSucceeds(updateDoc(
+    // A11d: reenviar es una decisión NUEVA y renueva `createdAt`. Esa fecha
+    // es la que después demuestra que una readmisión es posterior a la
+    // expulsión vigente, así que sin renovarla el reenvío se deniega.
+    await assertFails(updateDoc(
       doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
       { status: 'pending', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
+      {
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
     await assertSucceeds(updateDoc(
       doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
       { status: 'cancelled', updatedAt: serverTimestamp() }));
@@ -1326,7 +1336,10 @@ describe('spaces', () => {
     await assertFails(batch.commit());
   });
 
-  it('salir (miembro), expulsión (owner) y límites', async () => {
+  // A11d: salir es un acto propio y sigue siendo un borrado suelto. Expulsar
+  // ya NO lo es: exige evidencia del ciclo y bloqueo en el mismo commit, y
+  // eso se prueba entero en `group_member_removal.test.mjs`.
+  it('salir (miembro) y límites del borrado suelto', async () => {
     // El miembro sale por sí mismo.
     await assertSucceeds(
       deleteDoc(doc(db(STRANGER), `spaces/sp1/members/${STRANGER}`)));
@@ -1338,8 +1351,8 @@ describe('spaces', () => {
       deleteDoc(doc(db(FOURTH), `spaces/sp1/members/${STRANGER}`)));
   });
 
-  it('el owner expulsa a un miembro', () =>
-    assertSucceeds(deleteDoc(
+  it('ni siquiera el owner borra una membresía a secas (A11d)', () =>
+    assertFails(deleteDoc(
       doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${STRANGER}`))));
 
   it('tickets vinculados: los miembros del espacio leen el resumen', async () => {
@@ -1838,22 +1851,15 @@ describe('activityEvents', () => {
     await assertFails(deleteDoc(doc(db(STRANGER), 'activityEvents/ev1')));
   });
 
-  it('P6: el owner marca removedBy antes de expulsar; nadie más', async () => {
-    // El owner del espacio sembrado (SOCIAL_OUTSIDER) marca a STRANGER.
-    await assertSucceeds(updateDoc(
-      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${STRANGER}`),
-      { removedBy: SOCIAL_OUTSIDER }));
-    // No puede marcarse a sí mismo (el owner no se expulsa).
-    await assertFails(updateDoc(
-      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${SOCIAL_OUTSIDER}`),
-      { removedBy: SOCIAL_OUTSIDER }));
-    // Un miembro no marca a otro, ni con uid falso.
-    await assertFails(updateDoc(
-      doc(db(STRANGER), `spaces/sp1/members/${OWNER}`),
-      { removedBy: STRANGER }));
-    await assertFails(updateDoc(
-      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${STRANGER}`),
-      { removedBy: STRANGER }));
+  // A11d retiró `removedBy`: escribir sobre el documento que se va a borrar
+  // no servía —el trigger recibe el cambio NETO del commit y el marcador no
+  // llegaba a verse—, así que la evidencia vive fuera y es inmutable.
+  it('P6: `removedBy` ya no se escribe sobre la membresía', async () => {
+    for (const actor of [SOCIAL_OUTSIDER, STRANGER]) {
+      await assertFails(updateDoc(
+        doc(db(actor), `spaces/sp1/members/${STRANGER}`),
+        { removedBy: actor }));
+    }
   });
 });
 

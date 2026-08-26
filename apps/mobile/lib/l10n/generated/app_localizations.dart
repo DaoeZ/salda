@@ -2035,14 +2035,32 @@ abstract class AppLocalizations {
   /// No description provided for @spaceRemoveMemberTitle.
   ///
   /// In es, this message translates to:
-  /// **'Eliminar del espacio'**
+  /// **'Expulsar del grupo'**
   String get spaceRemoveMemberTitle;
 
   /// No description provided for @spaceRemoveMemberBody.
   ///
   /// In es, this message translates to:
-  /// **'{name} dejará de ver este espacio. Sus tickets, pagos e historial no se tocan.'**
+  /// **'{name} saldrá del grupo y dejará de ver el contenido nuevo. Sus deudas y pagos anteriores no desaparecen, y podrá seguir consultando los gastos en los que participó. Para que vuelva tendrás que invitarle otra vez.'**
   String spaceRemoveMemberBody(String name);
+
+  /// No description provided for @spaceAccessRevokedTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya no tienes acceso a este grupo'**
+  String get spaceAccessRevokedTitle;
+
+  /// No description provided for @spaceAccessRevokedBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Alguien que administra el grupo te ha sacado, o has salido desde otro dispositivo. Tus deudas y pagos no han cambiado: siguen en Economía, junto a los gastos en los que participaste.'**
+  String get spaceAccessRevokedBody;
+
+  /// No description provided for @spaceAccessRevokedAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver a mis contextos'**
+  String get spaceAccessRevokedAction;
 
   /// No description provided for @spaceTicketsTitle.
   ///

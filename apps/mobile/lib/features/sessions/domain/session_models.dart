@@ -158,6 +158,21 @@ class SessionDetail {
 }
 
 /// Ticket dentro de una cuenta (historial, RF-80/83).
+/// Un ticket alcanzado por DERECHO HISTÓRICO (A11d).
+///
+/// Es lo que puede abrir quien participó económicamente en él pero ya no es
+/// miembro del grupo: el ticket y los nombres de ESE reparto, nada más. Los
+/// nombres viajan aquí porque un `pid` suelto no explica ninguna deuda y el
+/// censo de la sesión no se le abre a un ex-miembro.
+class HistoricTicket {
+  const HistoricTicket({required this.ticket, required this.participantNames});
+
+  final SessionTicket ticket;
+
+  /// pid → nombre visible, congelado por recompute para este ticket.
+  final Map<String, String> participantNames;
+}
+
 class SessionTicket {
   const SessionTicket({
     required this.id,
