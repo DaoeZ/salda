@@ -27,7 +27,8 @@ usa para calcular balances, permisos, membresías ni estados.
 | invite_sent | invitación (o reenvío) | emisor |
 | member_joined | aceptar invitación | el propio miembro |
 | member_left / member_removed | salida / expulsión | miembro / quien expulsa (owner o admin) |
-| ticket_created / deleted | alta y baja del ticket | dueño de la sesión |
+| ticket_created | alta del ticket | dueño de la sesión |
+| ticket_deleted | eliminación del gasto (A2) | **quien lo borró**, según `ticketRemovals/{tid}`; la hora es `removedAt`, la del hecho |
 | ticket_updated | edición RELEVANTE (comercio, total, fecha, pagador) **o** corrección administrativa firmada (A11c, incluida la que solo toca productos) | dueño de la sesión, o **quien firma la corrección** |
 | ticket_linked / unlinked | vínculo con espacio | dueño de la sesión |
 | payment_marked / confirmed | settlements humanos del flujo antiguo (marked/confirmed) | deudor / receptor reales |

@@ -15,6 +15,7 @@ import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../economy/application/ticket_payment_impact.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../spaces/data/spaces_repository.dart';
@@ -56,6 +57,9 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   /// deja explícito: fuera de él, la pantalla es la de siempre.
   var _correcting = false;
 
+  /// Borrado en curso: evita el doble toque sobre una acción irreversible.
+  var _deleting = false;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -75,11 +79,46 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
       )),
     );
     if (_correcting && !canCorrect) _correcting = false;
+    // A2: misma autoridad que corregir, más la frontera de sesión cerrada.
+    final canDelete = ref.watch(
+      canDeleteTicketProvider((
+        sessionId: ticket.sessionId,
+        spaceId: t.spaceId ?? '',
+      )),
+    );
+    if (canDelete) {
+      // Mantiene viva la suscripción a la economía del gasto para que el
+      // aviso del diálogo esté resuelto cuando haga falta.
+      ref.watch(
+        ticketPaymentImpactProvider((
+          sessionId: ticket.sessionId,
+          ticketId: t.id,
+        )),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(t.merchantName),
         actions: [
+          if (canDelete)
+            IconButton(
+              tooltip: l10n.ticketDeleteAction,
+              icon: const Icon(Icons.delete_outline),
+              // El impacto se OBSERVA desde aquí, no se lee al abrir el
+              // diálogo: leerlo en ese instante arrancaba la consulta con la
+              // pantalla ya encima y el aviso salía siempre vacío.
+              onPressed: _deleting
+                  ? null
+                  : () => _confirmDelete(
+                      ref.read(
+                        ticketPaymentImpactProvider((
+                          sessionId: ticket.sessionId,
+                          ticketId: t.id,
+                        )),
+                      ),
+                    ),
+            ),
           if (canCorrect)
             IconButton(
               tooltip: _correcting
@@ -167,6 +206,87 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
         ],
       ),
     );
+  }
+
+  /// Confirmación destructiva (A2). El aviso se REFUERZA cuando existen
+  /// pagos que van a sobrevivir al gasto, y separa siempre dos cosas que no
+  /// son lo mismo: dinero ya confirmado como recibido, y una declaración que
+  /// todavía espera confirmación.
+  Future<void> _confirmDelete(TicketPaymentImpact impact) async {
+    final l10n = AppLocalizations.of(context);
+    final ticket = widget.ticket.ticket;
+
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.ticketDeleteTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.ticketDeleteBody),
+            if (impact.hasConfirmed) ...[
+              const SizedBox(height: TokenSpacing.lg),
+              Text(
+                l10n.ticketDeletePaymentsTitle,
+                style: Theme.of(dialogContext).textTheme.titleSmall,
+              ),
+              const SizedBox(height: TokenSpacing.xs),
+              Text(
+                l10n.ticketDeletePaymentsBody(
+                  impact.confirmedCount,
+                  formatMoney(impact.confirmedTotal),
+                ),
+              ),
+            ],
+            if (impact.hasPending) ...[
+              const SizedBox(height: TokenSpacing.lg),
+              Text(
+                l10n.ticketDeleteDeclarationsTitle,
+                style: Theme.of(dialogContext).textTheme.titleSmall,
+              ),
+              const SizedBox(height: TokenSpacing.xs),
+              Text(
+                l10n.ticketDeleteDeclarationsBody(
+                  impact.pendingCount,
+                  formatMoney(impact.pendingTotal),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.commonDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await ref.read(sessionRepositoryProvider).deleteTicket(ticket.path);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketDeleted)));
+      // La pantalla no puede quedarse apuntando a un documento que ya no
+      // existe: se vuelve al contexto desde el que se abrió.
+      if (navigator.canPop()) navigator.pop();
+    } on Object {
+      // Un fallo NO puede parecer un éxito: la pantalla se queda donde está
+      // y lo dice. Las Rules son la autoridad (sesión cerrada, sin permiso).
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketDeleteError)));
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 }
 

@@ -612,6 +612,51 @@ sigue apareciendo el rótulo controlado de siempre.
 tickets.spaceId); las queries de invitaciones son de igualdad pura (sin
 composites).
 
+## Eliminar un gasto (A2, ADR-040)
+
+**Hard delete.** No hay `deleted: true`, ni papelera, ni restauración: el
+ticket deja de existir. Lo que queda es una **evidencia de auditoría**,
+`sessions/{sid}/ticketRemovals/{tid}`, con `ticketId`, `accountId`,
+`merchantName`, `grandTotal`, `removedBy`, `removedAt` y `schemaVersion`.
+Nace en el MISMO commit que el borrado, es inmutable, y **no concede lectura
+de nada**: sirve para que P6 pueda decir quién borró qué, no para volver
+atrás.
+
+| Quién | Grupo | Relación |
+|---|---|---|
+| Creador del gasto (= dueño de la sesión) | sí | sí |
+| Propietario / administrador del contexto | sí | **no** (no hay administración) |
+| Miembro normal, contraparte | no | no |
+| Cualquiera, con la sesión `closed` | no | no |
+
+**Qué se lleva por delante** (purga `cleanupOnTicketDelete`, idempotente y con
+reintento): las líneas y el «documento fantasma» que deja una subcolección
+viva, la cuenta contenedora si queda vacía, `ticketAccess`, `ticketClaims`,
+`ticketLinks` y `ticketEntitlements` de ESE ticket, y la foto
+`receipts/{sid}/{tid}/` —que ningún cliente puede borrar, porque la regla de
+Storage exige un `request.resource` que un delete no tiene—. `recompute`
+retira por su cuenta la obligación, la participación y las liquidaciones, y
+recalcula los agregados.
+
+**Qué NO se lleva por delante:** los pagos. Un pago confirmado sobrevive y, al
+quedarse sin deuda detrás, se convierte en crédito de quien pagó: **el saldo
+puede invertirse**, y es correcto porque el dinero se movió. Una declaración
+«ya he pagado» pendiente tampoco se cancela y su receptor puede confirmarla
+después. Tampoco se tocan la actividad ni las `allocations` del pago, que
+siguen nombrando la obligación borrada: son su contexto histórico.
+
+**El derecho histórico de A11d termina aquí.** Es monotónico frente a
+correcciones (A11c no puede quitarte el ticket que explica tu deuda), no
+frente a la desaparición deliberada del gasto: sin ticket no protege nada, y
+retirarlo evita que un derecho viejo abra un id reutilizado en el futuro. Un
+ex-miembro que llegue por la actividad ve «Este gasto ya no está disponible»,
+no un error de carga.
+
+**La sesión NO se borra** aunque se quede sin gastos: es otro ciclo de vida y
+quien borra puede no ser su dueño. Y su vista legacy converge a 0 € mientras
+la relación P5 mantiene la inversión: la sesión describe el gasto, P5 describe
+lo que dos personas se deben; el saldo autoritativo es el de P5.
+
 ## Pruebas
 
 - `backend/firestore/test/rules.test.mjs` (bloque spaces): 19 casos
@@ -646,6 +691,18 @@ composites).
 - `economic_names_test.dart` (A11d): el saldo de un ex-miembro frente a una
   persona MANUAL se nombra por el derecho histórico, y sin derecho no se
   inventa ningún nombre.
+- `ticket_deletion.test.mjs` (A2): 20 casos — matriz de autoridad (incluida
+  la relación sin administración y la sesión cerrada), atomicidad de las dos
+  escrituras, y una evidencia que no se puede falsear, retocar ni borrar.
+- `ticketDeletion.it.test.ts` (A2): los vectores económicos A–E contra el
+  motor real, la convergencia del recompute, la purga acotada al ticket (con
+  su foto) y su idempotencia.
+- `activity.test.ts` (A2): el borrado lo firma quien borró, no el dueño de la
+  sesión, y conserva la hora del hecho y el id determinista.
+- `ticket_deletion_test.dart` (A2): a quién se le ofrece la acción, el aviso
+  reforzado según pagos confirmados o declaraciones pendientes, el commit
+  atómico que sale, el fallo que no finge éxito, y el «ya no está disponible»
+  de quien perdió el acceso.
 - `storage_receipt_access.test.mjs` (A11d): la foto sigue la misma frontera.
 - `ticketEntitlements.it.test.ts` (A11d): el derecho se persiste, sobrevive a
   una corrección A11c y se crea aunque el recompute resulte «sin cambios».

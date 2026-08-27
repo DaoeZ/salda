@@ -109,6 +109,12 @@ abstract interface class SessionRepository {
   /// asignaciones se van con él: el documento entero desaparece.
   Future<void> removeLine(String linePath);
 
+  /// Elimina el gasto entero (A2): un solo commit con el borrado del ticket y
+  /// la evidencia inmutable de quién lo borró. Lo derivado —líneas, foto,
+  /// enlaces, derechos históricos, cuenta vacía y agregados— lo purga
+  /// `cleanup` después; los PAGOS y la actividad no se tocan nunca.
+  Future<void> deleteTicket(String ticketPath);
+
   Future<void> updateSettlementState(
     String sessionId,
     String settlementId,

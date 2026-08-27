@@ -31,9 +31,20 @@ export const PROJECT_ID = 'demo-salda';
  * pruebas escribieran en una instancia distinta de la que usa la Function.
  */
 export function db(): Firestore {
-  if (getApps().length === 0) initializeApp({ projectId: PROJECT_ID });
+  if (getApps().length === 0) {
+    initializeApp({
+      projectId: PROJECT_ID,
+      // Sin bucket declarado, `getStorage().bucket()` lanza y no se podría
+      // comprobar que la purga de un gasto se lleva su foto (A2).
+      storageBucket: `${PROJECT_ID}.appspot.com`,
+    });
+  }
   return getFirestore();
 }
+
+/** ¿Hay emulador de Storage? Las pruebas que lo usen se saltan sin él. */
+export const storageEmulatorAvailable = (): boolean =>
+  Boolean(process.env.FIREBASE_STORAGE_EMULATOR_HOST);
 
 export async function disposeApp(): Promise<void> {
   // La app por defecto se reutiliza durante toda la suite; cerrarla rompería

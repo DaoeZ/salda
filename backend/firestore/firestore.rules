@@ -1846,6 +1846,59 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // ── Evidencia de ELIMINACIÓN de un gasto (A2, ADR-040) ─────────────
+      // «Este ticket fue eliminado por esta persona en este momento», y nada
+      // más. NO es papelera, NO restaura y NO concede lectura de lo
+      // borrado: el ticket deja de existir de verdad.
+      //
+      // Existe por la misma razón que `removals` en A11d: el trigger de
+      // borrado recibe el cambio NETO del commit (`after` vacío), así que
+      // firmar el ticket y borrarlo en el mismo batch no dejaría ver la
+      // firma y P6 atribuiría el borrado al dueño de la sesión — falsamente
+      // en cuanto quien borra es un administrador del grupo. El actor tiene
+      // que viajar en un documento propio que sobreviva al borrado.
+      match /ticketRemovals/{removedTid} {
+        // Lo ven quienes ya podían ver el gasto: dueño, su invitado y el
+        // GRUPO que lo auditaba. No abre nada nuevo.
+        allow read: if canRead(sid) || auditableByGroup(sid);
+
+        allow create: if isOpen(sid)
+          && request.resource.data.keys().hasOnly([
+            'ticketId', 'accountId', 'merchantName', 'grandTotal',
+            'removedBy', 'removedAt', 'schemaVersion'])
+          && request.resource.data.keys().hasAll([
+            'ticketId', 'accountId', 'merchantName', 'grandTotal',
+            'removedBy', 'removedAt', 'schemaVersion'])
+          && request.resource.data.ticketId == removedTid
+          // Actor y hora los pone el servidor: una auditoría no acepta
+          // ninguno de los dos de manos del cliente.
+          && request.resource.data.removedBy == request.auth.uid
+          && request.resource.data.removedAt == request.time
+          && request.resource.data.schemaVersion == 1
+          // El ticket existía ANTES y ya no existe DESPUÉS: ni evidencia sin
+          // borrado, ni borrado sin evidencia (la otra mitad la exige la
+          // regla de `delete` del ticket).
+          && exists(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+          && !existsAfter(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+          // El resumen no se declara: se copia del ticket y se comprueba.
+          // Sin esto, la actividad podría contar un importe inventado.
+          && request.resource.data.grandTotal
+            == get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+                .data.grandTotal
+          && request.resource.data.merchantName
+            == get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+                .data.get('merchant', {}).get('name', '')
+          // Misma autoridad que el borrado, comprobada sobre el ticket real.
+          && (isOwner(sid)
+            || managesGroupOf(
+              get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+                .data.get('spaceId', '')));
+
+        // Inmutable: es la única fuente con la que P6 puede atribuir el
+        // borrado, y un trigger reintentado debe leer siempre lo mismo.
+        allow update, delete: if false;
+      }
+
       match /participants/{pid} {
         // El enlace de ticket NO abre los participantes: los nombres de los
         // demás no son suyos. Rules sí los consulta internamente con get()
@@ -1927,7 +1980,20 @@ service cloud.firestore {
             && isOpen(sid)
             && managesGroupOf(resource.data.get('spaceId', ''));
 
-          allow delete: if isOwner(sid) && isOpen(sid);
+          // A2: eliminar el gasto. Lo hace su creador —que en este modelo es
+          // el dueño de la sesión: nadie más puede crear tickets— y quien
+          // administra el GRUPO del que nació el gasto. Una relación no
+          // adquiere autoridad administrativa: `managesGroupOf` la excluye,
+          // así que la contraparte no puede borrar el ticket de la otra.
+          //
+          // Exige la evidencia del actor en el MISMO commit: sin ella el
+          // borrado se deniega, y por tanto P6 nunca recibe un borrado que
+          // no pueda atribuir. Cerrada = solo lectura, igual que A11c.
+          allow delete: if isOpen(sid)
+            && (isOwner(sid) || managesGroupOf(resource.data.get('spaceId', '')))
+            && existsAfter(/databases/$(database)/documents/sessions/$(sid)/ticketRemovals/$(tid))
+            && getAfter(/databases/$(database)/documents/sessions/$(sid)/ticketRemovals/$(tid))
+                .data.accountId == aid;
 
           match /lines/{lid} {
             // Productos, cantidades, precios y reparto: el cuerpo de la

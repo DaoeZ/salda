@@ -92,6 +92,21 @@ final canCorrectTicketProvider = Provider.autoDispose
       return ref.watch(iAdministerSpaceProvider(key.spaceId));
     });
 
+/// ¿Puedo ELIMINAR este gasto? (A2)
+///
+/// Misma autoridad que corregirlo —el creador, que en este modelo es el dueño
+/// de la sesión porque nadie más puede crear tickets, y quien administra el
+/// GRUPO— con una condición añadida: una sesión CERRADA es solo lectura, y
+/// borrar es la modificación más destructiva de todas. Cuando el estado no se
+/// puede leer (quien administra el grupo no lee la sesión: ahí vive el
+/// `shareCode`) se ofrece y mandan las Rules, que comprueban `isOpen`.
+final canDeleteTicketProvider = Provider.autoDispose
+    .family<bool, ({String sessionId, String spaceId})>((ref, key) {
+      if (!ref.watch(canCorrectTicketProvider(key))) return false;
+      final session = ref.watch(sessionDetailProvider(key.sessionId)).value;
+      return session == null || session.summary.status == SessionStatus.open;
+    });
+
 /// Líneas vivas de un ticket (P2.1): el creador ve elegir y elige él mismo.
 final ticketLinesProvider = StreamProvider.autoDispose
     .family<List<TicketLine>, String>(

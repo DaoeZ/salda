@@ -265,6 +265,21 @@
   "ticketCorrectImpactBody": "{names} dejará de tener consumo asignado aquí. No se traslada a nadie más y los balances se recalculan. Los pagos ya registrados se mantienen.",
   "@ticketCorrectImpactBody": { "placeholders": { "names": { "type": "String" } } },
   "ticketCorrectError": "No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.",
+  "ticketDeleteAction": "Eliminar gasto",
+  "ticketDeleteTitle": "¿Eliminar este gasto?",
+  "ticketDeleteBody": "El gasto desaparecerá con su foto y su reparto, y los balances se recalcularán. No se puede deshacer.",
+  "ticketDeletePaymentsTitle": "Este gasto tiene pagos registrados",
+  "ticketDeletePaymentsBody": "{count, plural, =1{Hay 1 pago confirmado de {amount}. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.} other{Hay {count} pagos confirmados por {amount} en total. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.}}",
+  "@ticketDeletePaymentsBody": {
+    "placeholders": { "count": { "type": "int" }, "amount": { "type": "String" } }
+  },
+  "ticketDeleteDeclarationsTitle": "Y pagos declarados sin confirmar",
+  "ticketDeleteDeclarationsBody": "{count, plural, =1{Hay 1 pago declarado de {amount} pendiente de confirmación. Tampoco se elimina, y si se confirma más tarde contará como dinero recibido.} other{Hay {count} pagos declarados por {amount} pendientes de confirmación. Tampoco se eliminan, y si se confirman más tarde contarán como dinero recibido.}}",
+  "@ticketDeleteDeclarationsBody": {
+    "placeholders": { "count": { "type": "int" }, "amount": { "type": "String" } }
+  },
+  "ticketDeleteError": "No se pudo eliminar el gasto. Puede que la cuenta esté cerrada o que no tengas permiso.",
+  "ticketDeleted": "Gasto eliminado",
   "ticketCorrectedBy": "Corregido por {name} · {date}",
   "@ticketCorrectedBy": {
     "placeholders": {

@@ -582,6 +582,38 @@ class FirestoreSessionRepository implements SessionRepository {
   }
 
   @override
+  Future<void> deleteTicket(String ticketPath) async {
+    final ticketRef = firestore.doc(ticketPath);
+    final accountRef = ticketRef.parent.parent!;
+    final sessionRef = accountRef.parent.parent!;
+
+    // El resumen se LEE del ticket justo antes de borrarlo, no se recibe de
+    // la pantalla: las Rules lo comparan con el documento real, así que un
+    // dato rancio hace fallar la operación en vez de dejar una evidencia que
+    // cuente un importe que nunca fue (mismo criterio que A11d).
+    final ticket = await ticketRef.get();
+    final data = ticket.data();
+    if (data == null) return; // ya no está: borrar dos veces no es un error.
+
+    final batch = firestore.batch();
+    batch.set(sessionRef.collection('ticketRemovals').doc(ticketRef.id), {
+      'ticketId': ticketRef.id,
+      'accountId': accountRef.id,
+      'merchantName': (data['merchant'] as Map?)?['name'] as String? ?? '',
+      'grandTotal': (data['grandTotal'] as int?) ?? 0,
+      'removedBy': uid(),
+      'removedAt': FieldValue.serverTimestamp(),
+      'schemaVersion': 1,
+    });
+    batch.delete(ticketRef);
+    // Las líneas NO van aquí: su número no está acotado por contrato y
+    // borrarlas no aporta ninguna garantía económica. Las purga `cleanup`,
+    // que además retira la foto —imposible desde el cliente— y la cuenta si
+    // queda vacía.
+    await batch.commit();
+  }
+
+  @override
   Future<void> updateSettlementState(
     String sessionId,
     String settlementId,

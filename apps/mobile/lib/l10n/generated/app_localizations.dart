@@ -1462,6 +1462,60 @@ abstract class AppLocalizations {
   /// **'No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.'**
   String get ticketCorrectError;
 
+  /// No description provided for @ticketDeleteAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar gasto'**
+  String get ticketDeleteAction;
+
+  /// No description provided for @ticketDeleteTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Eliminar este gasto?'**
+  String get ticketDeleteTitle;
+
+  /// No description provided for @ticketDeleteBody.
+  ///
+  /// In es, this message translates to:
+  /// **'El gasto desaparecerá con su foto y su reparto, y los balances se recalcularán. No se puede deshacer.'**
+  String get ticketDeleteBody;
+
+  /// No description provided for @ticketDeletePaymentsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto tiene pagos registrados'**
+  String get ticketDeletePaymentsTitle;
+
+  /// No description provided for @ticketDeletePaymentsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{Hay 1 pago confirmado de {amount}. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.} other{Hay {count} pagos confirmados por {amount} en total. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.}}'**
+  String ticketDeletePaymentsBody(int count, String amount);
+
+  /// No description provided for @ticketDeleteDeclarationsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Y pagos declarados sin confirmar'**
+  String get ticketDeleteDeclarationsTitle;
+
+  /// No description provided for @ticketDeleteDeclarationsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{Hay 1 pago declarado de {amount} pendiente de confirmación. Tampoco se elimina, y si se confirma más tarde contará como dinero recibido.} other{Hay {count} pagos declarados por {amount} pendientes de confirmación. Tampoco se eliminan, y si se confirman más tarde contarán como dinero recibido.}}'**
+  String ticketDeleteDeclarationsBody(int count, String amount);
+
+  /// No description provided for @ticketDeleteError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo eliminar el gasto. Puede que la cuenta esté cerrada o que no tengas permiso.'**
+  String get ticketDeleteError;
+
+  /// No description provided for @ticketDeleted.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto eliminado'**
+  String get ticketDeleted;
+
   /// No description provided for @ticketCorrectedBy.
   ///
   /// In es, this message translates to:

@@ -769,6 +769,56 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.';
 
   @override
+  String get ticketDeleteAction => 'Eliminar gasto';
+
+  @override
+  String get ticketDeleteTitle => '¿Eliminar este gasto?';
+
+  @override
+  String get ticketDeleteBody =>
+      'El gasto desaparecerá con su foto y su reparto, y los balances se recalcularán. No se puede deshacer.';
+
+  @override
+  String get ticketDeletePaymentsTitle => 'Este gasto tiene pagos registrados';
+
+  @override
+  String ticketDeletePaymentsBody(int count, String amount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hay $count pagos confirmados por $amount en total. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.',
+      one:
+          'Hay 1 pago confirmado de $amount. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketDeleteDeclarationsTitle =>
+      'Y pagos declarados sin confirmar';
+
+  @override
+  String ticketDeleteDeclarationsBody(int count, String amount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hay $count pagos declarados por $amount pendientes de confirmación. Tampoco se eliminan, y si se confirman más tarde contarán como dinero recibido.',
+      one:
+          'Hay 1 pago declarado de $amount pendiente de confirmación. Tampoco se elimina, y si se confirma más tarde contará como dinero recibido.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketDeleteError =>
+      'No se pudo eliminar el gasto. Puede que la cuenta esté cerrada o que no tengas permiso.';
+
+  @override
+  String get ticketDeleted => 'Gasto eliminado';
+
+  @override
   String ticketCorrectedBy(String name, DateTime date) {
     final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
     final String dateString = dateDateFormat.format(date);

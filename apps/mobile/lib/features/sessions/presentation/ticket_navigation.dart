@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart' show FirebaseException;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -58,6 +59,14 @@ void resetTicketNavigationDebounce() {
   _ultimoInstante = null;
 }
 
+/// ¿El fallo es «no tienes acceso» y no «no se pudo cargar»?
+///
+/// Se distinguen porque llevan a mensajes opuestos: uno es definitivo y el
+/// otro invita a reintentar. Cualquier otro error (red, servidor) sigue
+/// siendo un error de carga.
+bool _esFaltaDeAcceso(Object error) =>
+    error is FirebaseException && error.code == 'permission-denied';
+
 /// Ticket de una sesión buscado por su id, sin conocer su cuenta.
 ///
 /// Un ticket vive en `sessions/{sid}/accounts/{aid}/tickets/{tid}`, pero las
@@ -76,10 +85,22 @@ final sessionTicketProvider = Provider.autoDispose
       if (granted != null) return AsyncValue.data(granted.ticket);
 
       final accounts = ref.watch(accountsProvider(key.sid));
-      if (accounts.isLoading) return const AsyncValue.loading();
+      // El error se mira ANTES que la carga: un stream denegado se queda en
+      // «cargando con error» y preguntar primero por `isLoading` dejaba la
+      // pantalla en un esqueleto que no iba a resolverse nunca.
       if (accounts.hasError) {
+        // Sin derecho histórico Y sin poder listar las cuentas no hay ningún
+        // camino más: el ticket no existe PARA QUIEN MIRA. Es lo que le pasa
+        // a un ex-miembro cuando el gasto se elimina (A2) —su derecho se
+        // limpia con él—, y merece el mismo «ya no está disponible» que ve
+        // cualquiera, no un error de carga que invita a reintentar. No se
+        // amplía ningún permiso: justamente se deja de insistir.
+        if (_esFaltaDeAcceso(accounts.error!)) {
+          return const AsyncValue.data(null);
+        }
         return AsyncValue.error(accounts.error!, accounts.stackTrace!);
       }
+      if (accounts.isLoading) return const AsyncValue.loading();
       var loading = false;
       for (final account in accounts.value ?? const <SessionAccount>[]) {
         final tickets = ref.watch(

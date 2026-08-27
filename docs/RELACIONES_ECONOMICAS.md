@@ -64,6 +64,15 @@ El signo determina deudor y acreedor. El detalle conserva ambos movimientos brut
 permite llegar a cada ticket. El resultado no depende del orden de lectura. No se netean
 monedas distintas y no se reasignan acreedores mediante simplificación multilateral.
 
+**Un pago no depende de que su obligación siga existiendo** (A2, ADR-040). Al
+eliminar un gasto desaparece su `economicEntry`, pero el pago no: sigue
+contando en el neteo y puede dejar el saldo INVERTIDO —quien pagó pasa a ser
+acreedor por lo que ya había entregado—. Es la consecuencia correcta de que el
+dinero se moviera de verdad. Sus `allocations` conservan el id de la
+obligación borrada: son el contexto histórico del pago y no se reasignan a
+otra deuda. Una declaración `pending` tampoco se cancela y su receptor puede
+confirmarla después, con el mismo efecto.
+
 ## Liquidaciones
 
 Los pagos P5 viven en `economicPayments/{id}` y solo se crean/resuelven mediante

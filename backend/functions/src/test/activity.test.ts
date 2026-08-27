@@ -210,6 +210,31 @@ test('ticket creado/borrado con audiencia y rótulos congelados', () => {
   assert.equal(deleted[0].type, 'ticket_deleted');
 });
 
+test('A2 el borrado lo firma quien borró, no el dueño de la sesión', () => {
+  // Ana creó el gasto; Edgar, que administra el grupo, lo elimina. Atribuirlo
+  // a Ana sería falso y PERMANENTE: `persistEvents` es create-only.
+  const [evento] = buildTicketEvents('s1', 't0', ticket(), undefined,
+    'ana', ['ana', 'edgar'], 'Cena',
+    { removedBy: 'edgar', removedAt: { toMillis: () => 1700 } });
+  assert.equal(evento.type, 'ticket_deleted');
+  assert.equal(evento.actorUid, 'edgar');
+  // La hora es la del HECHO (evidencia), no la del proceso.
+  assert.equal((evento.at as { toMillis: () => number }).toMillis(), 1700);
+  // El id no cambia de formato: reintentar produce el mismo documento.
+  assert.equal(evento.id, 'tk_s1_t0_deleted');
+  // Y el resumen sigue congelado desde el `before`: es lo único que explica
+  // después un pago que sobrevivió al gasto.
+  assert.equal(evento.summary.ticketName, 'Casa Paco');
+  assert.equal(evento.summary.amount, 5190);
+});
+
+test('A2 el borrado del propio dueño se atribuye a él mismo', () => {
+  const [evento] = buildTicketEvents('s1', 't0', ticket(), undefined,
+    'ana', ['ana'], 'Cena',
+    { removedBy: 'ana', removedAt: { toMillis: () => 900 } });
+  assert.equal(evento.actorUid, 'ana');
+});
+
 test('edición relevante = UN evento; ruido técnico = ninguno', () => {
   const relevant = buildTicketEvents('s1', 't0', ticket(),
     ticket({ grandTotal: 6000 }), 'ana', ['ana'], 'Cena');

@@ -246,6 +246,12 @@ function correctionSignature(data: Doc): string {
   return Number.isNaN(millis) ? '' : `${by}@${millis}`;
 }
 
+/** Evidencia de eliminación (A2): quién borró el gasto y cuándo. */
+export interface TicketRemovalEvidence {
+  removedBy: string;
+  removedAt: unknown;
+}
+
 export function buildTicketEvents(
   sessionId: string,
   ticketId: string,
@@ -254,6 +260,7 @@ export function buildTicketEvents(
   actorUid: string,
   audience: string[],
   sessionName: string,
+  removal?: TicketRemovalEvidence,
 ): ActivityEventDraft[] {
   const data = after ?? before;
   const ticketName =
@@ -276,7 +283,20 @@ export function buildTicketEvents(
     return [{ ...base, id: `tk_${sessionId}_${ticketId}_created`, type: 'ticket_created' }];
   }
   if (before && !after) {
-    return [{ ...base, id: `tk_${sessionId}_${ticketId}_deleted`, type: 'ticket_deleted' }];
+    // A2: el actor NO es el dueño de la sesión por defecto — quien administra
+    // el grupo puede borrar el gasto de otra persona, y atribuírselo a ella
+    // sería falso y PERMANENTE (`persistEvents` usa create-only). El actor y
+    // la hora salen de la evidencia inmutable, así que un trigger reintentado
+    // o retrasado obtiene siempre los mismos. Sin evidencia no se puede
+    // llegar aquí: Rules la exigen en el mismo commit que el borrado.
+    return [{
+      ...base,
+      ...(removal
+        ? { actorUid: removal.removedBy, at: removal.removedAt }
+        : {}),
+      id: `tk_${sessionId}_${ticketId}_deleted`,
+      type: 'ticket_deleted',
+    }];
   }
   if (!before || !after) return [];
 
@@ -537,11 +557,22 @@ export const activityOnTicketWrite = onDocumentWritten(
     const before = event.data?.before?.data();
     const after = event.data?.after?.data();
 
+    // A2: la evidencia del borrado se lee ANTES de construir el evento y por
+    // su ruta determinista, no por el `before` del ticket: es el único
+    // documento del commit que sobrevive y sabe quién borró.
+    const removal = before && !after
+      ? (await getFirestore()
+        .doc(`sessions/${sid}/ticketRemovals/${tid}`).get()).data()
+      : undefined;
+
     const uids = [context.ownerUid, ...context.registered.values()];
     // Quien corrige puede no ser participante del gasto (A11c): entra en la
-    // audiencia para que su propio hecho no le quede invisible.
+    // audiencia para que su propio hecho no le quede invisible. Lo mismo
+    // vale para quien borra (A2).
     const signer = (after?.lastEditedByUid as string) ?? '';
     if (signer) uids.push(signer);
+    const remover = (removal?.removedBy as string) ?? '';
+    if (remover) uids.push(remover);
     const spaceId = ((after ?? before)?.spaceId as string) || '';
     if (spaceId) {
       try {
@@ -562,6 +593,9 @@ export const activityOnTicketWrite = onDocumentWritten(
       context.ownerUid,
       activityAudience(uids),
       context.name,
+      remover
+        ? { removedBy: remover, removedAt: removal?.removedAt }
+        : undefined,
     ));
   },
 );

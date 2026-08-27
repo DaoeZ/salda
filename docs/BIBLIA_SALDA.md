@@ -1695,6 +1695,67 @@ cliente anterior no puede expulsar (su protocolo ya no se acepta).
 del trigger (limitación preexistente de P6, acotada a 30 UIDs); si algún día
 importa la composición exacta del instante del hecho, habrá que congelarla.
 
+### ADR-040: Eliminar un gasto — borrado real con evidencia del actor (A2)
+**Estado:** Aceptada · **Fecha:** 2026-08-27 (A2)
+**Contexto:** no había forma de eliminar un ticket. Las Rules lo permitían al
+dueño de la sesión, pero ninguna pantalla lo ofrecía, y hacerlo «a pelo»
+dejaba tres problemas: las `lines` son una subcolección y sobreviven al
+borrado del padre —con un «documento fantasma» que sigue apareciendo en
+`listDocuments()`—; la foto no la puede borrar ningún cliente (la regla de
+Storage exige `request.resource`, que en un delete no existe); y P6 atribuía
+el hecho al dueño de la sesión, que desde A11c ya no es necesariamente quien
+actúa.
+**Decisión:** [HECHO] **hard delete**, sin `deleted: true` ni papelera: un
+gasto equivocado deja de existir. Tres piezas:
+
+- **Commit atómico del cliente**: `sessions/{sid}/ticketRemovals/{tid}` +
+  borrado del ticket, en un único `WriteBatch`. Rules validan cruzado con
+  `exists/existsAfter/getAfter`: no hay borrado sin evidencia ni evidencia sin
+  borrado, el actor es `request.auth.uid`, la hora es `request.time`, y el
+  resumen (`merchantName`, `grandTotal`) se compara con el ticket real.
+  Inmutable: `update, delete: if false`.
+- **`cleanupOnTicketDelete`** (Admin, `retry`): `recursiveDelete` de líneas y
+  fantasma, `ticketAccess`/`ticketClaims`/`ticketEntitlements`/`ticketLinks`
+  de ESE ticket, la cuenta contenedora si queda vacía, la foto de Storage, y
+  un `recompute` final.
+- **`recompute` sin cambios**: ya podaba `economicEntries`,
+  `ticketParticipants` y `ticketParticipantProjections`, y regeneraba
+  liquidaciones y agregados. Se midió su convergencia en vez de reescribirlo.
+
+**Por qué la evidencia y no una firma en el ticket.** Es el mismo hallazgo de
+ADR-039: Firestore entrega al trigger el cambio NETO del commit, así que
+`update {lastEditedByUid}` + `delete` en el mismo batch no deja ver la firma
+(`after` viene vacío) y el actor se perdería. El único documento del commit
+que sobrevive al borrado puede llevarlo.
+**Economía:** desaparece la obligación del ticket; **NO** desaparece ningún
+pago. Un pago confirmado que se queda sin deuda detrás se convierte en
+crédito del pagador y **el saldo puede invertirse** —es correcto: el dinero se
+movió de verdad—. Una declaración `pending` sobrevive sin cancelarse y sigue
+siendo confirmable por su receptor. Las `allocations` que nombran obligaciones
+ya borradas se conservan tal cual: son el contexto histórico del pago y
+reasignarlas sería inventar a qué se pagó.
+**Autoridad:** el creador del gasto —que en este modelo ES el dueño de la
+sesión, porque nadie más puede crear tickets— y quien administra el GRUPO
+(`managesGroupOf`, que excluye relaciones: la contraparte no borra el gasto de
+la otra). Sesión cerrada = solo lectura, igual que A11c.
+**`ticketEntitlements` terminan aquí.** A11d los hizo monotónicos frente a
+*correcciones*, no frente a la desaparición del recurso: sin ticket no
+protegen nada, y borrarlos evita que un derecho viejo abra un futuro id
+reutilizado. La evidencia constata que el gasto existió; no da lectura de él.
+**Consecuencias:** la sesión NO se borra aunque se quede sin gastos (otro
+lifecycle, y quien borra puede no ser su dueño). La vista legacy de la sesión
+converge a 0 € mientras la relación P5 conserva la inversión: son preguntas
+distintas —«qué costó este gasto» y «cuánto nos debemos»— y el saldo
+autoritativo es el de P5. La copia local de la foto en el dispositivo no se
+retira: `ReceiptImageStore` no tiene API de borrado (misma deuda que el
+borrado de grupos).
+**Revisión:** durante la convergencia aparece brevemente una liquidación
+invertida en la sesión legacy. Se comprobó que no habilita ninguna acción
+económica irreversible (solo la puede confirmar su receptor, y ese mismo
+receptor puede deshacerla; su espejo en `economicPayments` es derivado y
+recompute lo retira). Si algún día molesta visualmente, se aborda como
+problema de recompute, no de A2.
+
 ---
 
 <a name="parte-x"></a>
