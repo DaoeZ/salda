@@ -595,6 +595,19 @@ GET, sin listar— y los nombres de ESE reparto, porque un `pid` sin nombre no
 explica ninguna deuda y el censo de la sesión sería mucho más de lo
 necesario. Storage aplica exactamente la misma frontera.
 
+Esos nombres se indexan **por `pid`** (el reparto, línea a línea) y **por
+ACTOR económico** cuando el participante es MANUAL (`manual:{id}`). El
+segundo índice existe porque la deuda de P5 nombra al actor, nunca a un
+`pid`, y el nombre de un manual lo custodia el ESPACIO (ADR-033), que un
+ex-miembro ya no puede leer: sin él, su propio saldo pasaba a leerse
+«Persona sin nombre». Es el mínimo posible —solo los manuales de los tickets
+que ya están en SU economía— y no abre `manualParticipants`: ni la colección
+ni un documento suelto. Una cuenta no necesita alias: su nombre vive en el
+perfil público, que sigue siendo legible. Sin backfill: los derechos ya
+escritos adquieren el alias en el siguiente `recompute` de esa sesión —los
+nombres se FUNDEN con los guardados, nunca se sustituyen—; hasta entonces
+sigue apareciendo el rótulo controlado de siempre.
+
 Índices: dos `fieldOverrides` de collection group (members.uid,
 tickets.spaceId); las queries de invitaciones son de igualdad pura (sin
 composites).
@@ -621,12 +634,18 @@ composites).
   invitaciones, transferencia, salida/expulsión, vínculo de tickets y
   compatibilidad con tickets sin espacio.
 - `spaces_screen_test.dart`: vacío, activos/archivados, aceptar invitación.
-- `group_member_removal.test.mjs` (A11d): 28 casos — matriz de autoridad,
+- `group_member_removal.test.mjs` (A11d): 29 casos — matriz de autoridad,
   atomicidad de las tres escrituras, inmutabilidad de la evidencia, veto
-  preventivo, bloqueo del enlace, invitación anterior vs posterior y dos
-  ciclos completos de entrada y salida.
+  preventivo, bloqueo del enlace, invitación anterior vs posterior, que el
+  expulsado no puede renovarse él la invitación, y dos ciclos completos de
+  entrada y salida (incluido que un `removal` histórico SIN bloqueo vigente
+  no cierra el enlace).
 - `group_ticket_history.test.mjs` (A11d): 17 casos — qué conserva y qué
-  pierde un ex-miembro, y que el miembro activo no pierde nada de A11b.
+  pierde un ex-miembro (tampoco un `manualParticipants` suelto), y que el
+  miembro activo no pierde nada de A11b.
+- `economic_names_test.dart` (A11d): el saldo de un ex-miembro frente a una
+  persona MANUAL se nombra por el derecho histórico, y sin derecho no se
+  inventa ningún nombre.
 - `storage_receipt_access.test.mjs` (A11d): la foto sigue la misma frontera.
 - `ticketEntitlements.it.test.ts` (A11d): el derecho se persiste, sobrevive a
   una corrección A11c y se crea aunque el recompute resulte «sin cambios».

@@ -1675,7 +1675,14 @@ comprueba ANTES del atajo `unchanged` —si no, faltaría justo en los tickets
 que llevan tiempo quietos—. El derecho lleva `accountId` (para llegar al
 ticket con un GET, sin listar cuentas) y los nombres de ESE reparto (un `pid`
 sin nombre no explica ninguna deuda; el censo entero de la sesión sería de
-más). Storage aplica la misma frontera sobre `receipts/{sid}/{tid}/`.
+más). Esos nombres se indexan por `pid` **y por ACTOR económico** cuando el
+participante es MANUAL: la deuda de P5 nombra a `manual:{id}`, nunca a un
+`pid`, y el nombre de un manual lo custodia el espacio, que el expulsado ya
+no lee —sin ese alias su propio saldo se leía «Persona sin nombre»—. No abre
+`manualParticipants` (ni la colección ni un documento suelto) y no crea
+ninguna agenda histórica: solo viajan los manuales de los tickets que ya
+están en SU economía. Storage aplica la misma frontera sobre
+`receipts/{sid}/{tid}/`.
 **Consecuencias:** expulsar no borra ni cancela nada económico —`recompute`
 nunca leyó la membresía y las callables de pago tampoco—, así que deudas,
 pagos y liquidaciones sobreviven. Lo que sí se pierde de inmediato es la

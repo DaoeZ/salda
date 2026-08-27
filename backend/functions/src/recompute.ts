@@ -341,10 +341,22 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
       // Nombres de ESTE ticket, para que el reparto siga siendo legible sin
       // abrir el censo de la sesión (A11d). Se congelan en el derecho
       // histórico: un `pid` sin nombre detrás no explica ninguna deuda.
+      //
+      // Se indexan por `pid` (el reparto, línea a línea) y ADEMÁS por ACTOR
+      // económico cuando el participante es MANUAL: la deuda de P5 nombra a
+      // `manual:{id}`, nunca a un `pid`, y el nombre de un manual lo custodia
+      // el ESPACIO (ADR-033), que un ex-miembro ya no puede leer. Sin este
+      // alias su propio saldo se leía «Persona sin nombre». Una cuenta no lo
+      // necesita: su nombre vive en el perfil público, que sí es legible.
       const participantNames: Record<string, string> = {};
       for (const pid of [...participatingPids].sort()) {
-        const name = participants.find((p) => p.id === pid)?.name;
-        if (name) participantNames[pid] = name;
+        const participant = participants.find((p) => p.id === pid);
+        const name = participant?.name;
+        if (!participant || !name) continue;
+        participantNames[pid] = name;
+        if (participant.manualId && !participant.userUid) {
+          participantNames[manualActor(participant.manualId)] = name;
+        }
       }
       for (const pid of participatingPids) {
         const participant = participants.find((p) => p.id === pid);

@@ -196,6 +196,10 @@ describe('A11d: lo que PIERDE un ex-miembro', () => {
     await assertFails(getDocs(collection(db(JORGE), 'spaces/gr1/members')));
     await assertFails(
       getDocs(collection(db(JORGE), 'spaces/gr1/manualParticipants')));
+    // Ni siquiera uno concreto: el nombre histórico de un manual le llega
+    // por el DERECHO del ticket (`participantNames`), no abriendo el censo.
+    await assertFails(
+      getDoc(doc(db(JORGE), 'spaces/gr1/manualParticipants/m-tete')));
   });
 
   it('no lee el chat', () =>

@@ -212,6 +212,56 @@ void main() {
     await cerrar(tester);
   });
 
+  testWidgets(
+    'EX-MIEMBRO (A11d): el manual se nombra por el DERECHO HISTÓRICO',
+    (tester) async {
+      // Expulsado del grupo: `manualParticipants` deja de ser legible —y debe
+      // dejar de serlo: es el censo entero del contexto—. Su deuda no puede
+      // por eso convertirse en «Persona sin nombre»: el nombre de ESE reparto
+      // viaja congelado en el derecho histórico del ticket.
+      await espacio('g1', kind: 'group');
+      await ticket('g1');
+      await obligacion(id: 'e1', spaceId: 'g1', debtor: 'manual:m1');
+      await firestore.doc('sessions/s1/ticketEntitlements/t1_$yo').set({
+        'uid': yo,
+        'ticketId': 't1',
+        'accountId': 'a1',
+        'participantNames': {'p0': 'Yo', 'manual:m1': 'Javi'},
+        'schemaVersion': 1,
+      });
+
+      await pump(tester, 'g1');
+
+      expect(find.textContaining('Javi'), findsOneWidget);
+      expect(find.textContaining('Persona sin nombre'), findsNothing);
+      sinIdentificador();
+      await cerrar(tester);
+    },
+  );
+
+  testWidgets('sin derecho histórico NO se inventa ningún nombre', (
+    tester,
+  ) async {
+    // El derecho es de OTRO ticket: no autoriza a nombrar a este manual.
+    await espacio('g1', kind: 'group');
+    await ticket('g1');
+    await obligacion(id: 'e1', spaceId: 'g1', debtor: 'manual:m1');
+    await firestore.doc('sessions/s1/ticketEntitlements/t9_$yo').set({
+      'uid': yo,
+      'ticketId': 't9',
+      'accountId': 'a1',
+      'participantNames': {'manual:m1': 'Javi'},
+      'schemaVersion': 1,
+    });
+
+    await pump(tester, 'g1');
+
+    expect(find.textContaining('Javi'), findsNothing);
+    expect(find.textContaining('Persona sin nombre'), findsOneWidget);
+    sinIdentificador();
+    await cerrar(tester);
+  });
+
   testWidgets('nombre VACÍO: rótulo controlado', (tester) async {
     await espacio('rel3', manuales: {'m1': '   '});
     await ticket('rel3');

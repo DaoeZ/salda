@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../profile/data/profile_repository.dart';
 import '../../auth/data/guest_identity_repository.dart';
+import '../../sessions/application/session_providers.dart';
 import '../../spaces/data/spaces_repository.dart';
 import '../data/economic_repository.dart';
 
@@ -60,6 +61,39 @@ final economicNamesProvider = Provider.autoDispose<Map<String, String>>((ref) {
   return names;
 });
 
+/// Nombres de MANUALES que solo alcanza el DERECHO HISTÓRICO (A11d).
+///
+/// Un ex-miembro pierde `manualParticipants` del grupo —y debe perderlo: es
+/// el censo entero del contexto—, pero conserva `ticketEntitlements` de los
+/// tickets en los que participó económicamente, y ahí viajan congelados los
+/// nombres de ESE reparto. Sin este repliegue su propia deuda pasaba a
+/// leerse «Persona sin nombre» en cuanto la contraparte era manual.
+///
+/// Solo se consulta lo que hace falta: un ticket por actor sin resolver, y
+/// solo tickets que ya están en SUS obligaciones. No hay agenda histórica.
+final historicManualNamesProvider =
+    Provider.autoDispose<({Map<String, String> names, bool loading})>((ref) {
+      final overview = ref.watch(participantEconomicOverviewProvider).value;
+      if (overview == null) return (names: const {}, loading: false);
+      final vivos = ref.watch(economicNamesProvider);
+
+      final names = <String, String>{};
+      var loading = false;
+      for (final entry in overview.entries) {
+        for (final actor in [entry.debtorUid, entry.creditorUid]) {
+          if (!isManualActor(actor)) continue;
+          if (vivos.containsKey(actor) || names.containsKey(actor)) continue;
+          final historico = ref.watch(
+            historicTicketProvider((sid: entry.sessionId, tid: entry.ticketId)),
+          );
+          if (historico.isLoading) loading = true;
+          final nombre = historico.value?.participantNames[actor];
+          if (nombre != null && nombre.isNotEmpty) names[actor] = nombre;
+        }
+      }
+      return (names: names, loading: loading);
+    });
+
 /// Nombre visible de UN actor económico.
 ///
 /// Es el único camino: ninguna pantalla debe deducir un nombre a partir del
@@ -75,10 +109,17 @@ final economicNameProvider = Provider.autoDispose.family<EconomicName, String>((
     final names = ref.watch(economicNamesProvider);
     final nombre = names[actor];
     if (nombre != null) return EconomicName(EconomicNameSource.person, nombre);
+    // Segundo camino: el nombre congelado en el derecho histórico, para quien
+    // ya no puede leer el espacio que custodia el manual.
+    final historicos = ref.watch(historicManualNamesProvider);
+    final historico = historicos.names[actor];
+    if (historico != null) {
+      return EconomicName(EconomicNameSource.person, historico);
+    }
     // Sin nombre conocido todavía: puede estar cargando el espacio. Se
     // distingue de «no tiene nombre» para no parpadear un rótulo genérico.
     final overview = ref.watch(participantEconomicOverviewProvider);
-    if (overview.isLoading) {
+    if (overview.isLoading || historicos.loading) {
       return const EconomicName(EconomicNameSource.loading);
     }
     // El participante ya no existe o se quedó sin nombre: rótulo controlado.

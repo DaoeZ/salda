@@ -79,7 +79,19 @@ test('derecho histórico: congela los nombres de ESE reparto', () => {
   const derecho = computeAggregates(conCuentas())
     .ticketEntitlements.find((entry) => entry.uid === 'uid-jorge');
   assert.deepEqual(derecho?.participantNames,
-    { p1: 'Alba', p2: 'Jorge', p3: 'Tete' });
+    { p1: 'Alba', p2: 'Jorge', p3: 'Tete', 'manual:m-tete': 'Tete' });
+});
+
+test('derecho histórico: el MANUAL también se nombra por su ACTOR', () => {
+  // La deuda de P5 nombra a `manual:{id}`, no a un `pid`. Sin el alias, un
+  // ex-miembro veía «Persona sin nombre» en su propio saldo, porque el
+  // nombre de un manual lo custodia el espacio y ya no puede leerlo.
+  const derecho = computeAggregates(conCuentas())
+    .ticketEntitlements.find((entry) => entry.uid === 'uid-jorge');
+  assert.equal(derecho?.participantNames['manual:m-tete'], 'Tete');
+  // Una cuenta NO recibe alias: su nombre vive en el perfil público.
+  assert.ok(!Object.keys(derecho?.participantNames ?? {})
+    .some((key) => key.startsWith('manual:') && key !== 'manual:m-tete'));
 });
 
 test('derecho histórico: es idempotente entre recomputes', () => {

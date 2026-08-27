@@ -295,6 +295,23 @@ describe('A11d: bloqueo del enlace y readmisión', () => {
     await assertFails(aceptarInvitacion(JORGE));
   });
 
+  it('el expulsado no se readmite renovando él la invitación', async () => {
+    // Una `accepted` vieja (la que le dio entrada en su día) sigue ahí. Solo
+    // el propietario puede reenviarla, y solo eso la fecha de nuevo.
+    await env.withSecurityRulesDisabled((ctx) => setDoc(
+      doc(ctx.firestore(), `spaceInvites/gr1_${JORGE}`), {
+        spaceId: 'gr1', spaceName: 'Piso', fromUid: JEFA, toUid: JORGE,
+        status: 'accepted', createdAt: Timestamp.fromMillis(1_500_000),
+        updatedAt: Timestamp.fromMillis(1_500_000),
+      }));
+    await assertFails(updateDoc(doc(db(JORGE), `spaceInvites/gr1_${JORGE}`), {
+      status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    // Y la `accepted` antigua tampoco readmite por sí sola.
+    await assertFails(aceptarInvitacion(JORGE));
+  });
+
   it('una invitación NUEVA readmite y levanta el bloqueo', async () => {
     await assertSucceeds(invitar(JORGE));
     await assertSucceeds(aceptarInvitacion(JORGE));
@@ -359,6 +376,15 @@ describe('A11d: ciclos repetidos', () => {
     async () => {
       await assertSucceeds(
         deleteDoc(doc(db(JORGE), `spaces/gr1/members/${JORGE}`)));
+      // Salir NO deja bloqueo, y la evidencia de la expulsión anterior sigue
+      // ahí: `removals` es HISTORIAL, `entryBlocks` es el bloqueo VIGENTE.
+      // Un removal antiguo, por sí solo, no cierra el enlace.
+      const evidencia = await getDoc(doc(
+        db(JEFA), `spaces/gr1/removals/${cicloId(JORGE, CICLO_A)}`));
+      const bloqueo = await getDoc(
+        doc(db(JEFA), `spaces/gr1/entryBlocks/${JORGE}`));
+      if (!evidencia.exists()) throw new Error('se perdió el histórico');
+      if (bloqueo.exists()) throw new Error('salir dejó bloqueo');
       await assertSucceeds(entrarPorEnlace(JORGE));
     });
 
