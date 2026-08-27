@@ -48,6 +48,27 @@ class EsReceiptParser implements CountryReceiptParser {
     r'DESCUENTO|\bDTO\b|CUP[OÓ]N|\bAHORRO\b',
   );
 
+  // ── Desglose fiscal suelto (A12) ──────────────────────────────────────
+  // Un ticket puede imprimir la base y la cuota como líneas normales, ANTES
+  // del total y sin la cabecera combinada que detecta `_taxZoneHeader`. Sin
+  // este filtro caían en la regla genérica `nombre + importe` y se
+  // convertían en productos fantasma: se midió que «BASE IMPONIBLE 13,19» +
+  // «IVA 21% 2,77» + «TOTAL 15,96» daba un ticket que CUADRABA exactamente
+  // sin un solo producto real y sin ningún aviso.
+  //
+  // Deliberadamente ESTRECHO: exige el concepto fiscal completo, no una
+  // palabra suelta. «BASE PIZZA» o «CUOTA MENSUAL GIMNASIO» son productos y
+  // tienen que seguir siéndolo; solo se descarta lo que únicamente puede ser
+  // fiscalidad.
+  static final _fiscalKeyword = RegExp(
+    r'\bBASE\s+IMP(?:ONIBLE)?\b'
+    r'|\bB\.?\s?IMPONIBLE\b'
+    r'|\bI\.?V\.?A\.?\s*:?\s*\d{1,2}(?:[.,]\d+)?\s*%'
+    r'|\d{1,2}\s*%\s*(?:DE\s+)?I\.?V\.?A\b'
+    r'|\bCUOTA\s+I\.?V\.?A\b'
+    r'|\bI\.?V\.?A\.?\s+INCLUIDO\b',
+  );
+
   // ── Reglas de línea por defecto (orden = prioridad) ───────────────────
   static final List<LineRule> _defaultRules = [
     LineRule('qty_name_unit_total', _qtyNameUnitTotal),
@@ -114,8 +135,9 @@ class EsReceiptParser implements CountryReceiptParser {
       grandTotal = totalHit.total;
       if (body.lines.isNotEmpty) {
         final delta = computed - totalHit.total.value!;
-        final tolerance = _max(2, totalHit.total.value!.abs().cents ~/ 100);
-        if (delta.abs().cents > tolerance) {
+        // A15: tolerancia FIJA de dos céntimos (ver `domain`). El 1 % de
+        // antes daba por cuadrado un ticket al que le faltaba un producto.
+        if (!receiptAmountsBalance(computed, totalHit.total.value!)) {
           issues.add(
             ReceiptIssue(
               ReceiptIssue.sumMismatch,
@@ -285,6 +307,15 @@ class EsReceiptParser implements CountryReceiptParser {
         continue;
       }
 
+      // Desglose fiscal suelto (A12): ni producto ni descuento. El importe
+      // sigue viviendo en `grandTotal`, que es lo que se pagó; no se
+      // reconstruye el impuesto a partir de una línea suelta porque la base
+      // y la cuota no siempre son distinguibles sin la tabla del pie.
+      if (_fiscalKeyword.hasMatch(upper)) {
+        pending = null;
+        continue;
+      }
+
       if (upper.contains('SUBTOTAL') && amounts.isNotEmpty) {
         subtotal = Extracted(amounts.last, 0.9 * degraded);
         pending = null;
@@ -441,8 +472,6 @@ class EsReceiptParser implements CountryReceiptParser {
     return const Extracted.missing();
   }
 
-  static int _max(int a, int b) => a > b ? a : b;
-
   // ── Implementación de las reglas por defecto ──────────────────────────
 
   static final _reQtyNameUnitTotal = RegExp(
@@ -544,25 +573,44 @@ class EsReceiptParser implements CountryReceiptParser {
   static LineInterpretation? _qtyNameTotal(String text) {
     final m = _reQtyNameTotal.firstMatch(text);
     if (m == null || !hasNameLetters(m[2]!)) return null;
+    final name = m[2]!.trim();
+    // Mismo criterio que en `_nameTotal`: si dentro del nombre sigue habiendo
+    // un importe sin interpretar, la lectura no está resuelta.
+    final suspicious = _nameStartsWithAmount.hasMatch(name);
     return LineInterpretation(
-      name: m[2]!.trim(),
+      name: name,
       quantityMilli: int.parse(m[1]!) * 1000,
       totalPrice: parseEsAmount(m[3]!),
-      confidence: 0.88,
+      confidence: suspicious ? 0.45 : 0.88,
     );
   }
 
   static final _reNameTotal = RegExp('^(.{3,}?)\\s+($amountSrc)\\s*[A-D]?\$');
+
+  /// El «nombre» empieza por algo con forma de importe: casi siempre es el
+  /// precio unitario impreso a la IZQUIERDA que la regla no supo separar.
+  static final _nameStartsWithAmount = RegExp('^($amountSrc)(?!\\d)\\s');
 
   static LineInterpretation? _nameTotal(String text) {
     final m = _reNameTotal.firstMatch(text);
     if (m == null || !hasNameLetters(m[1]!)) return null;
     final total = parseEsAmount(m[2]!);
     if (total.isNegative) return null; // los negativos son descuentos
+    final name = m[1]!.trim();
+    // A15: `1,15 MACARRON ROMERO 1 KG   5,75` se leía como UN producto de
+    // 5,75 con el precio unitario metido en el nombre y cantidad 1. Cuadraba
+    // y no avisaba de nada, y esa cantidad equivocada es la que después
+    // decide cuántas unidades repartibles tiene la línea.
+    //
+    // No se inventa la cantidad —5,75/1,15 = 5 es una división exacta, no una
+    // prueba: podría ser peso, oferta o descuento—. Lo que se hace es dejar
+    // de afirmar que la línea es fiable: baja de confianza y la revisión la
+    // marca para que una persona la mire.
+    final suspicious = _nameStartsWithAmount.hasMatch(name);
     return LineInterpretation(
-      name: m[1]!.trim(),
+      name: name,
       totalPrice: total,
-      confidence: 0.78,
+      confidence: suspicious ? 0.45 : 0.78,
     );
   }
 }

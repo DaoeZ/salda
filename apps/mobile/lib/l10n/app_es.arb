@@ -22,7 +22,14 @@
   "reviewAddLine": "Añadir producto",
   "reviewComputedTotal": "Suma de productos",
   "reviewGrandTotal": "Total del ticket",
-  "reviewBalanced": "El ticket cuadra",
+  "reviewBalanced": "El total cuadra",
+  "reviewBalancedHint": "Que cuadre solo dice que las cuentas salen. Revisa el establecimiento, los nombres y las cantidades.",
+  "reviewAiWithoutPhoto": "Sin la foto original: la IA revisará los datos ya extraídos, no el ticket.",
+  "reviewAiOverwriteTitle": "¿Revisar de nuevo con IA?",
+  "reviewAiOverwriteBody": "La IA volverá a interpretar el ticket entero y sustituirá los cambios que has hecho a mano.",
+  "reviewAiOverwriteConfirm": "Revisar igualmente",
+  "reviewEditTotalTitle": "Total del ticket",
+  "reviewEditTotalHint": "El dinero realmente pagado. Cambiarlo no toca los productos.",
   "reviewMismatch": "Descuadre de {amount}",
   "@reviewMismatch": {
     "placeholders": { "amount": { "type": "String" } }

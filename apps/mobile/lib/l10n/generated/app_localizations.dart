@@ -217,8 +217,50 @@ abstract class AppLocalizations {
   /// No description provided for @reviewBalanced.
   ///
   /// In es, this message translates to:
-  /// **'El ticket cuadra'**
+  /// **'El total cuadra'**
   String get reviewBalanced;
+
+  /// No description provided for @reviewBalancedHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Que cuadre solo dice que las cuentas salen. Revisa el establecimiento, los nombres y las cantidades.'**
+  String get reviewBalancedHint;
+
+  /// No description provided for @reviewAiWithoutPhoto.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin la foto original: la IA revisará los datos ya extraídos, no el ticket.'**
+  String get reviewAiWithoutPhoto;
+
+  /// No description provided for @reviewAiOverwriteTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Revisar de nuevo con IA?'**
+  String get reviewAiOverwriteTitle;
+
+  /// No description provided for @reviewAiOverwriteBody.
+  ///
+  /// In es, this message translates to:
+  /// **'La IA volverá a interpretar el ticket entero y sustituirá los cambios que has hecho a mano.'**
+  String get reviewAiOverwriteBody;
+
+  /// No description provided for @reviewAiOverwriteConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Revisar igualmente'**
+  String get reviewAiOverwriteConfirm;
+
+  /// No description provided for @reviewEditTotalTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Total del ticket'**
+  String get reviewEditTotalTitle;
+
+  /// No description provided for @reviewEditTotalHint.
+  ///
+  /// In es, this message translates to:
+  /// **'El dinero realmente pagado. Cambiarlo no toca los productos.'**
+  String get reviewEditTotalHint;
 
   /// No description provided for @reviewMismatch.
   ///

@@ -564,6 +564,14 @@ firebase CLI → keyring del SO del desarrollador.
 - **`ShareCode.toString()` es opaco** a propósito (no filtrar secretos a logs).
 - **Umbral de revisión**: `needsReview` = issues no vacíos O confianza global < 0,75
   (DC-13; calibrable con el corpus real).
+- **«Cuadrar» solo habla de aritmética (A15)**: la suma de líneas − descuentos +
+  propina frente al `grandTotal`, con tolerancia FIJA de **2 céntimos**
+  (`receiptBalanceToleranceCents` en `domain`, usada por el parser, por el borrador
+  de revisión y por la validación de la respuesta de IA — antes eran tres copias del
+  1 % y un ticket de 15,96 € daba por bueno un descuadre de 15 céntimos). Un ticket
+  puede cuadrar al céntimo con el comercio mal leído o una cantidad equivocada: por
+  eso la revisión dice «El total cuadra», nunca «el ticket cuadra», y editar a mano y
+  «Analizar con IA» siguen disponibles con el total cuadrado.
 - **Functions**: `maxInstances: 3` y europe-west1 en `setGlobalOptions` son el techo de
   coste (spec §12.4) — no subirlos sin consultar al usuario.
 - **Presupuesto de peso de la web**: `chunkSizeWarningLimit: 300` en vite.config.ts;

@@ -75,10 +75,16 @@ class _LineEditFormState extends State<_LineEditForm> {
     final total = parseUserMoney(_total.text);
     if (_name.text.trim().isEmpty || total == null) return;
     final quantity = double.tryParse(_quantity.text.replaceAll(',', '.'));
+    final quantityMilli = quantity == null ? 1000 : (quantity * 1000).round();
     final line = DraftLine(
       name: _name.text.trim(),
-      quantityMilli: quantity == null ? 1000 : (quantity * 1000).round(),
-      unitPrice: parseUserMoney(_unit.text),
+      quantityMilli: quantityMilli,
+      unitPrice: unitPriceAfterEdit(
+        widget.line,
+        quantityMilli: quantityMilli,
+        total: total,
+        typed: parseUserMoney(_unit.text),
+      ),
       totalPrice: total,
       sourceText: widget.line?.sourceText ?? '',
     );

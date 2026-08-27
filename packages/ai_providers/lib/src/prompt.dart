@@ -112,10 +112,9 @@ ReceiptExtraction parseAiResponse(String content, {required String engine}) {
     // igual que hace el parser OCR.
     if (grandTotal != null && lines.isNotEmpty) {
       final delta = extraction.computedTotal - grandTotal;
-      final tolerance = grandTotal.abs().cents ~/ 100 > 2
-          ? grandTotal.abs().cents ~/ 100
-          : 2;
-      if (delta.abs().cents > tolerance) {
+      // Mismo margen que el parser y que la revisión: dos céntimos, definido
+      // UNA vez en `domain` (A15). Tres copias de la fórmula divergían.
+      if (!receiptAmountsBalance(extraction.computedTotal, grandTotal)) {
         return ReceiptExtraction(
           engine: engine,
           merchantName: extraction.merchantName,

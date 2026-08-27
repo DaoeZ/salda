@@ -54,6 +54,30 @@ class DraftLine {
   );
 }
 
+/// Precio unitario que sobrevive a la edición de una línea (A15).
+///
+/// El unitario es informativo: el reparto usa el TOTAL de la línea y la
+/// cantidad. En cuanto cambia cualquiera de esos dos, un unitario que venía
+/// del OCR deja de poder demostrarse, y conservarlo sería guardar un dato que
+/// ya sabemos que puede mentir — la misma decisión que tomó A11c después de
+/// guardar, donde directamente se borra.
+///
+/// Tampoco se recalcula `total / cantidad`: eso inventaría un precio que el
+/// ticket no dice (ofertas, pesos, redondeos). Solo se conserva si lo escribe
+/// una persona, o si no ha cambiado nada que lo sostenga.
+Money? unitPriceAfterEdit(
+  DraftLine? original, {
+  required int quantityMilli,
+  required Money total,
+  required Money? typed,
+}) {
+  if (original == null) return typed; // línea nueva: lo que escriba manda
+  if (typed != original.unitPrice) return typed; // edición explícita
+  final mismaCantidad = original.quantityMilli == quantityMilli;
+  final mismoTotal = original.totalPrice == total;
+  return mismaCantidad && mismoTotal ? typed : null;
+}
+
 /// Estado de la revisión de un ticket antes de guardarlo (M3 lo persiste).
 class ReviewDraftState {
   const ReviewDraftState({
@@ -70,6 +94,7 @@ class ReviewDraftState {
     this.grandTotal,
     this.issues = const [],
     this.sourceConfidence = 1.0,
+    this.manuallyEdited = false,
   });
 
   factory ReviewDraftState.fromExtraction(ReceiptExtraction e) =>
@@ -103,6 +128,16 @@ class ReviewDraftState {
   final List<ReceiptIssue> issues;
   final double sourceConfidence;
 
+  /// ¿Hay trabajo del usuario que una revisión con IA se llevaría por
+  /// delante? La IA devuelve el ticket entero y sustituye el borrador; sin
+  /// esta marca, corregir algo a mano y pedir después una revisión perdía la
+  /// corrección en silencio.
+  ///
+  /// Vive solo en memoria a propósito: no viaja en el contrato canónico ni
+  /// se persiste. Si la app muere y el borrador se recupera del disco, se
+  /// vuelve a partir de «sin editar» — se pierde un aviso, nunca un dato.
+  final bool manuallyEdited;
+
   Money get computedTotal {
     var sum = Money.zero;
     for (final l in lines) {
@@ -118,12 +153,10 @@ class ReviewDraftState {
   /// computed − grandTotal; null si aún no hay total.
   Money? get delta => grandTotal == null ? null : computedTotal - grandTotal!;
 
-  bool get balanced {
-    final d = delta;
-    if (d == null) return false;
-    final tolerance = grandTotal!.abs().cents ~/ 100;
-    return d.abs().cents <= (tolerance > 2 ? tolerance : 2);
-  }
+  /// SOLO habla de aritmética: la suma de líneas coincide con el total. No
+  /// dice nada del comercio, de los nombres ni de las cantidades (A15).
+  bool get balanced =>
+      grandTotal != null && receiptAmountsBalance(computedTotal, grandTotal!);
 
   /// El banner de baja confianza se muestra si el origen era dudoso
   /// o el estado actual no cuadra.
@@ -162,6 +195,8 @@ class ReviewDraftState {
     issues: issues,
   );
 
+  /// Toda mutación del usuario pasa por aquí, así que `manuallyEdited` se
+  /// marca en un solo sitio en vez de en siete.
   ReviewDraftState copyWith({
     String? merchantName,
     String? date,
@@ -169,6 +204,7 @@ class ReviewDraftState {
     List<DraftLine>? lines,
     Money? grandTotal,
     List<ReceiptIssue>? issues,
+    bool manuallyEdited = true,
   }) => ReviewDraftState(
     engine: engine,
     merchantName: merchantName ?? this.merchantName,
@@ -183,6 +219,7 @@ class ReviewDraftState {
     grandTotal: grandTotal ?? this.grandTotal,
     issues: issues ?? this.issues,
     sourceConfidence: sourceConfidence,
+    manuallyEdited: manuallyEdited,
   );
 }
 

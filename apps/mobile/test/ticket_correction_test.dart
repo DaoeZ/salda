@@ -162,23 +162,29 @@ void main() {
     late FakeFirebaseFirestore fake;
     setUp(() async => fake = await _seed());
 
-    test('bajar de 2 a 1 unidad deja sin consumo a quien tenía la segunda', () async {
-      final impacto = impactOfQuantityChange(await _line(fake, 'l1'), 1000);
+    test(
+      'bajar de 2 a 1 unidad deja sin consumo a quien tenía la segunda',
+      () async {
+        final impacto = impactOfQuantityChange(await _line(fake, 'l1'), 1000);
 
-      expect(impacto.isDestructive, isTrue);
-      expect(impacto.affectedPids, ['p2']);
-      expect(impacto.lostUnitsByPid['p2'], [1]);
-      expect(impacto.removedUnitIds, ['u1']);
-    });
+        expect(impacto.isDestructive, isTrue);
+        expect(impacto.affectedPids, ['p2']);
+        expect(impacto.lostUnitsByPid['p2'], [1]);
+        expect(impacto.removedUnitIds, ['u1']);
+      },
+    );
 
-    test('subir la cantidad no destruye nada ni inventa consumidores', () async {
-      final line = await _line(fake, 'l1');
-      final impacto = impactOfQuantityChange(line, 4000);
+    test(
+      'subir la cantidad no destruye nada ni inventa consumidores',
+      () async {
+        final line = await _line(fake, 'l1');
+        final impacto = impactOfQuantityChange(line, 4000);
 
-      expect(impacto.isDestructive, isFalse);
-      expect(impacto.removedUnitIds, isEmpty);
-      expect(unitIdsFor(4000), ['u0', 'u1', 'u2', 'u3']);
-    });
+        expect(impacto.isDestructive, isFalse);
+        expect(impacto.removedUnitIds, isEmpty);
+        expect(unitIdsFor(4000), ['u0', 'u1', 'u2', 'u3']);
+      },
+    );
 
     test('la poda nombra la unidad que se va, no la que se queda', () async {
       // Se borra u1 y NADA más: u0 ni se menciona, así que nadie puede
@@ -208,32 +214,34 @@ void main() {
       );
     });
 
-    test('corregir el precio deja el total intacto y firma la corrección',
-        () async {
-      await repo.correctLine(
-        '$_ticketPath/lines/l1',
-        name: 'Coca-Cola',
-        quantityMilli: 2000,
-        totalPrice: const Money(400),
-      );
+    test(
+      'corregir el precio deja el total intacto y firma la corrección',
+      () async {
+        await repo.correctLine(
+          '$_ticketPath/lines/l1',
+          name: 'Coca-Cola',
+          quantityMilli: 2000,
+          totalPrice: const Money(400),
+        );
 
-      final line = (await fake.doc('$_ticketPath/lines/l1').get()).data()!;
-      final ticket = (await fake.doc(_ticketPath).get()).data()!;
-      expect(line['totalPrice'], 400);
-      // El reparto no se toca: cada unidad sigue con su dueño.
-      expect((line['assignment'] as Map)['units'], {
-        'u0': {'p1': true},
-        'u1': {'p2': true},
-      });
-      // El precio unitario deja de constar en vez de quedar falso.
-      expect(line.containsKey('unitPrice'), isFalse);
-      // Y lo importante: el ticket ponía 15,96 € y SIGUE poniendo 15,96 €.
-      // Corregir un producto mal leído no inventa dinero pagado; solo cambia
-      // con qué pesos se reparte ese dinero.
-      expect(ticket['grandTotal'], 1596);
-      expect(ticket['lastEditedByUid'], 'owner');
-      expect(ticket['lastEditedAt'], isNotNull);
-    });
+        final line = (await fake.doc('$_ticketPath/lines/l1').get()).data()!;
+        final ticket = (await fake.doc(_ticketPath).get()).data()!;
+        expect(line['totalPrice'], 400);
+        // El reparto no se toca: cada unidad sigue con su dueño.
+        expect((line['assignment'] as Map)['units'], {
+          'u0': {'p1': true},
+          'u1': {'p2': true},
+        });
+        // El precio unitario deja de constar en vez de quedar falso.
+        expect(line.containsKey('unitPrice'), isFalse);
+        // Y lo importante: el ticket ponía 15,96 € y SIGUE poniendo 15,96 €.
+        // Corregir un producto mal leído no inventa dinero pagado; solo cambia
+        // con qué pesos se reparte ese dinero.
+        expect(ticket['grandTotal'], 1596);
+        expect(ticket['lastEditedByUid'], 'owner');
+        expect(ticket['lastEditedAt'], isNotNull);
+      },
+    );
 
     test('reducir la cantidad poda solo la unidad perdida', () async {
       final line = await _line(fake, 'l1');
@@ -264,20 +272,22 @@ void main() {
       expect(ticket['lastEditedByUid'], 'owner');
     });
 
-    test('el total SOLO cambia por la corrección explícita de la cabecera',
-        () async {
-      // El caso en que el ticket físico también estaba mal leído: se corrige
-      // a conciencia, en su propia acción, y queda firmado.
-      await repo.correctTicketHeader(
-        _ticketPath,
-        merchantName: 'Familycash',
-        grandTotal: const Money(1650),
-      );
+    test(
+      'el total SOLO cambia por la corrección explícita de la cabecera',
+      () async {
+        // El caso en que el ticket físico también estaba mal leído: se corrige
+        // a conciencia, en su propia acción, y queda firmado.
+        await repo.correctTicketHeader(
+          _ticketPath,
+          merchantName: 'Familycash',
+          grandTotal: const Money(1650),
+        );
 
-      final ticket = (await fake.doc(_ticketPath).get()).data()!;
-      expect(ticket['grandTotal'], 1650);
-      expect(ticket['lastEditedByUid'], 'owner');
-    });
+        final ticket = (await fake.doc(_ticketPath).get()).data()!;
+        expect(ticket['grandTotal'], 1650);
+        expect(ticket['lastEditedByUid'], 'owner');
+      },
+    );
 
     test('corregir la cabecera cambia comercio y total, y firma', () async {
       await repo.correctTicketHeader(
@@ -337,7 +347,9 @@ void main() {
 
       // 3,00 + 12,96 = 15,96 → cuadra con el total del ticket.
       expect(find.textContaining('Suma de productos: 15,96'), findsOneWidget);
-      expect(find.text('El ticket cuadra'), findsOneWidget);
+      // A15: el estado verde dice lo que de verdad comprueba —la aritmética—
+      // y ya no se presenta como un certificado del ticket entero.
+      expect(find.text('El total cuadra'), findsOneWidget);
     });
 
     testWidgets('si la corrección descuadra el ticket, se dice; el total no '
@@ -403,7 +415,8 @@ void main() {
       expect(find.text('Se perderán asignaciones'), findsOneWidget);
       expect(find.textContaining('Jorge'), findsWidgets);
       expect(
-        (await fake.doc('$_ticketPath/lines/l1').get()).data()!['quantityMilli'],
+        (await fake.doc('$_ticketPath/lines/l1').get())
+            .data()!['quantityMilli'],
         2000,
       );
 
@@ -411,7 +424,8 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Cancelar').last);
       await tester.pumpAndSettle();
       expect(
-        (await fake.doc('$_ticketPath/lines/l1').get()).data()!['quantityMilli'],
+        (await fake.doc('$_ticketPath/lines/l1').get())
+            .data()!['quantityMilli'],
         2000,
       );
     });

@@ -72,7 +72,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewGrandTotal => 'Total del ticket';
 
   @override
-  String get reviewBalanced => 'El ticket cuadra';
+  String get reviewBalanced => 'El total cuadra';
+
+  @override
+  String get reviewBalancedHint =>
+      'Que cuadre solo dice que las cuentas salen. Revisa el establecimiento, los nombres y las cantidades.';
+
+  @override
+  String get reviewAiWithoutPhoto =>
+      'Sin la foto original: la IA revisará los datos ya extraídos, no el ticket.';
+
+  @override
+  String get reviewAiOverwriteTitle => '¿Revisar de nuevo con IA?';
+
+  @override
+  String get reviewAiOverwriteBody =>
+      'La IA volverá a interpretar el ticket entero y sustituirá los cambios que has hecho a mano.';
+
+  @override
+  String get reviewAiOverwriteConfirm => 'Revisar igualmente';
+
+  @override
+  String get reviewEditTotalTitle => 'Total del ticket';
+
+  @override
+  String get reviewEditTotalHint =>
+      'El dinero realmente pagado. Cambiarlo no toca los productos.';
 
   @override
   String reviewMismatch(String amount) {

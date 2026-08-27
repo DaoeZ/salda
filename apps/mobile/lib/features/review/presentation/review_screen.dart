@@ -1,4 +1,5 @@
 import 'package:design_tokens/design_tokens.dart';
+import 'package:domain/domain.dart' show Money;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -52,6 +53,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
               onEditManually: () => setState(() => _bannerDismissed = true),
             ),
           _AmountHero(draft: draft),
+          // A15: revisar con IA NO es un recurso de emergencia. Vivía dentro
+          // del aviso de baja confianza, así que un ticket que cuadraba
+          // —o pulsar «Editar a mano»— hacía desaparecer el botón justo
+          // cuando el usuario sospechaba que algo estaba mal leído.
+          const _AiReviewAction(),
           const SectionGap(),
           SectionHeader(title: l10n.reviewTicketData),
           _HeaderCard(draft: draft),
@@ -181,6 +187,18 @@ class _AmountHero extends StatelessWidget {
                 ? Icons.check_rounded
                 : Icons.error_outline_rounded,
           ),
+          // El verde solo certifica ARITMÉTICA. Un ticket puede cuadrar al
+          // céntimo con el establecimiento mal leído, un producto inventado
+          // o una cantidad equivocada — se midió con tickets reales.
+          if (draft.balanced) ...[
+            const SizedBox(height: TokenSpacing.xs),
+            Text(
+              l10n.reviewBalancedHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -226,7 +244,6 @@ class _AttentionBanner extends ConsumerWidget {
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: Text(l10n.reviewEditManually),
                 ),
-                _AiButton(l10n: l10n),
               ],
             ),
           ],
@@ -236,47 +253,101 @@ class _AttentionBanner extends ConsumerWidget {
   }
 }
 
-/// "Analizar con IA": último recurso, solo con proveedor configurado (DC-13).
-class _AiButton extends ConsumerWidget {
-  const _AiButton({required this.l10n});
-
-  final AppLocalizations l10n;
+/// Revisar con IA: acción CONSCIENTE y siempre disponible (DC-13 sigue
+/// vigente en lo que importa —nunca se lanza sola—, pero deja de esconderse
+/// cuando las cuentas salen: que un ticket cuadre no dice nada de si está
+/// bien leído).
+class _AiReviewAction extends ConsumerWidget {
+  const _AiReviewAction();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final available = ref.watch(aiAvailableProvider).value ?? false;
     final analyzingWith = ref.watch(aiAnalysisControllerProvider).value;
+    final draft = ref.watch(reviewDraftProvider);
+    // Sin la foto original la IA revisa el texto ya extraído: es una
+    // revisión distinta y peor, y se dice en vez de disimularlo.
+    final withoutPhoto = ref.watch(lastScanImageProvider) == null;
 
-    return Tooltip(
-      message: available ? '' : l10n.reviewAiUnavailable,
-      child: FilledButton.tonalIcon(
-        onPressed: !available || analyzingWith != null
-            ? null
-            : () async {
-                final result = await ref
-                    .read(aiAnalysisControllerProvider.notifier)
-                    .analyze();
-                if (!context.mounted) return;
-                if (!result.ok && result.error != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(aiErrorText(l10n, result.error!))),
-                  );
-                }
-              },
-        icon: analyzingWith != null
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.auto_awesome, size: 18),
-        label: Text(
-          analyzingWith != null
-              ? l10n.aiAnalyzing(analyzingWith)
-              : l10n.reviewAnalyzeWithAi,
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(top: TokenSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Tooltip(
+            message: available ? '' : l10n.reviewAiUnavailable,
+            child: FilledButton.tonalIcon(
+              onPressed: !available || analyzingWith != null
+                  ? null
+                  : () => _run(context, ref, l10n, draft),
+              icon: analyzingWith != null
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome, size: 18),
+              label: Text(
+                analyzingWith != null
+                    ? l10n.aiAnalyzing(analyzingWith)
+                    : l10n.reviewAnalyzeWithAi,
+              ),
+            ),
+          ),
+          if (available && withoutPhoto) ...[
+            const SizedBox(height: TokenSpacing.xs),
+            Text(
+              l10n.reviewAiWithoutPhoto,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+          ],
+        ],
       ),
     );
+  }
+
+  Future<void> _run(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    ReviewDraftState? draft,
+  ) async {
+    // La IA devuelve el ticket ENTERO y sustituye el borrador: no hay merge
+    // ni lo va a haber (un diff de líneas sin identidad estable sería
+    // adivinar). Lo que sí puede hacerse es no perder trabajo en silencio.
+    if (draft?.manuallyEdited ?? false) {
+      final seguir = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(l10n.reviewAiOverwriteTitle),
+          content: Text(l10n.reviewAiOverwriteBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(l10n.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(l10n.reviewAiOverwriteConfirm),
+            ),
+          ],
+        ),
+      );
+      if (seguir != true || !context.mounted) return;
+    }
+
+    final result = await ref
+        .read(aiAnalysisControllerProvider.notifier)
+        .analyze();
+    if (!context.mounted) return;
+    if (!result.ok && result.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(aiErrorText(l10n, result.error!))));
+    }
   }
 }
 
@@ -403,13 +474,13 @@ class _LineTile extends ConsumerWidget {
   }
 }
 
-class _TotalsCard extends StatelessWidget {
+class _TotalsCard extends ConsumerWidget {
   const _TotalsCard({required this.draft});
 
   final ReviewDraftState draft;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     return SaldaCard(
       child: Column(
@@ -424,15 +495,73 @@ class _TotalsCard extends StatelessWidget {
           for (final d in draft.discounts)
             _totalRow(context, d.label, '−${formatMoney(d.amount)}'),
           const Divider(),
+          // El TOTAL es lo único que no se podía corregir antes de guardar,
+          // y es el dato que manda: el reparto se hace sobre él. A11c ya
+          // permite corregirlo DESPUÉS; no tenía sentido que fuese imposible
+          // antes. Cambiarlo no toca los productos: no se inventa ninguna
+          // línea de ajuste para hacer que cuadre.
           _totalRow(
             context,
             l10n.reviewGrandTotal,
             draft.grandTotal == null ? '—' : formatMoney(draft.grandTotal!),
             emphasized: true,
+            onEdit: () => _editTotal(context, ref, l10n),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _editTotal(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) async {
+    final controller = TextEditingController(
+      text: draft.grandTotal == null
+          ? ''
+          : formatMoney(draft.grandTotal!).replaceAll(' €', ''),
+    );
+    final result = await showDialog<Money>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.reviewEditTotalTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(suffixText: '€'),
+            ),
+            const SizedBox(height: TokenSpacing.sm),
+            Text(
+              l10n.reviewEditTotalHint,
+              style: Theme.of(dialogContext).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = parseUserMoney(controller.text);
+              if (parsed == null || parsed.cents < 0) return;
+              Navigator.pop(dialogContext, parsed);
+            },
+            child: Text(l10n.commonSave),
+          ),
+        ],
+      ),
+    );
+    if (result != null) {
+      ref.read(reviewDraftProvider.notifier).updateGrandTotal(result);
+    }
   }
 
   Widget _totalRow(
@@ -440,24 +569,33 @@ class _TotalsCard extends StatelessWidget {
     String label,
     String amount, {
     bool emphasized = false,
+    VoidCallback? onEdit,
   }) {
     final style = emphasized
         ? Theme.of(context).textTheme.titleLarge
         : Theme.of(context).textTheme.bodyMedium;
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: style),
+          Expanded(
+            child: Text(label, style: style, overflow: TextOverflow.ellipsis),
+          ),
           Text(
             amount,
             style: style?.copyWith(
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
+          if (onEdit != null) ...[
+            const SizedBox(width: TokenSpacing.sm),
+            const Icon(Icons.edit_outlined, size: 18),
+          ],
         ],
       ),
     );
+    if (onEdit == null) return row;
+    return InkWell(onTap: onEdit, child: row);
   }
 }
