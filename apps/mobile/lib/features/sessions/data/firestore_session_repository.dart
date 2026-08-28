@@ -501,6 +501,13 @@ class FirestoreSessionRepository implements SessionRepository {
     'assignment.units.u$unit.$participantId': selected
         ? true
         : FieldValue.delete(),
+    // Procedencia por PAR (unidad, persona), no por línea (A10): desde que
+    // alguien puede asignar el consumo de otro, «quién puso esto aquí» deja
+    // de ser evidente, y una firma global se perdería en cuanto otra persona
+    // tocase otra unidad. Se va con su asignación cuando se retira.
+    'assignment.by.u$unit.$participantId': selected
+        ? uid()
+        : FieldValue.delete(),
   });
 
   @override
@@ -555,6 +562,10 @@ class FirestoreSessionRepository implements SessionRepository {
       // permitido colar a alguien en una unidad ajena de paso.
       for (final unit in removedUnitIds)
         'assignment.units.$unit': FieldValue.delete(),
+      // Con la unidad se va su procedencia (A10): un actor sin asignación
+      // detrás no explica nada y las Rules no lo permitirían.
+      for (final unit in removedUnitIds)
+        'assignment.by.$unit': FieldValue.delete(),
     });
     // El total NO se toca. `grandTotal` es el dinero REALMENTE pagado (tras
     // impuestos, descuentos y propina) y las líneas son los PESOS con los

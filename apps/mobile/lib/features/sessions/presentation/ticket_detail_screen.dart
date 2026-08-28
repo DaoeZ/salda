@@ -26,6 +26,7 @@ import '../data/ticket_links_repository.dart';
 import '../domain/session_models.dart';
 import '../domain/ticket_link_models.dart';
 import 'ticket_correction_sheets.dart';
+import 'unit_assignment_sheet.dart';
 
 /// Datos de navegación al detalle de un ticket (van como `extra` de la ruta).
 class TicketRef {
@@ -542,6 +543,20 @@ class _TicketLines extends ConsumerWidget {
         mode == SplitMode.byItem &&
         (!canEdit || detail?.summary.status == SessionStatus.open);
 
+    // A10: repartir el consumo de OTRAS personas. Solo en «cada uno lo suyo»
+    // —a partes iguales el motor no mira las líneas, así que asignar
+    // productos no significaría nada— y nunca mientras se corrige el
+    // contenido: un mismo toque no puede querer decir dos cosas.
+    final canAssign =
+        !correcting &&
+        mode == SplitMode.byItem &&
+        ref.watch(
+          canAssignConsumptionProvider((
+            sessionId: ticketRef.sessionId,
+            spaceId: ticket.spaceId ?? '',
+          )),
+        );
+
     // «A partes iguales» no mira las líneas: repartirlo es dividir el total
     // entre quienes participan. Sin decirlo, la pantalla mentía — cada
     // producto salía rotulado «sin reclamar (para Alba)», que es la lectura
@@ -591,6 +606,8 @@ class _TicketLines extends ConsumerWidget {
                 myPid: myPid,
                 canPick: canPick,
                 canEdit: canEdit,
+                canAssign: canAssign,
+                sessionId: ticketRef.sessionId,
                 correcting: correcting,
                 names: names,
                 showAssignment: mode == SplitMode.byItem,
@@ -609,11 +626,18 @@ class _LineTile extends ConsumerWidget {
     required this.myPid,
     required this.canPick,
     required this.canEdit,
+    required this.canAssign,
+    required this.sessionId,
     required this.correcting,
     required this.showAssignment,
     required this.names,
     required this.payerName,
   });
+
+  /// A10: repartir el consumo de terceros. Con esta autoridad, tocar una
+  /// unidad abre el selector de personas en vez de marcarme a mí.
+  final bool canAssign;
+  final String sessionId;
 
   /// Modo corrección (A11c): la fila abre el arreglo del producto.
   final bool correcting;
@@ -640,6 +664,20 @@ class _LineTile extends ConsumerWidget {
     final myUnits = pid == null ? 0 : line.weightOf(pid);
     final mine = myUnits > 0;
     final interactive = canPick && line.assignmentType != 'all';
+    // A10 solo escribe en el modelo por unidades: convertir una línea
+    // histórica al modelo nuevo NO es lossless (el reparto por pesos no dice
+    // qué unidad concreta se compartía), así que no se hace por la puerta de
+    // atrás. Esas líneas siguen exactamente como estaban.
+    final canAssignUnits = canAssign && line.usesUnitModel;
+
+    Future<void> openUnitAssignment(int unit) => showUnitAssignmentSheet(
+      context,
+      ref,
+      line: line,
+      unit: unit,
+      sessionId: sessionId,
+      payerName: payerName,
+    );
 
     // La selección ya no es siempre del dueño: para un miembro del grupo la
     // autoridad la deciden las Rules (sesión abierta, modo por líneas), y el
@@ -756,7 +794,11 @@ class _LineTile extends ConsumerWidget {
         message: l10n.unitAssignment(unit + 1, detail),
         child: FilterChip(
           selected: selected,
-          onSelected: interactive ? (_) => toggleUnit(unit) : null,
+          onSelected: canAssignUnits
+              ? (_) => openUnitAssignment(unit)
+              : interactive
+              ? (_) => toggleUnit(unit)
+              : null,
           label: Text('${unit + 1}'),
           avatar: Icon(
             consumers.length > 1 ? Icons.group_outlined : Icons.person_outline,
@@ -773,6 +815,11 @@ class _LineTile extends ConsumerWidget {
           dense: true,
           onTap: correcting
               ? () => showLineCorrection(context, ref, line: line, names: names)
+              // Con autoridad para repartir, la fila abre el selector de
+              // personas en vez de marcarme a mí: es la acción que de verdad
+              // se quiere hacer sobre el gasto de un grupo.
+              : canAssignUnits && line.units == 1
+              ? () => openUnitAssignment(0)
               : interactive && line.units == 1
               ? line.usesUnitModel
                     ? () => toggleUnit(0)
@@ -830,7 +877,12 @@ class _LineTile extends ConsumerWidget {
             ),
           ),
         ),
-        if (interactive && line.units > 1 && line.usesUnitModel)
+        // Las unidades se pintan para quien puede tocarlas: quien elige lo
+        // suyo (siempre) y, desde A10, quien reparte el de los demás aunque
+        // no sea participante del gasto.
+        if ((interactive || canAssignUnits) &&
+            line.units > 1 &&
+            line.usesUnitModel)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               TokenSpacing.lg,

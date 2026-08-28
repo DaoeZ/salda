@@ -612,6 +612,52 @@ sigue apareciendo el rótulo controlado de siempre.
 tickets.spaceId); las queries de invitaciones son de igualdad pura (sin
 composites).
 
+## Repartir el consumo de otras personas (A10)
+
+**Misma asignación económica, distinta autoridad.** No hay un segundo sistema
+de reparto: se escribe en el modelo por unidades de siempre
+(`assignment.units.{unitId}.{pid}`), con la misma operación quirúrgica por par
+(unidad, persona). Lo único que cambia es quién puede escribirla.
+
+| Actor | Lo suyo | Lo de otra persona | A un MANUAL |
+|---|---|---|---|
+| Creador del gasto (dueño de la sesión) | sí | sí | sí |
+| Propietario / administrador del **grupo** | sí | sí | sí |
+| Miembro normal del grupo | sí | no | no |
+| Contraparte de una **relación** | sí | no | no |
+| Ajeno o expulsado | no | no | no |
+
+Una asignación hecha por quien tiene autoridad es **económicamente válida al
+instante**: la persona beneficiaria no tiene que entrar a confirmarla. Solo
+aplica en «cada uno lo suyo» —a partes iguales el motor no mira las líneas— y
+nunca con la sesión cerrada.
+
+**Repartir no es editar.** La rama de asignación exige que la escritura toque
+únicamente `assignment`: por ahí no entra un nombre, una cantidad, un precio
+ni una unidad nueva. Corregir el contenido sigue siendo A11c, con su propia
+autoridad y su propia firma.
+
+**Procedencia (`assignment.by`).** Quién asignó qué se guarda por PAR:
+`assignment.by.{unitId}.{pid} = uid`. Una firma única por línea no valdría —la
+siguiente persona que tocase otra unidad borraría la atribución de la
+anterior—. Rules exigen que ese uid sea el de quien escribe, así que nadie
+puede atribuir a otro lo que hace él; la firma se retira con su asignación, y
+al podar unidades (A11c) se va con ellas. Es obligatoria al asignar a un
+tercero y opcional al marcarse uno mismo, porque la web de invitados no la
+escribe: **si no hay firma, la asignación es una autoselección**.
+
+**La relación también audita su gasto.** A11b abrió la lectura del ticket a
+los GRUPOS y dejó fuera a las relaciones, con un resultado absurdo: la otra
+mitad de la pareja no podía ver el ticket que comparte ni decir qué consumió
+sin entrar por un enlace de invitado. Ahora `auditableByContext` cubre ambos
+contextos. Sigue siendo lectura: la corrección administrativa (A11c) y el
+reparto de terceros (A10) exigen `managesGroupOf`, que excluye relaciones.
+
+**Líneas históricas.** A10 solo escribe en el modelo por unidades. Convertir
+una línea del modelo de pesos NO es lossless —los pesos no dicen qué unidad
+concreta se compartía—, así que esa conversión sigue siendo del dueño de la
+sesión y explícita. Los tickets creados hoy nacen ya con unidades.
+
 ## Eliminar un gasto (A2, ADR-040)
 
 **Hard delete.** No hay `deleted: true`, ni papelera, ni restauración: el
@@ -691,6 +737,16 @@ lo que dos personas se deben; el saldo autoritativo es el de P5.
 - `economic_names_test.dart` (A11d): el saldo de un ex-miembro frente a una
   persona MANUAL se nombra por el derecho histórico, y sin derecho no se
   inventa ningún nombre.
+- `unit_assignment.test.mjs` (A10): 32 casos — matriz de autoridad en grupo y
+  relación, destinatarios válidos, compartir/retirar/reasignar, firma
+  infalsificable que sobrevive a tocar otra unidad, y que repartir no cuela
+  contenido. Cada denegación se comprueba además LIMPIA: no por agotar el
+  presupuesto de expresiones de Rules.
+- `unit_assignment_test.dart` (A10): 14 casos — a quién se le ofrece el
+  reparto, qué se escribe, y que la escritura no pisa lo que ya había.
+- `assignedConsumption.it.test.ts` (A10): la economía de una asignación hecha
+  por otra persona es idéntica a la de una autoselección, incluida una
+  persona sin cuenta y una unidad compartida.
 - `ticket_deletion.test.mjs` (A2): 20 casos — matriz de autoridad (incluida
   la relación sin administración y la sesión cerrada), atomicidad de las dos
   escrituras, y una evidencia que no se puede falsear, retocar ni borrar.

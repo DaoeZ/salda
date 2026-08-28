@@ -886,6 +886,20 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String unitAssignTitle(int number) {
+    return '¿Quién consume la unidad $number?';
+  }
+
+  @override
+  String unitAssignResidual(String payer) {
+    return 'Sin nadie marcado, esta unidad corre a cargo de $payer.';
+  }
+
+  @override
+  String get unitAssignShareHint =>
+      'Marca a varias personas para repartir esta unidad entre ellas.';
+
+  @override
   String unitCompactSummary(int selected, int total, int residual) {
     return '$selected de $total tuyas · $residual sin reclamar';
   }

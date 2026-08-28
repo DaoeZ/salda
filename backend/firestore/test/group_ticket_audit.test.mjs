@@ -402,14 +402,23 @@ describe('A11b: el grupo audita el ticket', () => {
     }
   });
 
-  // ── Lo que NO entra en la auditoría de grupo ─────────────────────────
-  it('una RELACIÓN mantiene su comportamiento: no se audita como grupo', async () => {
+  // ── La RELACIÓN también audita su propio gasto (A10) ─────────────────
+  // A11b abrió esto a los GRUPOS y dejó fuera a las relaciones, y el
+  // resultado era absurdo: la otra mitad de la pareja no podía ver el ticket
+  // que comparte ni decir qué consumió sin entrar por un enlace de invitado,
+  // a hacer algo que es suyo. Leer sigue siendo leer: la corrección
+  // administrativa (A11c) sigue exigiendo GRUPO.
+  it('una RELACIÓN audita el gasto que comparte', async () => {
     const f = db(PAREJA);
-    await assertFails(getDoc(doc(f, `${SR}/accounts/a1/tickets/t1/lines/l1`)));
-    await assertFails(getDocs(collection(f, `${SR}/participants`)));
+    await assertSucceeds(
+      getDoc(doc(f, `${SR}/accounts/a1/tickets/t1/lines/l1`)));
+    await assertSucceeds(getDocs(collection(f, `${SR}/participants`)));
     // El dueño de la sesión sigue leyendo la suya con normalidad.
     await assertSucceeds(
       getDoc(doc(db(JEFA), `${SR}/accounts/a1/tickets/t1/lines/l1`)));
+    // Y sigue sin haber autoridad administrativa en una relación.
+    await assertFails(updateDoc(
+      doc(f, `${SR}/accounts/a1/tickets/t1/lines/l1`), { name: 'Otra cosa' }));
   });
 
   it('una sesión SIN contexto no se abre por vincular un ticket a mano', async () => {

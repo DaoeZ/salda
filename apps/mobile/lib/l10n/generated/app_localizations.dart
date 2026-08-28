@@ -1612,6 +1612,24 @@ abstract class AppLocalizations {
   /// **'sin reclamar (para {payer})'**
   String unitResidual(String payer);
 
+  /// No description provided for @unitAssignTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Quién consume la unidad {number}?'**
+  String unitAssignTitle(int number);
+
+  /// No description provided for @unitAssignResidual.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin nadie marcado, esta unidad corre a cargo de {payer}.'**
+  String unitAssignResidual(String payer);
+
+  /// No description provided for @unitAssignShareHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Marca a varias personas para repartir esta unidad entre ellas.'**
+  String get unitAssignShareHint;
+
   /// No description provided for @unitCompactSummary.
   ///
   /// In es, this message translates to:

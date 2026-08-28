@@ -107,6 +107,24 @@ final canDeleteTicketProvider = Provider.autoDispose
       return session == null || session.summary.status == SessionStatus.open;
     });
 
+/// ¿Puedo repartir el consumo de OTRAS personas en este gasto? (A10)
+///
+/// Es una autoridad DISTINTA de corregir el contenido, aunque hoy la tenga
+/// el mismo conjunto de personas: quien subió el gasto y quien administra el
+/// grupo del que nació. Se declara aparte para que ampliar una no arrastre a
+/// la otra por accidente — repartir no da derecho a cambiar precios, y al
+/// revés tampoco, y las Rules lo separan igual.
+///
+/// La sesión cerrada es de solo lectura. Cuando no se puede leer su estado
+/// —quien administra el grupo no lee `sessions/{sid}`: ahí vive el
+/// `shareCode`— se ofrece y mandan las Rules.
+final canAssignConsumptionProvider = Provider.autoDispose
+    .family<bool, ({String sessionId, String spaceId})>((ref, key) {
+      if (!ref.watch(canCorrectTicketProvider(key))) return false;
+      final session = ref.watch(sessionDetailProvider(key.sessionId)).value;
+      return session == null || session.summary.status == SessionStatus.open;
+    });
+
 /// Líneas vivas de un ticket (P2.1): el creador ve elegir y elige él mismo.
 final ticketLinesProvider = StreamProvider.autoDispose
     .family<List<TicketLine>, String>(

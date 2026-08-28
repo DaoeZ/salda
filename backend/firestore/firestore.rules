@@ -315,6 +315,26 @@ service cloud.firestore {
         && isSpaceMember(sessionData(sid).spaceId);
     }
 
+    // ── Auditar el gasto desde SU contexto (A10) ────────────────────────
+    // Igual que `auditableByGroup` pero sin exigir que el contexto sea un
+    // GRUPO. Nació porque una RELACIÓN quedaba fuera de todo: la otra mitad
+    // de la pareja no podía leer el ticket que comparte con quien lo subió
+    // ni elegir lo que consumió, y tenía que entrar por un enlace de
+    // invitado a hacer algo que es suyo. Una relación son DOS personas que
+    // reparten ese gasto: ver la línea que les cobra no es un permiso nuevo,
+    // es el mínimo para participar.
+    //
+    // Sigue siendo LECTURA. La autoridad administrativa (corregir el
+    // contenido, A11c) sigue exigiendo `managesGroupOf`, que excluye
+    // relaciones: una pareja no adquiere jerarquía por esta vía.
+    function auditableByContext(sid) {
+      return canParticipate()
+        && sessionData(sid).get('contextModelVersion', 0) == 1
+        && sessionData(sid).get('spaceId', '') != ''
+        && exists(/databases/$(database)/documents/spaces/$(sessionData(sid).spaceId))
+        && isSpaceMember(sessionData(sid).spaceId);
+    }
+
     function claimedBy(sid, pid) {
       return get(/databases/$(database)/documents/sessions/$(sid)/participants/$(pid))
         .data.get('claimedByDevice', '');
@@ -1904,7 +1924,7 @@ service cloud.firestore {
         // demás no son suyos. Rules sí los consulta internamente con get()
         // para validar una identificación. El GRUPO sí los ve: sin el
         // nombre detrás de cada `pid` el reparto es ilegible (A11b).
-        allow read: if canRead(sid) || auditableByGroup(sid);
+        allow read: if canRead(sid) || auditableByContext(sid);
         allow create: if isOwner(sid) && isOpen(sid);
         allow delete: if isOwner(sid) && isOpen(sid);
         allow update: if
@@ -1929,7 +1949,7 @@ service cloud.firestore {
         // El grupo las lee para LLEGAR al ticket: un ticket vive en
         // `accounts/{aid}/tickets/{tid}` y las superficies que enlazan a él
         // solo tienen `sessionId` + `ticketId` (A11b).
-        allow read: if canRead(sid) || auditableByGroup(sid);
+        allow read: if canRead(sid) || auditableByContext(sid);
         allow create: if isOwner(sid) && isOpen(sid)
           && !('totals' in request.resource.data);
         allow update: if isOwner(sid) && isOpen(sid)
@@ -1943,7 +1963,7 @@ service cloud.firestore {
           // A11d: y quien ya no es miembro conserva EXACTAMENTE los tickets
           // en los que participó económicamente, ni uno más.
           allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
-            || auditableByGroup(sid) || hasTicketHistory(sid, tid);
+            || auditableByContext(sid) || hasTicketHistory(sid, tid);
           // spaceId (P4): un ticket pertenece a UN espacio como máximo y
           // solo puede vincularlo el dueño de la sesión a un espacio del
           // que sea miembro. '' o ausente = sin espacio (compatibilidad).
@@ -2000,7 +2020,7 @@ service cloud.firestore {
             // auditoría. El grupo LEE; escribir sigue siendo del dueño de
             // la sesión o del invitado sobre SU propia asignación (A11b).
             allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
-              || auditableByGroup(sid) || hasTicketHistory(sid, tid);
+              || auditableByContext(sid) || hasTicketHistory(sid, tid);
             allow create: if isOwner(sid) && isOpen(sid);
 
             // Retirar un producto que no estaba (A11c). Con él se van sus
@@ -2009,10 +2029,21 @@ service cloud.firestore {
             allow delete: if (isOwner(sid) && isOpen(sid))
               || (isOpen(sid) && managesTicket(sid, aid, tid));
 
-            allow update: if (isOwner(sid) && isOpen(sid))
-              || canPickOwnShare(sid, aid, tid)
-              || canPickOwnUnit(sid, aid, tid)
-              || canCorrectLine(sid, aid, tid);
+            // Dos familias que no se mezclan: repartir el consumo y
+            // corregir el contenido. El discriminante barato elige una sola,
+            // así que ningún camino —permitido o denegado— paga las lecturas
+            // de la otra. Repartir NUNCA puede colar un cambio de nombre,
+            // cantidad, precio o `unitIds`: la rama entera exige que lo
+            // único tocado sea `assignment`.
+            allow update: if onlyAssignmentChanged()
+              ? (
+                (isOwner(sid) && isOpen(sid))
+                || (usesUnitModel()
+                  ? (canPickOwnUnit(sid, aid, tid)
+                    || canAssignAsManager(sid, aid, tid))
+                  : canPickOwnShare(sid, aid, tid))
+              )
+              : ((isOwner(sid) && isOpen(sid)) || canCorrectLine(sid, aid, tid));
           }
         }
       }
@@ -2082,7 +2113,25 @@ service cloud.firestore {
     // siempre: `claimedBy(pid) == mi uid`. Un participante MANUAL, que no
     // reclama nada, sigue sin poder ser elegido por nadie.
     function participatesInSplit(sid) {
-      return hasGuestAccess(sid) || auditableByGroup(sid);
+      return hasGuestAccess(sid) || auditableByContext(sid);
+    }
+
+    // ¿La escritura toca SOLO el reparto? Discriminante barato que decide
+    // qué familia de reglas se evalúa. Sin él, una corrección de contenido
+    // recorría además las tres funciones de reparto —con sus get()— y una
+    // denegación agotaba el presupuesto de 1000 expresiones de Rules: el
+    // rechazo llegaba como «Unable to evaluate the expression», que no es
+    // una denegación, es quedarse sin gasolina a mitad.
+    function onlyAssignmentChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['assignment']);
+    }
+
+    // El modelo por UNIDADES (P2.2) y el histórico por pesos se excluyen
+    // mutuamente según lo que ya hay guardado, así que preguntarlo primero
+    // hace que solo se evalúe la familia que puede aplicar.
+    function usesUnitModel() {
+      return resource.data.assignment.get('schemaVersion', 0) == 2;
     }
 
     function canPickOwnShare(sid, aid, tid) {
@@ -2094,13 +2143,7 @@ service cloud.firestore {
       let newParts = request.resource.data.assignment.get('participants', {});
       let weight = newParts.get(editor, 1);
       let quantityMilli = request.resource.data.get('quantityMilli', 1000);
-      // Discriminante BARATO primero: elegir consumo solo toca
-      // `assignment`. Sin esto, una corrección de A11c recorría entera esta
-      // función —con sus get()— antes de morir, y la evaluación de la regla
-      // se quedaba sin presupuesto de expresiones.
-      return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['assignment'])
-        && participatesInSplit(sid)
+      return participatesInSplit(sid)
         && session.status == 'open'
         && mode == 'byItem'
         // Solo cambió SU entrada del mapa de participantes…
@@ -2120,36 +2163,106 @@ service cloud.firestore {
     // P2.2: un invitado cambia únicamente SU pertenencia a UNA unidad. El
     // mapa anidado permite que dos dispositivos compartan la misma unidad sin
     // sobrescribirse; unitIds limita los identificadores creados por el owner.
-    function canPickOwnUnit(sid, aid, tid) {
-      let session = sessionData(sid);
-      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
-      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+    // ── Forma de UNA escritura por unidad (P2.2 + A10) ──────────────────
+    // Toda la parte que NO depende de quién escribe: se toca una sola
+    // unidad, una sola persona dentro de ella, la unidad existe, el reparto
+    // no cambia de modelo y la procedencia queda firmada. Compartida por la
+    // autoselección y por la asignación administrativa para no evaluar dos
+    // veces lo mismo (presupuesto de Rules).
+    function validUnitWrite(target) {
       let assignment = request.resource.data.assignment;
-      let editor = assignment.get('lastEditorPid', '');
       let unitKey = assignment.get('lastEditedUnit', '');
       let oldUnits = resource.data.assignment.get('units', {});
       let newUnits = assignment.get('units', {});
       let oldMembers = oldUnits.get(unitKey, {});
       let newMembers = newUnits.get(unitKey, {});
-      let selected = newMembers.get(editor, false);
-      return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['assignment'])
-        && participatesInSplit(sid)
-        && session.status == 'open'
-        && mode == 'byItem'
-        && resource.data.assignment.get('schemaVersion', 0) == 2
+      let selected = newMembers.get(target, false);
+      let oldBy = resource.data.assignment.get('by', {});
+      let newBy = assignment.get('by', {});
+      let oldByUnit = oldBy.get(unitKey, {});
+      let newByUnit = newBy.get(unitKey, {});
+      return usesUnitModel()
         && assignment.keys().hasOnly([
-          'type', 'schemaVersion', 'units', 'lastEditorPid', 'lastEditedUnit'
+          'type', 'schemaVersion', 'units', 'by',
+          'lastEditorPid', 'lastEditedUnit'
         ])
         && assignment.type == 'units'
         && assignment.schemaVersion == 2
-        && editor != ''
+        && target != ''
         && unitKey != ''
         && resource.data.get('unitIds', ['u0']).hasAny([unitKey])
         && newUnits.diff(oldUnits).affectedKeys().hasOnly([unitKey])
-        && newMembers.diff(oldMembers).affectedKeys().hasOnly([editor])
+        && newMembers.diff(oldMembers).affectedKeys().hasOnly([target])
         && selected is bool
+        // ── Procedencia (A10) ──────────────────────────────────────────
+        // Quién asignó ESTA unidad a ESTA persona, ligado al par y no a la
+        // línea: una firma global se destruiría en cuanto otra persona
+        // tocara otra unidad. El actor lo pone el servidor —`request.auth`—,
+        // así que un cliente no puede atribuirle a otro lo que hace él. Al
+        // retirar la asignación se retira también la firma: nunca queda un
+        // actor sin asignación detrás.
+        && newBy.diff(oldBy).affectedKeys().hasOnly([unitKey])
+        && newByUnit.diff(oldByUnit).affectedKeys().hasOnly([target])
+        && (selected
+          // La firma es OPCIONAL aquí y OBLIGATORIA al asignar a otra
+          // persona (ver `canAssignAsManager`). Así la web de invitados
+          // —que solo se marca a sí misma y no la escribe— sigue
+          // funcionando sin cambios, y el invariante se mantiene: si no
+          // hay firma, la asignación es una autoselección.
+          ? newByUnit.get(target, request.auth.uid) == request.auth.uid
+          : !(target in newByUnit));
+    }
+
+    function canPickOwnUnit(sid, aid, tid) {
+      let session = sessionData(sid);
+      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+      let editor = request.resource.data.assignment.get('lastEditorPid', '');
+      return participatesInSplit(sid)
+        && session.status == 'open'
+        && mode == 'byItem'
+        && validUnitWrite(editor)
         && claimedBy(sid, editor) == request.auth.uid;
+    }
+
+    // ── Asignar el consumo de OTRA persona (A10) ─────────────────────────
+    // Quien administra el GRUPO del que nació el gasto reparte lo que sabe
+    // que consumió cada cual, sin esperar a que cada persona entre a
+    // reclamarlo — y sin que eso le dé nada sobre el CONTENIDO del ticket:
+    // esta rama solo se alcanza cuando la escritura toca únicamente
+    // `assignment`, así que el nombre, la cantidad y el precio siguen
+    // siendo territorio de A11c.
+    //
+    // El creador del gasto no pasa por aquí: como dueño de la sesión ya
+    // podía repartir, y esa autoridad es anterior a A10.
+    //
+    // Una RELACIÓN no entra: `managesGroupOf` la excluye a propósito. Su
+    // pareja no adquiere jerarquía; cada cual elige lo suyo y quien subió
+    // el gasto reparte como dueño de la sesión.
+    function canAssignAsManager(sid, aid, tid) {
+      let session = sessionData(sid);
+      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+      let assignment = request.resource.data.assignment;
+      let target = assignment.get('lastEditorPid', '');
+      let unitKey = assignment.get('lastEditedUnit', '');
+      let selected = assignment.get('units', {}).get(unitKey, {})
+        .get(target, false);
+      return session.status == 'open'
+        && mode == 'byItem'
+        && validUnitWrite(target)
+        // Asignar el consumo de otra persona SIEMPRE queda firmado: es la
+        // diferencia entre «Jorge se marcó esto» y «se lo asignó Edgar», y
+        // sin ella el reparto de un grupo no se puede explicar después.
+        && (!selected
+          || assignment.get('by', {}).get(unitKey, {}).get(target, '')
+            == request.auth.uid)
+        // El destinatario tiene que ser alguien del reparto, no un `pid`
+        // inventado, y seguir activo para recibir consumo NUEVO. Lo que ya
+        // estuviera asignado no se toca por dejar de estarlo.
+        && exists(/databases/$(database)/documents/sessions/$(sid)/participants/$(target))
+        && participantData(sid, target).get('active', true) == true
+        && managesGroupOf(ticket.get('spaceId', ''));
     }
 
     // ── Corregir el CONTENIDO de un producto (A11c) ──────────────────────
@@ -2163,16 +2276,11 @@ service cloud.firestore {
       let newUnitIds = request.resource.data.get('unitIds', []);
       let oldUnits = resource.data.assignment.get('units', {});
       let newUnits = request.resource.data.assignment.get('units', {});
-      // Igual que en las funciones de selección: primero lo barato. Una
-      // corrección SIEMPRE toca contenido (nombre, cantidad o importe), así
-      // que una autoasignación —que solo escribe `assignment`— se descarta
-      // aquí sin gastar una sola lectura.
+      let oldBy = resource.data.assignment.get('by', {});
+      let newBy = request.resource.data.assignment.get('by', {});
       return request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['name', 'quantityMilli', 'unitPrice', 'totalPrice',
             'unitIds', 'assignment'])
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['name', 'quantityMilli', 'unitPrice', 'totalPrice',
-              'unitIds'])
         && isOpen(sid)
         && managesTicket(sid, aid, tid)
         && request.resource.data.name is string
@@ -2188,6 +2296,11 @@ service cloud.firestore {
             == resource.data.assignment.get('schemaVersion', 0)
         && newUnits.keys().hasOnly(newUnitIds)
         && newUnits.diff(oldUnits).affectedKeys()
+            .hasOnly(oldUnitIds.removeAll(newUnitIds))
+        // A10: la procedencia sigue a su asignación. Al podar una unidad se
+        // retira también su firma —ni firma huérfana, ni ocasión de reescribir
+        // la de una unidad que sobrevive.
+        && newBy.diff(oldBy).affectedKeys()
             .hasOnly(oldUnitIds.removeAll(newUnitIds))
         // El reparto histórico por pesos no se toca en absoluto.
         && request.resource.data.assignment.get('participants', {})
