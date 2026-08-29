@@ -230,6 +230,100 @@ describe('A10: quién reparte el consumo (grupo)', () => {
   });
 });
 
+// ── La autoridad del creador no es una puerta trasera ──────────────────
+// El dueño de la sesión podía repartir desde antes de A10, y eso no se le
+// quita. Lo que se le quita es la rama que no validaba forma: con ella, un
+// cliente modificado suyo podía dejar «u0 → Jorge» sin decir quién lo puso.
+// No falsificaba a nadie —el UID lo pone el servidor—, pero borraba la
+// procedencia, que es justo lo que A10 prometía conservar.
+describe('A10: el creador reparte, pero con procedencia', () => {
+  it('se asigna a sí misma', () => assertSucceeds(asignar(ALBA, 'p1')));
+
+  it('asigna a un tercero firmando con su propio UID', async () => {
+    await assertSucceeds(asignar(ALBA, 'p2'));
+    const guardado = (await getDoc(doc(db(ALBA), G))).data();
+    assert.equal(guardado.assignment.by.u0.p2, ALBA);
+  });
+
+  it('NO puede asignar a un tercero sin firma', () =>
+    assertDeniegaLimpio(asignarSinFirma(ALBA, 'p2')));
+
+  it('NO puede asignar a un MANUAL sin firma', () =>
+    assertDeniegaLimpio(asignarSinFirma(ALBA, 'p3')));
+
+  it('NO puede atribuir la asignación a otra persona', () =>
+    assertDeniegaLimpio(asignar(ALBA, 'p2', { firma: JORGE })));
+
+  it('retira la asignación de un tercero llevándose su firma', async () => {
+    await assertSucceeds(asignar(ALBA, 'p2'));
+    await assertSucceeds(asignar(ALBA, 'p2', { selected: false }));
+    const guardado = (await getDoc(doc(db(ALBA), G))).data();
+    assert.deepEqual(guardado.assignment.units.u0, {});
+    assert.deepEqual(guardado.assignment.by.u0, {});
+  });
+
+  it('no retira una asignación dejando la firma huérfana', () =>
+    assertDeniegaLimpio(updateDoc(doc(db(ALBA), G), {
+      'assignment.type': 'units',
+      'assignment.schemaVersion': 2,
+      'assignment.lastEditorPid': 'p2',
+      'assignment.lastEditedUnit': 'u0',
+      'assignment.units.u0.p2': deleteField(),
+      'assignment.by.u0.p2': ALBA,
+    })));
+
+  it('tampoco reparte de más en una sola escritura', () =>
+    assertDeniegaLimpio(updateDoc(doc(db(ALBA), G), {
+      'assignment.type': 'units',
+      'assignment.schemaVersion': 2,
+      'assignment.lastEditorPid': 'p2',
+      'assignment.lastEditedUnit': 'u0',
+      'assignment.units.u0.p2': true,
+      'assignment.units.u1.p3': true,
+      'assignment.by.u0.p2': ALBA,
+      'assignment.by.u1.p3': ALBA,
+    })));
+
+  // La otra mitad del mismo agujero: si repartir sin firma se deniega pero
+  // «corregir el contenido» acepta cualquier assignment, la puerta sigue
+  // abierta, solo que con un nombre distinto en la misma escritura.
+  it('no cuela una asignación junto al dato fuente de la línea', async () => {
+    for (const extra of [{ name: 'Otra cosa' }, { totalPrice: 1 },
+      { quantityMilli: 5000 }, { unitIds: ['u0', 'u1', 'u2'] }]) {
+      await assertDeniegaLimpio(updateDoc(doc(db(ALBA), G), {
+        ...extra,
+        'assignment.units.u0.p2': true,
+      }));
+    }
+  });
+
+  it('pero sigue corrigiendo el contenido y podando unidades', async () => {
+    await assertSucceeds(updateDoc(doc(db(ALBA), G), { name: 'Fanta' }));
+    await assertSucceeds(asignar(ALBA, 'p2', { unit: 'u1' }));
+    await assertSucceeds(updateDoc(doc(db(ALBA), G), {
+      quantityMilli: 1000,
+      unitIds: ['u0'],
+      'assignment.units.u1': deleteField(),
+      'assignment.by.u1': deleteField(),
+    }));
+  });
+
+  it('y el reparto histórico por pesos no cambia para nadie', async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(
+      doc(ctx.firestore(), 'sessions/sg1/accounts/a1/tickets/t1/lines/l2'),
+      {
+        name: 'Tapa', totalPrice: 400, quantityMilli: 1000, order: 1,
+        assignment: { type: 'unassigned', participants: {} },
+      }));
+    const L2 = 'sessions/sg1/accounts/a1/tickets/t1/lines/l2';
+    await assertSucceeds(updateDoc(doc(db(ALBA), L2), {
+      'assignment.type': 'one',
+      'assignment.lastEditorPid': 'p2',
+      'assignment.participants.p2': 1,
+    }));
+  });
+});
+
 describe('A10: sobre quién se puede asignar', () => {
   it('un participante que ya no está activo no recibe consumo nuevo', () =>
     assertDeniegaLimpio(asignar(ADMIN, 'p4')));

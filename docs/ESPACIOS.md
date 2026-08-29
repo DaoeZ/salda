@@ -644,7 +644,20 @@ anterior—. Rules exigen que ese uid sea el de quien escribe, así que nadie
 puede atribuir a otro lo que hace él; la firma se retira con su asignación, y
 al podar unidades (A11c) se va con ellas. Es obligatoria al asignar a un
 tercero y opcional al marcarse uno mismo, porque la web de invitados no la
-escribe: **si no hay firma, la asignación es una autoselección**.
+escribe: **si no hay firma, la asignación es una autoselección**. Esa
+convención solo se sostiene porque la rama sin firma exige además que el `pid`
+tocado esté reclamado por quien escribe (`claimedBy(pid) == uid`): sin firma y
+con el `pid` de otra persona no pasa por ninguna puerta.
+
+**Nadie escribe una asignación sin forma, tampoco el creador.** La autoridad
+del dueño de la sesión es anterior a A10 y no se le quita —se asigna a sí
+mismo, a terceros y a manuales, comparte, retira y reasigna—, pero desde el
+cierre de A10 pasa por el mismo protocolo: bajo el modelo por unidades ya no
+tiene una rama que acepte cualquier `assignment`. Antes, un cliente modificado
+suyo podía dejar «u0 → Jorge» sin firma: no falsificaba a nadie (el uid lo
+pone el servidor) pero borraba la procedencia. La frontera se cierra por las
+dos caras —repartir y corregir—, porque colar la asignación junto a un nombre
+o un precio habría sido la misma puerta con otro nombre.
 
 **La relación también audita su gasto.** A11b abrió la lectura del ticket a
 los GRUPOS y dejó fuera a las relaciones, con un resultado absurdo: la otra
@@ -737,11 +750,12 @@ lo que dos personas se deben; el saldo autoritativo es el de P5.
 - `economic_names_test.dart` (A11d): el saldo de un ex-miembro frente a una
   persona MANUAL se nombra por el derecho histórico, y sin derecho no se
   inventa ningún nombre.
-- `unit_assignment.test.mjs` (A10): 32 casos — matriz de autoridad en grupo y
+- `unit_assignment.test.mjs` (A10): 43 casos — matriz de autoridad en grupo y
   relación, destinatarios válidos, compartir/retirar/reasignar, firma
   infalsificable que sobrevive a tocar otra unidad, y que repartir no cuela
-  contenido. Cada denegación se comprueba además LIMPIA: no por agotar el
-  presupuesto de expresiones de Rules.
+  contenido. Incluye al creador del gasto: reparte y retira, pero no sin
+  procedencia ni junto al dato fuente de la línea. Cada denegación se comprueba
+  además LIMPIA: no por agotar el presupuesto de expresiones de Rules.
 - `unit_assignment_test.dart` (A10): 14 casos — a quién se le ofrece el
   reparto, qué se escribe, y que la escritura no pisa lo que ya había.
 - `assignedConsumption.it.test.ts` (A10): la economía de una asignación hecha

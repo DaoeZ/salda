@@ -2035,15 +2035,23 @@ service cloud.firestore {
             // de la otra. Repartir NUNCA puede colar un cambio de nombre,
             // cantidad, precio o `unitIds`: la rama entera exige que lo
             // único tocado sea `assignment`.
+            //
+            // El dueño de la sesión ya NO tiene una rama libre bajo el
+            // modelo por unidades: su autoridad es anterior a A10, pero
+            // autoridad amplia no es permiso para escribir un documento sin
+            // forma. Con la rama libre podía dejar «u0 → Jorge» sin decir
+            // quién lo puso: no falsificaba a nadie, borraba la procedencia.
+            // Ahora reparte por la misma puerta que los demás. El reparto
+            // histórico por pesos se queda exactamente como estaba.
             allow update: if onlyAssignmentChanged()
-              ? (
-                (isOwner(sid) && isOpen(sid))
-                || (usesUnitModel()
-                  ? (canPickOwnUnit(sid, aid, tid)
-                    || canAssignAsManager(sid, aid, tid))
-                  : canPickOwnShare(sid, aid, tid))
-              )
-              : ((isOwner(sid) && isOpen(sid)) || canCorrectLine(sid, aid, tid));
+              ? (usesUnitModel()
+                ? (canPickOwnUnit(sid, aid, tid)
+                  || canAssignWithProvenance(sid, aid, tid))
+                : ((isOwner(sid) && isOpen(sid))
+                  || canPickOwnShare(sid, aid, tid)))
+              : ((isOwner(sid) && isOpen(sid)
+                  && (!usesUnitModel() || unitsOnlyPruned()))
+                || canCorrectLine(sid, aid, tid));
           }
         }
       }
@@ -2131,7 +2139,29 @@ service cloud.firestore {
     // mutuamente según lo que ya hay guardado, así que preguntarlo primero
     // hace que solo se evalúe la familia que puede aplicar.
     function usesUnitModel() {
-      return resource.data.assignment.get('schemaVersion', 0) == 2;
+      return resource.data.get('assignment', {}).get('schemaVersion', 0) == 2;
+    }
+
+    // Corregir el CONTENIDO puede podar las unidades que dejan de existir, y
+    // nada más: el reparto solo pierde lo que se lleva la poda. Con esto,
+    // colar una asignación en la misma escritura que un nombre o un precio
+    // deja de ser una vía —también para el dueño de la sesión, que es quien
+    // tenía la rama sin validar—. Vale para el modelo por unidades y para el
+    // histórico por pesos, que aquí solo puede quedarse igual.
+    function unitsOnlyPruned() {
+      let pruned = resource.data.get('unitIds', [])
+        .removeAll(request.resource.data.get('unitIds', []));
+      let old = resource.data.get('assignment', {});
+      let now = request.resource.data.get('assignment', {});
+      return now.get('type', '') == old.get('type', '')
+        && now.get('schemaVersion', 0) == old.get('schemaVersion', 0)
+        && now.get('units', {}).diff(old.get('units', {}))
+            .affectedKeys().hasOnly(pruned)
+        // La procedencia sigue a su asignación (A10): ni firma huérfana, ni
+        // ocasión de reescribir la de una unidad que sobrevive.
+        && now.get('by', {}).diff(old.get('by', {}))
+            .affectedKeys().hasOnly(pruned)
+        && now.get('participants', {}) == old.get('participants', {});
     }
 
     function canPickOwnShare(sid, aid, tid) {
@@ -2205,7 +2235,7 @@ service cloud.firestore {
         && newByUnit.diff(oldByUnit).affectedKeys().hasOnly([target])
         && (selected
           // La firma es OPCIONAL aquí y OBLIGATORIA al asignar a otra
-          // persona (ver `canAssignAsManager`). Así la web de invitados
+          // persona (ver `canAssignWithProvenance`). Así la web de invitados
           // —que solo se marca a sí misma y no la escribe— sigue
           // funcionando sin cambios, y el invariante se mantiene: si no
           // hay firma, la asignación es una autoselección.
@@ -2233,13 +2263,17 @@ service cloud.firestore {
     // `assignment`, así que el nombre, la cantidad y el precio siguen
     // siendo territorio de A11c.
     //
-    // El creador del gasto no pasa por aquí: como dueño de la sesión ya
-    // podía repartir, y esa autoridad es anterior a A10.
+    // El creador del gasto pasa por AQUÍ. Podía repartir desde antes de A10
+    // —esa autoridad no se le quita: se asigna a sí mismo, a terceros y a
+    // manuales, comparte, retira y reasigna—, pero tiene que hacerlo con
+    // una escritura válida del protocolo. Su rama antigua no validaba forma
+    // y con ella un cliente modificado suyo podía dejar una asignación sin
+    // firma: sin poder atribuírsela a nadie más, pero sin procedencia.
     //
-    // Una RELACIÓN no entra: `managesGroupOf` la excluye a propósito. Su
-    // pareja no adquiere jerarquía; cada cual elige lo suyo y quien subió
-    // el gasto reparte como dueño de la sesión.
-    function canAssignAsManager(sid, aid, tid) {
+    // Una RELACIÓN no da jerarquía: `managesGroupOf` la excluye a propósito.
+    // Cada cual elige lo suyo y quien subió el gasto reparte como dueño de
+    // la sesión, que es exactamente lo que ya podía hacer.
+    function canAssignWithProvenance(sid, aid, tid) {
       let session = sessionData(sid);
       let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
       let mode = ticket.get('splitModeOverride', session.splitModeDefault);
@@ -2262,22 +2296,18 @@ service cloud.firestore {
         // estuviera asignado no se toca por dejar de estarlo.
         && exists(/databases/$(database)/documents/sessions/$(sid)/participants/$(target))
         && participantData(sid, target).get('active', true) == true
-        && managesGroupOf(ticket.get('spaceId', ''));
+        && (isOwner(sid) || managesGroupOf(ticket.get('spaceId', '')));
     }
 
     // ── Corregir el CONTENIDO de un producto (A11c) ──────────────────────
     // Quien administra el grupo arregla lo que se leyó mal: el nombre, la
     // cantidad, el precio. Lo que NO puede es repartir el consumo de los
-    // demás —eso sería A10 y no existe—, así que el reparto solo puede
-    // PERDER las unidades que dejan de existir; las que siguen vivas quedan
-    // intactas y nadie entra ni sale del consumo ajeno por esta vía.
+    // demás —eso es A10 y tiene su propia puerta, con su firma—, así que por
+    // aquí el reparto solo puede PERDER las unidades que dejan de existir;
+    // las que siguen vivas quedan intactas y nadie entra ni sale del consumo
+    // ajeno por esta vía.
     function canCorrectLine(sid, aid, tid) {
-      let oldUnitIds = resource.data.get('unitIds', []);
       let newUnitIds = request.resource.data.get('unitIds', []);
-      let oldUnits = resource.data.assignment.get('units', {});
-      let newUnits = request.resource.data.assignment.get('units', {});
-      let oldBy = resource.data.assignment.get('by', {});
-      let newBy = request.resource.data.assignment.get('by', {});
       return request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['name', 'quantityMilli', 'unitPrice', 'totalPrice',
             'unitIds', 'assignment'])
@@ -2289,22 +2319,11 @@ service cloud.firestore {
         && request.resource.data.totalPrice >= 0
         && request.resource.data.get('quantityMilli', 1000) is int
         && request.resource.data.get('quantityMilli', 1000) > 0
-        // Ni cambia de modelo de reparto ni inventa unidades.
-        && request.resource.data.assignment.get('type', '')
-            == resource.data.assignment.get('type', '')
-        && request.resource.data.assignment.get('schemaVersion', 0)
-            == resource.data.assignment.get('schemaVersion', 0)
-        && newUnits.keys().hasOnly(newUnitIds)
-        && newUnits.diff(oldUnits).affectedKeys()
-            .hasOnly(oldUnitIds.removeAll(newUnitIds))
-        // A10: la procedencia sigue a su asignación. Al podar una unidad se
-        // retira también su firma —ni firma huérfana, ni ocasión de reescribir
-        // la de una unidad que sobrevive.
-        && newBy.diff(oldBy).affectedKeys()
-            .hasOnly(oldUnitIds.removeAll(newUnitIds))
-        // El reparto histórico por pesos no se toca en absoluto.
-        && request.resource.data.assignment.get('participants', {})
-            == resource.data.assignment.get('participants', {});
+        // Ni cambia de modelo de reparto, ni inventa unidades, ni reparte:
+        // el reparto solo puede PERDER lo que se lleva la poda.
+        && request.resource.data.assignment.get('units', {})
+            .keys().hasOnly(newUnitIds)
+        && unitsOnlyPruned();
     }
   }
 }
