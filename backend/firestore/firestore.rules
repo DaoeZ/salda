@@ -2234,12 +2234,19 @@ service cloud.firestore {
         && newBy.diff(oldBy).affectedKeys().hasOnly([unitKey])
         && newByUnit.diff(oldByUnit).affectedKeys().hasOnly([target])
         && (selected
-          // La firma es OPCIONAL aquí y OBLIGATORIA al asignar a otra
-          // persona (ver `canAssignWithProvenance`). Así la web de invitados
-          // —que solo se marca a sí misma y no la escribe— sigue
-          // funcionando sin cambios, y el invariante se mantiene: si no
-          // hay firma, la asignación es una autoselección.
-          ? newByUnit.get(target, request.auth.uid) == request.auth.uid
+          ? (oldMembers.get(target, false) == true
+            // La asignación ya existía: su procedencia NO se reescribe.
+            // Cambiar la firma de una asignación viva convertiría «me lo
+            // asignó Edgar» en «me lo puse yo», que es exactamente lo que
+            // A10 promete poder distinguir.
+            ? newByUnit.get(target, '') == oldByUnit.get(target, '')
+            // Asignación nueva: la firma es OPCIONAL aquí y OBLIGATORIA al
+            // asignar a otra persona (ver `canAssignWithProvenance`). Así la
+            // web de invitados —que solo se marca a sí misma y no la
+            // escribe— sigue funcionando, y el invariante se mantiene: si no
+            // hay firma, la asignación es una autoselección.
+            : newByUnit.get(target, request.auth.uid) == request.auth.uid)
+          // Se retira: la procedencia se va con su asignación.
           : !(target in newByUnit));
     }
 

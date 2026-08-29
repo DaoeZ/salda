@@ -48,6 +48,39 @@ export function unitsForQuantity(quantityMilli: number): number {
 }
 
 /**
+ * Escritura quirúrgica de MI pertenencia a UNA unidad (P2.2), en rutas
+ * punteadas: dos dispositivos en la misma unidad no se pisan.
+ *
+ * A10: la procedencia vive por par (unidad, persona) en `assignment.by`, y
+ * desde que alguien con autoridad puede asignar el consumo de otro, esa
+ * entrada puede existir aunque no la escribiera yo. Al retirar mi consumo
+ * hay que retirarla: mientras la asignación existe conserva su procedencia;
+ * cuando deja de existir, la procedencia se va con ella. Sin este borrado, la
+ * firma quedaba huérfana y Rules —con razón— rechazaba la escritura entera,
+ * así que quien había sido asignado por un administrador no podía
+ * desmarcarse. Marcarse NO firma: sin firma, la asignación es autoselección,
+ * y las reglas ya exigen que el pid sea de quien escribe.
+ *
+ * `remove` es el centinela de borrado del SDK (`deleteField()`), inyectado
+ * para que este módulo siga sin depender de Firebase.
+ */
+export function unitUpdate(
+  unit: number,
+  pid: string,
+  selected: boolean,
+  remove: unknown,
+): Record<string, unknown> {
+  return {
+    'assignment.type': 'units',
+    'assignment.schemaVersion': 2,
+    'assignment.lastEditorPid': pid,
+    'assignment.lastEditedUnit': `u${unit}`,
+    [`assignment.units.u${unit}.${pid}`]: selected ? true : remove,
+    ...(selected ? {} : { [`assignment.by.u${unit}.${pid}`]: remove }),
+  };
+}
+
+/**
  * Fija MIS unidades reclamadas (0 = quitarme). Las reglas validan que el
  * peso sea entero y no supere las unidades de la línea.
  */

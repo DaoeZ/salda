@@ -10,8 +10,48 @@ import {
   unitConsumers,
   unitIsPickedBy,
   unitsForQuantity,
+  unitUpdate,
   usesUnitModel,
 } from './assignment';
+
+// A10: la procedencia (`assignment.by`) va con su asignación. Si al
+// desmarcarme dejo la firma detrás, Rules rechaza la escritura entera —y con
+// razón: una firma sin asignación no explica nada—, así que quien fue
+// asignado por un administrador se quedaba sin poder soltar el producto.
+describe('unitUpdate (contrato A10 con las reglas)', () => {
+  const BORRAR = Symbol('deleteField');
+
+  it('marcarse toca SOLO mi entrada y no firma nada', () => {
+    expect(unitUpdate(0, 'p2', true, BORRAR)).toEqual({
+      'assignment.type': 'units',
+      'assignment.schemaVersion': 2,
+      'assignment.lastEditorPid': 'p2',
+      'assignment.lastEditedUnit': 'u0',
+      'assignment.units.u0.p2': true,
+    });
+  });
+
+  it('desmarcarse retira mi asignación Y su procedencia, del mismo par', () => {
+    expect(unitUpdate(1, 'p2', false, BORRAR)).toEqual({
+      'assignment.type': 'units',
+      'assignment.schemaVersion': 2,
+      'assignment.lastEditorPid': 'p2',
+      'assignment.lastEditedUnit': 'u1',
+      'assignment.units.u1.p2': BORRAR,
+      'assignment.by.u1.p2': BORRAR,
+    });
+  });
+
+  it('no toca a nadie más: ni otra unidad ni otro participante', () => {
+    const claves = Object.keys(unitUpdate(0, 'p2', false, BORRAR));
+    expect(claves.filter((k) => k.startsWith('assignment.units.'))).toEqual([
+      'assignment.units.u0.p2',
+    ]);
+    expect(claves.filter((k) => k.startsWith('assignment.by.'))).toEqual([
+      'assignment.by.u0.p2',
+    ]);
+  });
+});
 
 describe('toggleSelf (contrato con las reglas de Firestore)', () => {
   it('marcarse en línea vacía → one con peso 1 y lastEditorPid', () => {

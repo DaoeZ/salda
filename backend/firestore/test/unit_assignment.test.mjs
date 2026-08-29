@@ -43,17 +43,23 @@ const JORGE = 'uid-jorge'; // miembro normal, participante p2
 const PAREJA = 'uid-pareja'; // la otra mitad de la relación, p2 en sr1
 const AJENA = 'uid-ajena'; // administra OTRO grupo
 const FUERA = 'uid-fuera'; // ni miembro ni nada
+const INVITADA = 'uid-invitada'; // anónima con guestAccess, reclama p2
 
 const G = 'sessions/sg1/accounts/a1/tickets/t1/lines/l1';
 const R = 'sessions/sr1/accounts/a1/tickets/t1/lines/l1';
 
 const db = (uid) =>
   env
-    .authenticatedContext(uid, {
-      email: `${uid}@salda.test`,
-      email_verified: true,
-      firebase: { sign_in_provider: 'password' },
-    })
+    .authenticatedContext(
+      uid,
+      uid === INVITADA
+        ? { firebase: { sign_in_provider: 'anonymous' } }
+        : {
+            email: `${uid}@salda.test`,
+            email_verified: true,
+            firebase: { sign_in_provider: 'password' },
+          },
+    )
     .firestore();
 
 /** Una asignación tal y como la escribe la app: par (unidad, persona). */
@@ -169,6 +175,14 @@ beforeEach(async () => {
       await setDoc(doc(f, `sessions/${sid}/participants/p3`), {
         name: 'Tete', isOwner: false, order: 2, active: true,
         claimedByDevice: '', manualId: 'm-tete',
+      });
+      // Invitada del enlace: sin cuenta social, reclama p5 desde la web.
+      await setDoc(doc(f, `sessions/${sid}/participants/p5`), {
+        name: 'Invitada', isOwner: false, order: 4, active: true,
+        claimedByDevice: INVITADA,
+      });
+      await setDoc(doc(f, `sessions/${sid}/guestAccess/${INVITADA}`), {
+        shareCode: 'SECRET-CODE-16CHARS',
       });
       // Alguien que ya no participa: no recibe consumo NUEVO.
       await setDoc(doc(f, `sessions/${sid}/participants/p4`), {
@@ -426,6 +440,62 @@ describe('A10: repartir NO es editar el gasto', () => {
 
   it('no se cuelan unidades nuevas', () =>
     assertDeniegaLimpio(conContenido(ADMIN, { unitIds: ['u0', 'u1', 'u2'] })));
+});
+
+// ── Soltar lo que te asignó otra persona ────────────────────────────────
+// El caso que A10 dejó roto: si un administrador te asigna una unidad, esa
+// asignación viene FIRMADA. Al desmarcarte hay que retirar también la firma
+// —una procedencia sin asignación detrás no explica nada—, y la web de
+// invitados no lo hacía: borraba `units` y dejaba `by`, así que Rules
+// rechazaba la escritura entera y quedabas atrapado en un consumo ajeno.
+describe('A10: retirar el consumo que te asignaron', () => {
+  it('la invitada suelta lo que le asignó el administrador', async () => {
+    await assertSucceeds(asignar(ADMIN, 'p5'));
+    await assertSucceeds(asignar(INVITADA, 'p5', { selected: false }));
+    const guardado = (await getDoc(doc(db(ALBA), G))).data();
+    assert.deepEqual(guardado.assignment.units.u0, {});
+    assert.deepEqual(guardado.assignment.by.u0, {});
+  });
+
+  it('y no se lleva por delante a quien comparte la unidad', async () => {
+    await assertSucceeds(asignar(ADMIN, 'p5'));
+    await assertSucceeds(asignar(ADMIN, 'p3'));
+    await assertSucceeds(asignar(INVITADA, 'p5', { selected: false }));
+    const guardado = (await getDoc(doc(db(ALBA), G))).data();
+    assert.deepEqual(guardado.assignment.units.u0, { p3: true });
+    assert.deepEqual(guardado.assignment.by.u0, { p3: ADMIN });
+  });
+
+  it('pero no suelta el consumo de OTRA persona', async () => {
+    await assertSucceeds(asignar(ADMIN, 'p3'));
+    await assertDeniegaLimpio(asignar(INVITADA, 'p3', { selected: false }));
+  });
+
+  it('ni borra procedencia ajena dejando la asignación en pie', async () => {
+    await assertSucceeds(asignar(ADMIN, 'p5'));
+    await assertDeniegaLimpio(updateDoc(doc(db(INVITADA), G), {
+      'assignment.type': 'units',
+      'assignment.schemaVersion': 2,
+      'assignment.lastEditorPid': 'p5',
+      'assignment.lastEditedUnit': 'u0',
+      'assignment.by.u0.p5': deleteField(),
+    }));
+  });
+
+  // Mientras la asignación existe conserva su procedencia: reescribirla
+  // convertiría «me lo asignó el administrador» en «me lo puse yo».
+  it('ni se apropia de la firma de una asignación viva', async () => {
+    await assertSucceeds(asignar(ADMIN, 'p5'));
+    await assertDeniegaLimpio(asignar(INVITADA, 'p5', { firma: INVITADA }));
+    await assertDeniegaLimpio(asignar(INVITADA, 'p5', { firma: ALBA }));
+    const guardado = (await getDoc(doc(db(ALBA), G))).data();
+    assert.equal(guardado.assignment.by.u0.p5, ADMIN);
+  });
+
+  it('y sigue eligiendo lo suyo sin firmar, como siempre', async () => {
+    await assertSucceeds(asignarSinFirma(INVITADA, 'p5'));
+    await assertDeniegaLimpio(asignarSinFirma(INVITADA, 'p2'));
+  });
 });
 
 describe('A10: relaciones', () => {

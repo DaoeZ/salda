@@ -382,5 +382,35 @@ void main() {
       expect((assignment['units'] as Map)['u0'], {'p2': true, 'p3': true});
       expect((assignment['by'] as Map)['u0'], {'p2': 'admin', 'p3': 'owner'});
     });
+
+    // Mientras la asignación existe conserva su procedencia; cuando deja de
+    // existir, la procedencia se va con ella. Una firma huérfana no explica
+    // nada y las reglas rechazan la escritura entera, así que retirar el
+    // consumo que asignó OTRA persona tiene que llevarse también su firma.
+    test('retirar el consumo se lleva su firma y no toca la ajena', () async {
+      await sembrar();
+      await firestore.doc(linePath).update({
+        'assignment.units.u0.p2': true,
+        'assignment.by.u0.p2': 'admin',
+        'assignment.units.u0.p3': true,
+        'assignment.by.u0.p3': 'admin',
+      });
+      final repo = FirestoreSessionRepository(
+        firestore: firestore,
+        uid: () => 'p2-device',
+        shareCodeFactory: () => 'X',
+      );
+
+      await repo.setUnitConsumer(
+        linePath,
+        unit: 0,
+        participantId: 'p2',
+        selected: false,
+      );
+
+      final assignment = await asignacion();
+      expect((assignment['units'] as Map)['u0'], {'p3': true});
+      expect((assignment['by'] as Map)['u0'], {'p3': 'admin'});
+    });
   });
 }

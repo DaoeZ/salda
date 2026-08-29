@@ -28,6 +28,7 @@ import {
   setUnits,
   toggleSelf,
   unitIsPickedBy,
+  unitUpdate,
   usesUnitModel,
   type Assignment,
 } from './assignment';
@@ -276,13 +277,10 @@ class GuestSession {
    */
   async setLineUnit(line: LineInfo, unit: number, selected: boolean): Promise<void> {
     if (!this.myPid) return;
-    await updateDoc(doc(db, line.path), {
-      'assignment.type': 'units',
-      'assignment.schemaVersion': 2,
-      'assignment.lastEditorPid': this.myPid,
-      'assignment.lastEditedUnit': `u${unit}`,
-      [`assignment.units.u${unit}.${this.myPid}`]: selected ? true : deleteField(),
-    });
+    await updateDoc(
+      doc(db, line.path),
+      unitUpdate(unit, this.myPid, selected, deleteField()),
+    );
   }
 
   /**

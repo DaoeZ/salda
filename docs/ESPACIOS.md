@@ -649,6 +649,15 @@ convención solo se sostiene porque la rama sin firma exige además que el `pid`
 tocado esté reclamado por quien escribe (`claimedBy(pid) == uid`): sin firma y
 con el `pid` de otra persona no pasa por ninguna puerta.
 
+**Mientras la asignación vive, su procedencia no se reescribe.** Sobre un par
+(unidad, persona) que ya estaba asignado, `by` solo puede quedarse igual:
+cambiarlo convertiría «me lo asignó Edgar» en «me lo puse yo». Cuando la
+asignación se retira, la firma se retira con ella —en la MISMA escritura—, y
+quien suelta su consumo tiene que borrar las dos entradas aunque la firma sea
+de otra persona. Eso es lo que le permite soltar lo que un administrador le
+asignó sin poder tocar nada más: no puede retirar el consumo ajeno, ni dejar
+una firma huérfana, ni borrar procedencia ajena dejando la asignación en pie.
+
 **Nadie escribe una asignación sin forma, tampoco el creador.** La autoridad
 del dueño de la sesión es anterior a A10 y no se le quita —se asigna a sí
 mismo, a terceros y a manuales, comparte, retira y reasigna—, pero desde el
@@ -750,12 +759,15 @@ lo que dos personas se deben; el saldo autoritativo es el de P5.
 - `economic_names_test.dart` (A11d): el saldo de un ex-miembro frente a una
   persona MANUAL se nombra por el derecho histórico, y sin derecho no se
   inventa ningún nombre.
-- `unit_assignment.test.mjs` (A10): 43 casos — matriz de autoridad en grupo y
+- `unit_assignment.test.mjs` (A10): 49 casos — matriz de autoridad en grupo y
   relación, destinatarios válidos, compartir/retirar/reasignar, firma
   infalsificable que sobrevive a tocar otra unidad, y que repartir no cuela
   contenido. Incluye al creador del gasto: reparte y retira, pero no sin
-  procedencia ni junto al dato fuente de la línea. Cada denegación se comprueba
-  además LIMPIA: no por agotar el presupuesto de expresiones de Rules.
+  procedencia ni junto al dato fuente de la línea. Y a la invitada del enlace:
+  suelta lo que le asignó un administrador —con su firma— sin poder soltar el
+  consumo ajeno ni apropiarse de una procedencia viva. Cada denegación se
+  comprueba además LIMPIA: no por agotar el presupuesto de expresiones de
+  Rules.
 - `unit_assignment_test.dart` (A10): 14 casos — a quién se le ofrece el
   reparto, qué se escribe, y que la escritura no pisa lo que ya había.
 - `assignedConsumption.it.test.ts` (A10): la economía de una asignación hecha
