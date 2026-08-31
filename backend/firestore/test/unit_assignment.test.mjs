@@ -69,6 +69,10 @@ const asignar = (
   { unit = 'u0', path = G, selected = true, firma } = {},
 ) => {
   const rubrica = firma === undefined ? actor : firma;
+  // `firma: null` = escritura SIN procedencia, byte a byte la que manda el
+  // cliente desde A3 cuando alguien se marca a sí mismo: el par se pone y la
+  // firma se retira, porque marcarse uno mismo no tiene procedencia que
+  // contar.
   return updateDoc(doc(db(actor), path), {
     'assignment.type': 'units',
     'assignment.schemaVersion': 2,
@@ -406,6 +410,35 @@ describe('A10: la firma no se puede falsear', () => {
 
   it('y si la firma, tiene que ser la suya', () =>
     assertDeniegaLimpio(asignar(JORGE, 'p2', { firma: ALBA })));
+
+  // A2/A3: la denegación espuria que el cliente se provocaba solo. Cuando
+  // firmaba TODA selección, volver a marcar una casilla que ya estaba
+  // marcada —una pantalla un instante desfasada basta— intentaba estampar
+  // una firma sobre una asignación viva, y Rules lo rechazaba con razón: la
+  // app enseñaba un error por una escritura que no cambiaba nada. Sin firma
+  // la escritura es idempotente y pasa.
+  it('volver a marcar lo tuyo, ya marcado, no choca con ninguna firma',
+    async () => {
+      await assertSucceeds(asignar(JORGE, 'p2', { firma: null }));
+      await assertSucceeds(asignar(JORGE, 'p2', { firma: null }));
+      const guardado = (await getDoc(doc(db(ALBA), G))).data();
+      assert.equal(guardado.assignment.units.u0.p2, true);
+      // Y sigue siendo lo que es: una autoselección, sin procedencia.
+      assert.equal(guardado.assignment.by?.u0?.p2, undefined);
+    });
+
+  // Lo que A3 NO arregla, y conviene tener escrito: quien administra sigue
+  // sin poder tocar una casilla que su dueño ya se marcó. La asignación
+  // existe y su procedencia —vacía: es una autoselección— no se reescribe,
+  // así que firmar la deniega, y no firmar también, porque asignar por otra
+  // persona exige firma. Es una limitación de Rules, no del cliente; lo que
+  // se fija aquí es que la denegación sea LIMPIA y no un presupuesto agotado.
+  it('la admin todavía no puede marcar lo que su dueño autoseleccionó',
+    async () => {
+      await assertSucceeds(asignar(JORGE, 'p2', { firma: null }));
+      await assertDeniegaLimpio(asignar(JEFA, 'p2'));
+      await assertDeniegaLimpio(asignar(JEFA, 'p2', { firma: null }));
+    });
 
   it('la firma de una asignación NO se pierde al tocar otra unidad',
     async () => {

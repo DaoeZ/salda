@@ -493,22 +493,34 @@ class FirestoreSessionRepository implements SessionRepository {
     required int unit,
     required String participantId,
     required bool selected,
-  }) => firestore.doc(linePath).update({
-    'assignment.type': 'units',
-    'assignment.schemaVersion': 2,
-    'assignment.lastEditorPid': participantId,
-    'assignment.lastEditedUnit': 'u$unit',
-    'assignment.units.u$unit.$participantId': selected
-        ? true
-        : FieldValue.delete(),
-    // Procedencia por PAR (unidad, persona), no por línea (A10): desde que
-    // alguien puede asignar el consumo de otro, «quién puso esto aquí» deja
-    // de ser evidente, y una firma global se perdería en cuanto otra persona
-    // tocase otra unidad. Se va con su asignación cuando se retira.
-    'assignment.by.u$unit.$participantId': selected
-        ? uid()
-        : FieldValue.delete(),
-  });
+    String? myPid,
+  }) {
+    // A3: firmar significa «esto se lo puse yo a OTRA persona». Marcarse a
+    // uno mismo no lleva firma, y esa ausencia es informativa: las Rules la
+    // leen como autoselección. Firmarlo todo borraba la distinción que A10
+    // existe para conservar, y además hacía imposible que quien administra
+    // tocara una casilla que su dueño acababa de marcar (una firma viva no
+    // se puede reescribir): el resultado era el deseado y la app enseñaba un
+    // error. `myPid == null` = no soy participante de este gasto, luego lo
+    // que escriba es siempre por cuenta de otra persona.
+    final assignsToSomeoneElse = myPid == null || myPid != participantId;
+    return firestore.doc(linePath).update({
+      'assignment.type': 'units',
+      'assignment.schemaVersion': 2,
+      'assignment.lastEditorPid': participantId,
+      'assignment.lastEditedUnit': 'u$unit',
+      'assignment.units.u$unit.$participantId': selected
+          ? true
+          : FieldValue.delete(),
+      // Procedencia por PAR (unidad, persona), no por línea (A10): desde que
+      // alguien puede asignar el consumo de otro, «quién puso esto aquí» deja
+      // de ser evidente, y una firma global se perdería en cuanto otra persona
+      // tocase otra unidad. Se va con su asignación cuando se retira.
+      'assignment.by.u$unit.$participantId': selected && assignsToSomeoneElse
+          ? uid()
+          : FieldValue.delete(),
+    });
+  }
 
   @override
   Future<void> setTicketImage(String ticketPath, String storagePath) =>

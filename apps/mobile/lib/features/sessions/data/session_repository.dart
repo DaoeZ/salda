@@ -70,11 +70,15 @@ abstract interface class SessionRepository {
 
   /// Añade o quita un consumidor de UNA unidad mediante ruta punteada. Así
   /// dos dispositivos pueden editar la misma unidad sin pisarse entre sí.
+  ///
+  /// [myPid] es MI participante en este gasto (null si no soy participante).
+  /// Sirve para una sola cosa: decidir si la escritura firma la procedencia.
   Future<void> setUnitConsumer(
     String linePath, {
     required int unit,
     required String participantId,
     required bool selected,
+    String? myPid,
   });
 
   /// Registra la ruta de Storage de la foto del ticket.

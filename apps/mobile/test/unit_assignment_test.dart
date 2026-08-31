@@ -383,6 +383,55 @@ void main() {
       expect((assignment['by'] as Map)['u0'], {'p2': 'admin', 'p3': 'owner'});
     });
 
+    // A3: firmar quiere decir «esto se lo puse yo a OTRA persona». Marcarse
+    // uno mismo no lleva firma, y esa ausencia es informativa: las Rules la
+    // leen como autoselección. Firmarlo todo borraba esa distinción y, de
+    // paso, impedía que quien administra tocase una casilla que su dueño
+    // acababa de marcar (una firma viva no se puede reescribir).
+    test('marcarse a uno mismo NO firma la procedencia', () async {
+      await sembrar();
+      final repo = FirestoreSessionRepository(
+        firestore: firestore,
+        uid: () => 'miembro',
+        shareCodeFactory: () => 'X',
+      );
+
+      await repo.setUnitConsumer(
+        linePath,
+        unit: 0,
+        participantId: 'p2',
+        selected: true,
+        myPid: 'p2',
+      );
+
+      final assignment = await asignacion();
+      expect((assignment['units'] as Map)['u0'], {'p2': true});
+      expect((assignment['by'] as Map?)?['u0'], anyOf(isNull, isEmpty));
+    });
+
+    test(
+      'asignar a OTRA persona sí firma con el uid de quien escribe',
+      () async {
+        await sembrar();
+        final repo = FirestoreSessionRepository(
+          firestore: firestore,
+          uid: () => 'miembro',
+          shareCodeFactory: () => 'X',
+        );
+
+        await repo.setUnitConsumer(
+          linePath,
+          unit: 0,
+          participantId: 'p3',
+          selected: true,
+          myPid: 'p2',
+        );
+
+        final assignment = await asignacion();
+        expect(((assignment['by'] as Map)['u0'] as Map)['p3'], 'miembro');
+      },
+    );
+
     // Mientras la asignación existe conserva su procedencia; cuando deja de
     // existir, la procedencia se va con ella. Una firma huérfana no explica
     // nada y las reglas rechazan la escritura entera, así que retirar el

@@ -677,6 +677,7 @@ class _LineTile extends ConsumerWidget {
       unit: unit,
       sessionId: sessionId,
       payerName: payerName,
+      myPid: pid,
     );
 
     // La selección ya no es siempre del dueño: para un miembro del grupo la
@@ -699,6 +700,7 @@ class _LineTile extends ConsumerWidget {
             unit: unit,
             participantId: pid!,
             selected: !line.unitIsMine(unit, pid),
+            myPid: pid,
           ),
     );
 

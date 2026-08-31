@@ -265,8 +265,10 @@ void main() {
               as Map<String, dynamic>;
       expect(assignment['type'], 'units');
       expect((assignment['units'] as Map)['u0'], {'p2': true, 'p1': true});
-      // Y queda quién lo asignó, no solo a quién (A10).
-      expect(((assignment['by'] as Map)['u0'] as Map)['p1'], 'owner');
+      // Pero marcarse a UNO MISMO no deja procedencia (A3): la firma cuenta
+      // quién te asignó algo, y aquí no le asignó nadie nada a nadie. Su
+      // ausencia es el dato: las Rules leen eso como autoselección.
+      expect(((assignment['by'] as Map?)?['u0'] as Map?)?['p1'], isNull);
     });
 
     testWidgets('línea multi-unidad: cada unidad se reparte por separado', (
