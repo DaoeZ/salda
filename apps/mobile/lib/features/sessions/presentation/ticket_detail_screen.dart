@@ -519,15 +519,22 @@ class _TicketLines extends ConsumerWidget {
     // sigue eligiendo como siempre.
     final myUid = ref.watch(currentUserIdFromSpacesProvider);
     final canEdit = ref.watch(canEditSessionProvider(ticketRef.sessionId));
+    // A4: y solo si sigo participando. Un participante desactivado no recibe
+    // consumo —`recompute` reparte sobre los activos—, así que ofrecerle
+    // elegir sería ofrecerle una acción que las Rules rechazan y que, de
+    // colarse, no movería un céntimo.
     final myPid =
         (myUid.isEmpty
             ? null
             : participants
-                  .where((p) => p.claimedByDevice == myUid)
+                  .where((p) => p.active && p.claimedByDevice == myUid)
                   .map((p) => p.id)
                   .firstOrNull) ??
         (canEdit
-            ? participants.where((p) => p.isOwner).map((p) => p.id).firstOrNull
+            ? participants
+                  .where((p) => p.active && p.isOwner)
+                  .map((p) => p.id)
+                  .firstOrNull
             : null);
     final mode =
         ticket.splitModeOverride ?? detail?.splitModeDefault ?? SplitMode.equal;
@@ -610,6 +617,7 @@ class _TicketLines extends ConsumerWidget {
                 sessionId: ticketRef.sessionId,
                 correcting: correcting,
                 names: names,
+                activePids: activePids,
                 showAssignment: mode == SplitMode.byItem,
                 payerName: ticketRef.payerName,
               ),
@@ -631,6 +639,7 @@ class _LineTile extends ConsumerWidget {
     required this.correcting,
     required this.showAssignment,
     required this.names,
+    required this.activePids,
     required this.payerName,
   });
 
@@ -654,7 +663,20 @@ class _LineTile extends ConsumerWidget {
   /// A partes iguales, esos rótulos describían un reparto que no se aplica.
   final bool showAssignment;
   final Map<String, String> names;
+
+  /// Participantes que siguen en el reparto, en su orden (A4). Es el mismo
+  /// universo que usa el motor, así que pintar consumidores fuera de esta
+  /// lista sería enseñar un reparto que el dinero no reconoce.
+  final List<String> activePids;
   final String payerName;
+
+  /// Consumidores de una unidad que el motor SÍ cuenta. Lo que ya estuviera
+  /// asignado no se borra por dejar de estar activo —el documento conserva
+  /// su historia—, pero deja de mostrarse como consumo vigente.
+  List<String> _vigentes(int unit) => [
+    for (final pid in line.consumersOf(unit))
+      if (activePids.contains(pid)) pid,
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -759,12 +781,9 @@ class _LineTile extends ConsumerWidget {
             for (var unit = 0; unit < line.units; unit++)
               l10n.unitAssignment(
                 unit + 1,
-                line.consumersOf(unit).isEmpty
+                _vigentes(unit).isEmpty
                     ? l10n.unitResidual(payerName)
-                    : line
-                          .consumersOf(unit)
-                          .map((p) => names[p] ?? '?')
-                          .join(', '),
+                    : _vigentes(unit).map((p) => names[p] ?? '?').join(', '),
               ),
           ]
         : const <String>[];
@@ -781,13 +800,13 @@ class _LineTile extends ConsumerWidget {
                   line.units,
                   [
                     for (var unit = 0; unit < line.units; unit++)
-                      if (line.consumersOf(unit).isEmpty) unit,
+                      if (_vigentes(unit).isEmpty) unit,
                   ].length,
                 ))
         : subtitle;
 
     Widget unitChip(int unit) {
-      final consumers = line.consumersOf(unit);
+      final consumers = _vigentes(unit);
       final selected = pid != null && consumers.contains(pid);
       final detail = consumers.isEmpty
           ? l10n.unitResidual(payerName)

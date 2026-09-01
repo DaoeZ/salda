@@ -2259,7 +2259,14 @@ service cloud.firestore {
         && session.status == 'open'
         && mode == 'byItem'
         && validUnitWrite(editor)
-        && claimedBy(sid, editor) == request.auth.uid;
+        && claimedBy(sid, editor) == request.auth.uid
+        // A4: quien ya no participa en el reparto tampoco se elige a sí
+        // mismo. `recompute` reparte sobre los ACTIVOS y descarta al resto,
+        // así que sin esto la pantalla pintaba un consumidor que el dinero
+        // no reconocía y la unidad acababa recayendo en quien pagó: dos
+        // versiones del mismo gasto. Asignar a un inactivo ya estaba
+        // prohibido (`canAssignWithProvenance`); esto cierra la simetría.
+        && participantData(sid, editor).get('active', true) == true;
     }
 
     // ── Asignar el consumo de OTRA persona (A10) ─────────────────────────

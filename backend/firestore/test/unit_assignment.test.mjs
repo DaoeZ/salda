@@ -351,6 +351,18 @@ describe('A10: sobre quién se puede asignar', () => {
 
   it('ni una unidad que no existe', () =>
     assertDeniegaLimpio(asignar(ADMIN, 'p2', { unit: 'u7' })));
+
+  // A4: tampoco uno mismo. `recompute` reparte sobre los ACTIVOS, así que la
+  // autoselección de alguien desactivado acababa recayendo en el pagador
+  // mientras la pantalla lo pintaba consumiendo: dos versiones del gasto.
+  it('un participante desactivado NO puede autoseleccionarse', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'sessions/sg1/participants/p2'), {
+        active: false,
+      });
+    });
+    await assertDeniegaLimpio(asignarSinFirma(JORGE, 'p2'));
+  });
 });
 
 describe('A10: compartir, retirar y reasignar', () => {

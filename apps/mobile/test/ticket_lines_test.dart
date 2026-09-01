@@ -311,5 +311,20 @@ void main() {
       expect(find.byType(FilterChip), findsNothing);
       expect(find.byIcon(Icons.circle_outlined), findsNothing);
     });
+
+    // A4: `recompute` reparte sobre los ACTIVOS. Un consumidor desactivado
+    // deja de contar para el dinero —su unidad recae en quien pagó—, así que
+    // seguir pintándolo era enseñar un reparto que las cuentas no reconocen.
+    testWidgets('un consumidor desactivado deja de pintarse en su unidad', (
+      tester,
+    ) async {
+      final fake = await _seed();
+      // Alba (p2) tiene la Pizza entera en l2.
+      await fake.doc('sessions/s1/participants/p2').update({'active': false});
+      await _pump(tester, fake);
+
+      expect(find.text('Unidad 1: Alba'), findsNothing);
+      expect(find.text('Unidad 1: sin reclamar (para Edgar)'), findsWidgets);
+    });
   });
 }
