@@ -1970,6 +1970,14 @@ service cloud.firestore {
           allow create, update: if isOwner(sid) && isOpen(sid)
             && request.resource.data.grandTotal is int
             && request.resource.data.paidByParticipantId is string
+            // A19: el picking se escribe por su propia puerta, también para
+            // el dueño. Por esta rama podría vaciar `open` de golpe y dar
+            // por cerrado un reparto que nadie ha terminado, o reescribir la
+            // economía congelada. Al CREAR sí lo escribe: es cuando se
+            // siembra, y ahí no hay nada anterior que falsear.
+            && (resource == null
+              || !request.resource.data.diff(resource.data)
+                   .affectedKeys().hasAny(['picking']))
             && (futureSessionData(sid).get('contextModelVersion', 0) == 0
               || (request.resource.data.get('contextModelVersion', 0) == 1
                 && request.resource.data.spaceId
@@ -1977,6 +1985,18 @@ service cloud.firestore {
             && (request.resource.data.get('spaceId', '') == ''
               || (request.resource.data.spaceId is string
                 && isSpaceMember(request.resource.data.spaceId)));
+
+          // A19: terminar de elegir, o volver a quedar abierto. Una entrada
+          // del mapa por escritura: la propia o —con la autoridad de A10— la
+          // de otra persona. Un MANUAL no puede pulsar nada y quien se fue a
+          // casa tampoco, así que sin esto un solo ausente dejaría las
+          // cuentas del grupo bloqueadas para siempre.
+          allow update: if onlyPickingChanged()
+            && isOpen(sid)
+            && validPickingWrite()
+            && (claimedBy(sid, pickingTarget()) == request.auth.uid
+              || isOwner(sid)
+              || managesGroupOf(resource.data.get('spaceId', '')));
 
           // A11c: quien administra el grupo CORRIGE el ticket ajeno, y solo
           // eso. Lista blanca estrecha: comercio, fecha, hora, total y la
@@ -2045,8 +2065,23 @@ service cloud.firestore {
             // histórico por pesos se queda exactamente como estaba.
             allow update: if onlyAssignmentChanged()
               ? (usesUnitModel()
-                ? (canPickOwnUnit(sid, aid, tid)
-                  || canAssignWithProvenance(sid, aid, tid))
+                // La reapertura se comprueba AL FINAL, no al principio: así
+                // el camino de denegación —que ya recorre las dos familias
+                // de autoridad— no paga además el `getAfter`. Comprobarla
+                // primero agotaba las 1000 expresiones justo en el caso más
+                // caro: un miembro sin autoridad asignando a un tercero.
+                // La FORMA de la escritura se comprueba UNA vez, aquí: antes
+                // la evaluaban las dos funciones de autoridad por separado y
+                // el camino de A10 —que las recorre las dos— pagaba
+                // `validUnitWrite` dos veces. Con eso, añadir la
+                // comprobación de reapertura agotaba las 1000 expresiones.
+                // Izarla no cambia qué se permite: ambas la exigían con el
+                // mismo argumento.
+                ? (validUnitWrite(
+                     request.resource.data.assignment.get('lastEditorPid', ''))
+                  && reopensPicking(sid, aid, tid)
+                  && (canPickOwnUnit(sid, aid, tid)
+                  || canAssignWithProvenance(sid, aid, tid)))
                 : ((isOwner(sid) && isOpen(sid))
                   || canPickOwnShare(sid, aid, tid)))
               : ((isOwner(sid) && isOpen(sid)
@@ -2133,6 +2168,55 @@ service cloud.firestore {
     function onlyAssignmentChanged() {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['assignment']);
+    }
+
+    // ── A19: cerrar y reabrir la elección de consumo ─────────────────────
+    // Un ticket bajo el protocolo nuevo solo acepta un cambio de reparto si,
+    // TRAS el commit, el pid afectado sigue abierto. Así es imposible que un
+    // «he terminado» sobreviva a un cambio de la selección que declaraba, y
+    // por tanto imposible que una economía firme se apoye en un reparto que
+    // ya no es el que se cerró.
+    //
+    // UN SOLO acceso de documento, y es deliberado: con `get` + `getAfter`
+    // el camino de A10 agota el presupuesto de 1000 expresiones (medido). El
+    // «after» sirve para las dos preguntas porque `pickingModelVersion` no
+    // cambia en una escritura de reparto.
+    function reopensPicking(sid, aid, tid) {
+      let after = getAfter(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      return after.get('pickingModelVersion', 0) != 1
+        || after.get('picking', {}).get('open', {})
+             .get(request.resource.data.assignment.get('lastEditorPid', ''), false) == true;
+    }
+
+    function onlyPickingChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['picking']);
+    }
+
+    function pickingTarget() {
+      return request.resource.data.picking.get('lastTarget', '');
+    }
+
+    // Forma de UNA escritura de picking: una sola persona, y nada más.
+    //
+    // La huella y la economía congelada son del SERVIDOR. Si un cliente
+    // pudiera tocar la huella, fingiría que la topología no cambió y dejaría
+    // firme un reparto que acaba de perder unidades; si pudiera tocar
+    // `firmContribution`, reescribiría a mano cuánto debe cada cual en un
+    // ticket reabierto, que es justo la deuda que sostiene los pagos ya
+    // cobrados.
+    function validPickingWrite() {
+      let now = request.resource.data.picking;
+      let old = resource.data.get('picking', {});
+      let target = pickingTarget();
+      return request.resource.data.get('pickingModelVersion', 0) == 1
+        && target != ''
+        && now.keys().hasOnly(
+             ['open', 'lastTarget', 'fingerprint', 'firmContribution'])
+        && now.get('fingerprint', '') == old.get('fingerprint', '')
+        && now.get('firmContribution', {}) == old.get('firmContribution', {})
+        && now.get('open', {}).diff(old.get('open', {}))
+             .affectedKeys().hasOnly([target]);
     }
 
     // El modelo por UNIDADES (P2.2) y el histórico por pesos se excluyen
@@ -2258,7 +2342,6 @@ service cloud.firestore {
       return participatesInSplit(sid)
         && session.status == 'open'
         && mode == 'byItem'
-        && validUnitWrite(editor)
         && claimedBy(sid, editor) == request.auth.uid
         // A4: quien ya no participa en el reparto tampoco se elige a sí
         // mismo. `recompute` reparte sobre los ACTIVOS y descarta al resto,
@@ -2298,7 +2381,6 @@ service cloud.firestore {
         .get(target, false);
       return session.status == 'open'
         && mode == 'byItem'
-        && validUnitWrite(target)
         // Asignar el consumo de otra persona SIEMPRE queda firmado: es la
         // diferencia entre «Jorge se marcó esto» y «se lo asignó Edgar», y
         // sin ella el reparto de un grupo no se puede explicar después.
