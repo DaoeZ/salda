@@ -26,6 +26,7 @@ Future<void> showUnitAssignmentSheet(
   required String sessionId,
   required String payerName,
   String? myPid,
+  bool usesPicking = false,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -35,6 +36,7 @@ Future<void> showUnitAssignmentSheet(
     sessionId: sessionId,
     payerName: payerName,
     myPid: myPid,
+    usesPicking: usesPicking,
   ),
 );
 
@@ -45,6 +47,7 @@ class _UnitAssignmentSheet extends ConsumerWidget {
     required this.sessionId,
     required this.payerName,
     this.myPid,
+    this.usesPicking = false,
   });
 
   final String linePath;
@@ -56,6 +59,9 @@ class _UnitAssignmentSheet extends ConsumerWidget {
   /// escritura firma la procedencia: marcarme a mí mismo desde aquí es una
   /// autoselección igual que tocar la unidad en el detalle.
   final String? myPid;
+
+  /// A19: tocar una unidad devuelve a esa persona a «eligiendo».
+  final bool usesPicking;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -154,6 +160,7 @@ class _UnitAssignmentSheet extends ConsumerWidget {
             participantId: participantId,
             selected: selected,
             myPid: myPid,
+            usesPicking: usesPicking,
           );
     } on Object {
       // La autoridad real la aplican las Rules; si rechazan, se dice.

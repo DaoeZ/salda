@@ -1630,6 +1630,66 @@ abstract class AppLocalizations {
   /// **'Marca a varias personas para repartir esta unidad entre ellas.'**
   String get unitAssignShareHint;
 
+  /// No description provided for @pickingOpenTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Aún estáis eligiendo'**
+  String get pickingOpenTitle;
+
+  /// No description provided for @pickingOpenBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto no entra en las cuentas hasta que todo el mundo termine.'**
+  String get pickingOpenBody;
+
+  /// No description provided for @pickingWaitingFor.
+  ///
+  /// In es, this message translates to:
+  /// **'Falta {names}'**
+  String pickingWaitingFor(String names);
+
+  /// No description provided for @pickingClosedTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Reparto cerrado'**
+  String get pickingClosedTitle;
+
+  /// No description provided for @pickingClosedBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Las cuentas de este gasto ya son firmes.'**
+  String get pickingClosedBody;
+
+  /// No description provided for @pickingFinishAction.
+  ///
+  /// In es, this message translates to:
+  /// **'He terminado'**
+  String get pickingFinishAction;
+
+  /// No description provided for @pickingFinishForOther.
+  ///
+  /// In es, this message translates to:
+  /// **'Terminar por {name}'**
+  String pickingFinishForOther(String name);
+
+  /// No description provided for @pickingReopenTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Volver a abrir el reparto?'**
+  String get pickingReopenTitle;
+
+  /// No description provided for @pickingReopenBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto ya estaba cerrado y hay {count} pago(s) confirmado(s) por {amount}. Las cuentas se quedan como están mientras lo revisáis; al volver a cerrarlo se ajustará la diferencia.'**
+  String pickingReopenBody(int count, String amount);
+
+  /// No description provided for @pickingReopenAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Cambiar de todas formas'**
+  String get pickingReopenAction;
+
   /// No description provided for @unitCompactSummary.
   ///
   /// In es, this message translates to:

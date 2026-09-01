@@ -188,7 +188,18 @@ class SessionTicket {
     this.contextModelVersion = 0,
     this.lastEditedByUid,
     this.lastEditedAt,
+    this.pickingModelVersion = 0,
+    this.pickingOpen = const <String>{},
   });
+
+  /// A19: 1 = el gasto espera a que todo el mundo termine de elegir. 0 (o
+  /// ausente) = gasto anterior al protocolo, se comporta como siempre.
+  final int pickingModelVersion;
+
+  /// pids que todavía NO han dicho «he terminado».
+  final Set<String> pickingOpen;
+
+  bool get usesPicking => pickingModelVersion == 1;
 
   final String id;
 

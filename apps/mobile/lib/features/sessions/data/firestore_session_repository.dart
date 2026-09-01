@@ -178,6 +178,10 @@ class FirestoreSessionRepository implements SessionRepository {
       accountName: input.accountName ?? input.ticket.merchantName,
       ticket: input.ticket,
       payerPid: 'p${input.payerIndex}',
+      // Todos los que acaban de escribirse arriba: al crear, todos activos.
+      pickingPids: [
+        for (var i = 0; i < input.participantNames.length; i++) 'p$i',
+      ],
       spaceId: input.spaceId,
       splitMode: input.splitModeDefault,
     );
@@ -202,6 +206,7 @@ class FirestoreSessionRepository implements SessionRepository {
     final sessionRef = _sessions.doc(sessionId);
     final accounts = await sessionRef.collection('accounts').get();
     final session = await sessionRef.get();
+    final participants = await sessionRef.collection('participants').get();
     final batch = firestore.batch();
     final ticketPath = _writeAccountWithTicket(
       batch,
@@ -210,6 +215,12 @@ class FirestoreSessionRepository implements SessionRepository {
       accountName: ticket.merchantName,
       ticket: ticket,
       payerPid: payerPid,
+      // A19: solo quien sigue en el reparto. A quien ya no participa no se
+      // le espera — `recompute` lo descarta igual.
+      pickingPids: [
+        for (final p in participants.docs)
+          if ((p.data()['active'] as bool?) ?? true) p.id,
+      ],
       spaceId: spaceId,
       splitMode: SplitMode.values.byName(
         (session.data()?['splitModeDefault'] as String?) ?? 'equal',
@@ -239,6 +250,7 @@ class FirestoreSessionRepository implements SessionRepository {
     required String accountName,
     required NewTicketInput ticket,
     required String payerPid,
+    required List<String> pickingPids,
     String? spaceId,
     SplitMode? splitMode,
   }) {
@@ -267,6 +279,18 @@ class FirestoreSessionRepository implements SessionRepository {
       ],
       'tip': ticket.tip?.cents,
       'grandTotal': ticket.grandTotal.cents,
+      // A19: el gasto nace bajo el protocolo y con todo el mundo pendiente,
+      // en el MISMO batch que lo crea. No puede existir un instante en el
+      // que ya cuente para las cuentas y todavía no sepa a quién espera:
+      // ese instante era el bug.
+      //
+      // Se siembra también en «a partes iguales», donde la puerta no se
+      // aplica: si alguien cambia el modo después, la huella de topología
+      // cambia y recompute reabre a todo el mundo.
+      'pickingModelVersion': 1,
+      'picking': {
+        'open': {for (final pid in pickingPids) pid: true},
+      },
       ...?spaceId == null
           ? null
           : <String, Object?>{
@@ -328,6 +352,13 @@ class FirestoreSessionRepository implements SessionRepository {
       },
       spaceId: data['spaceId'] as String?,
       contextModelVersion: (data['contextModelVersion'] as int?) ?? 0,
+      pickingModelVersion: (data['pickingModelVersion'] as int?) ?? 0,
+      pickingOpen: {
+        for (final entry
+            in (((data['picking'] as Map?)?['open'] as Map?) ?? const {})
+                .entries)
+          if (entry.value == true) entry.key as String,
+      },
     );
   }
 
@@ -494,7 +525,8 @@ class FirestoreSessionRepository implements SessionRepository {
     required String participantId,
     required bool selected,
     String? myPid,
-  }) {
+    bool usesPicking = false,
+  }) async {
     // A3: firmar significa «esto se lo puse yo a OTRA persona». Marcarse a
     // uno mismo no lleva firma, y esa ausencia es informativa: las Rules la
     // leen como autoselección. Firmarlo todo borraba la distinción que A10
@@ -504,7 +536,9 @@ class FirestoreSessionRepository implements SessionRepository {
     // error. `myPid == null` = no soy participante de este gasto, luego lo
     // que escriba es siempre por cuenta de otra persona.
     final assignsToSomeoneElse = myPid == null || myPid != participantId;
-    return firestore.doc(linePath).update({
+    final lineRef = firestore.doc(linePath);
+    final batch = firestore.batch();
+    batch.update(lineRef, {
       'assignment.type': 'units',
       'assignment.schemaVersion': 2,
       'assignment.lastEditorPid': participantId,
@@ -520,7 +554,28 @@ class FirestoreSessionRepository implements SessionRepository {
           ? uid()
           : FieldValue.delete(),
     });
+    // A19: cambiar lo que alguien consume lo devuelve a «eligiendo», en el
+    // MISMO commit. Las Rules lo exigen, y con razón: si la reapertura
+    // pudiera llegar después, entre las dos escrituras existiría un instante
+    // con un «he terminado» vigente sobre una selección que ya cambió, y esa
+    // foto es exactamente la que publicaría unas cuentas equivocadas.
+    if (usesPicking) {
+      batch.update(lineRef.parent.parent!, {
+        'picking.lastTarget': participantId,
+        'picking.open.$participantId': true,
+      });
+    }
+    await batch.commit();
   }
+
+  @override
+  Future<void> finishPicking(
+    String ticketPath, {
+    required String participantId,
+  }) => firestore.doc(ticketPath).update({
+    'picking.lastTarget': participantId,
+    'picking.open.$participantId': FieldValue.delete(),
+  });
 
   @override
   Future<void> setTicketImage(String ticketPath, String storagePath) =>

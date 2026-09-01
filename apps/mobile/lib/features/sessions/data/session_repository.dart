@@ -79,6 +79,20 @@ abstract interface class SessionRepository {
     required String participantId,
     required bool selected,
     String? myPid,
+
+    /// A19: si el gasto sigue el protocolo, la escritura lleva además la
+    /// REAPERTURA del pid afectado, en el mismo commit. Un gasto anterior no
+    /// la lleva: escribirle `picking` haría que las Rules rechazasen el lote.
+    bool usesPicking = false,
+  });
+
+  /// «He terminado de elegir»: [participantId] sale de los pendientes (A19).
+  ///
+  /// Lo hace cada cual con lo suyo y, con la autoridad de A10, por otra
+  /// persona: un MANUAL no puede pulsar nada y quien se fue a casa tampoco.
+  Future<void> finishPicking(
+    String ticketPath, {
+    required String participantId,
   });
 
   /// Registra la ruta de Storage de la foto del ticket.

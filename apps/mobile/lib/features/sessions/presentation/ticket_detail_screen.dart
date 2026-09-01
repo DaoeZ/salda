@@ -605,6 +605,23 @@ class _TicketLines extends ConsumerWidget {
           ],
           const SizedBox(height: TokenSpacing.sm),
         ],
+        // A19: quién falta por terminar, y qué significa que falte alguien.
+        // Sin esto, «no he mirado» y «no consumí nada» son indistinguibles
+        // mirando las líneas, y lo no reclamado recae en quien pagó: las
+        // cuentas salían mal a mitad de la cena.
+        if (ticket.usesPicking && mode == SplitMode.byItem) ...[
+          _PickingBanner(
+            ticketPath: ticket.path,
+            pendientes: [
+              for (final p in participants)
+                if (p.active && ticket.pickingOpen.contains(p.id)) p.id,
+            ],
+            myPid: myPid,
+            canAssign: canAssign,
+            names: names,
+          ),
+          const SizedBox(height: TokenSpacing.md),
+        ],
         SaldaCardList(
           children: [
             for (final line in lines)
@@ -618,12 +635,111 @@ class _TicketLines extends ConsumerWidget {
                 correcting: correcting,
                 names: names,
                 activePids: activePids,
+                usesPicking: ticket.usesPicking,
+                pickingClosed:
+                    ticket.usesPicking &&
+                    !participants.any(
+                      (p) => p.active && ticket.pickingOpen.contains(p.id),
+                    ),
+                ticketId: ticket.id,
                 showAssignment: mode == SplitMode.byItem,
                 payerName: ticketRef.payerName,
               ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Estado del reparto (A19): a quién se está esperando y qué significa.
+///
+/// Existe porque «todavía no he mirado» y «no consumí nada» son
+/// indistinguibles mirando las líneas: hasta que alguien lo dice, lo no
+/// reclamado recae en quien pagó y las cuentas de un gasto a medio elegir
+/// serían falsas. Aquí se dice, y se ve quién falta.
+class _PickingBanner extends ConsumerWidget {
+  const _PickingBanner({
+    required this.ticketPath,
+    required this.pendientes,
+    required this.myPid,
+    required this.canAssign,
+    required this.names,
+  });
+
+  final String ticketPath;
+
+  /// pids ACTIVOS que todavía no han terminado, en el orden del reparto.
+  final List<String> pendientes;
+  final String? myPid;
+  final bool canAssign;
+  final Map<String, String> names;
+
+  Future<void> _terminar(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    String pid,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(sessionRepositoryProvider)
+          .finishPicking(ticketPath, participantId: pid);
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketPickError)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final abierto = pendientes.isNotEmpty;
+    final nombres = [for (final pid in pendientes) names[pid] ?? '?'];
+
+    return SaldaCard(
+      padding: const EdgeInsets.all(TokenSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            abierto ? l10n.pickingOpenTitle : l10n.pickingClosedTitle,
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: TokenSpacing.xs),
+          Text(
+            abierto ? l10n.pickingOpenBody : l10n.pickingClosedBody,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          if (abierto) ...[
+            const SizedBox(height: TokenSpacing.sm),
+            Text(
+              l10n.pickingWaitingFor(nombres.join(', ')),
+              style: theme.textTheme.bodyMedium,
+            ),
+            if (myPid != null && pendientes.contains(myPid)) ...[
+              const SizedBox(height: TokenSpacing.md),
+              FilledButton(
+                onPressed: () => _terminar(context, ref, l10n, myPid!),
+                child: Text(l10n.pickingFinishAction),
+              ),
+            ],
+            // A10 cierra por quien no puede hacerlo: un MANUAL no pulsa
+            // nada, y quien se fue a casa tampoco. Sin esto, un solo
+            // ausente dejaría las cuentas bloqueadas para siempre.
+            if (canAssign)
+              for (final pid in pendientes)
+                if (pid != myPid)
+                  TextButton(
+                    onPressed: () => _terminar(context, ref, l10n, pid),
+                    child: Text(l10n.pickingFinishForOther(names[pid] ?? '?')),
+                  ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -640,8 +756,22 @@ class _LineTile extends ConsumerWidget {
     required this.showAssignment,
     required this.names,
     required this.activePids,
+    required this.usesPicking,
+    required this.pickingClosed,
+    required this.ticketId,
     required this.payerName,
   });
+
+  /// A19: el gasto sigue el protocolo de cierre, así que tocar una unidad
+  /// devuelve a esa persona a «eligiendo» en el mismo commit.
+  final bool usesPicking;
+
+  /// El reparto ya estaba cerrado: tocarlo lo REABRE, y eso hay que avisarlo
+  /// cuando ya hay dinero confirmado detrás.
+  final bool pickingClosed;
+
+  /// Id del ticket, para preguntar por los pagos que ya lo respaldan.
+  final String ticketId;
 
   /// A10: repartir el consumo de terceros. Con esta autoridad, tocar una
   /// unidad abre el selector de personas en vez de marcarme a mí.
@@ -692,15 +822,40 @@ class _LineTile extends ConsumerWidget {
     // atrás. Esas líneas siguen exactamente como estaban.
     final canAssignUnits = canAssign && line.usesUnitModel;
 
-    Future<void> openUnitAssignment(int unit) => showUnitAssignmentSheet(
-      context,
-      ref,
-      line: line,
-      unit: unit,
-      sessionId: sessionId,
-      payerName: payerName,
-      myPid: pid,
-    );
+    /// Cambiar un reparto ya cerrado lo REABRE y saca el gasto de la
+    /// economía firme hasta que se vuelva a cerrar. Si alguien ya confirmó
+    /// un cobro, eso no se pierde —las cuentas se quedan como están— pero
+    /// hay que decirlo antes, no después.
+    Future<bool> confirmarReapertura() async {
+      if (!pickingClosed) return true;
+      final impact = ref.read(
+        ticketPaymentImpactProvider((sessionId: sessionId, ticketId: ticketId)),
+      );
+      if (!impact.hasConfirmed) return true;
+      return await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text(l10n.pickingReopenTitle),
+              content: Text(
+                l10n.pickingReopenBody(
+                  impact.confirmedCount,
+                  formatMoney(impact.confirmedTotal),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(l10n.commonCancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(l10n.pickingReopenAction),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+    }
 
     // La selección ya no es siempre del dueño: para un miembro del grupo la
     // autoridad la deciden las Rules (sesión abierta, modo por líneas), y el
@@ -714,17 +869,36 @@ class _LineTile extends ConsumerWidget {
       }
     }
 
-    Future<void> toggleUnit(int unit) => guard(
-      () => ref
-          .read(sessionRepositoryProvider)
-          .setUnitConsumer(
-            line.path,
-            unit: unit,
-            participantId: pid!,
-            selected: !line.unitIsMine(unit, pid),
-            myPid: pid,
-          ),
-    );
+    Future<void> openUnitAssignment(int unit) async {
+      if (!await confirmarReapertura()) return;
+      if (!context.mounted) return;
+      await showUnitAssignmentSheet(
+        context,
+        ref,
+        line: line,
+        unit: unit,
+        sessionId: sessionId,
+        payerName: payerName,
+        myPid: pid,
+        usesPicking: usesPicking,
+      );
+    }
+
+    Future<void> toggleUnit(int unit) async {
+      if (!await confirmarReapertura()) return;
+      await guard(
+        () => ref
+            .read(sessionRepositoryProvider)
+            .setUnitConsumer(
+              line.path,
+              unit: unit,
+              participantId: pid!,
+              selected: !line.unitIsMine(unit, pid),
+              myPid: pid,
+              usesPicking: usesPicking,
+            ),
+      );
+    }
 
     Future<void> convertToUnits() async {
       final confirmed =

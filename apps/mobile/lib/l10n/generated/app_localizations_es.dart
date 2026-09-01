@@ -900,6 +900,43 @@ class AppLocalizationsEs extends AppLocalizations {
       'Marca a varias personas para repartir esta unidad entre ellas.';
 
   @override
+  String get pickingOpenTitle => 'Aún estáis eligiendo';
+
+  @override
+  String get pickingOpenBody =>
+      'Este gasto no entra en las cuentas hasta que todo el mundo termine.';
+
+  @override
+  String pickingWaitingFor(String names) {
+    return 'Falta $names';
+  }
+
+  @override
+  String get pickingClosedTitle => 'Reparto cerrado';
+
+  @override
+  String get pickingClosedBody => 'Las cuentas de este gasto ya son firmes.';
+
+  @override
+  String get pickingFinishAction => 'He terminado';
+
+  @override
+  String pickingFinishForOther(String name) {
+    return 'Terminar por $name';
+  }
+
+  @override
+  String get pickingReopenTitle => '¿Volver a abrir el reparto?';
+
+  @override
+  String pickingReopenBody(int count, String amount) {
+    return 'Este gasto ya estaba cerrado y hay $count pago(s) confirmado(s) por $amount. Las cuentas se quedan como están mientras lo revisáis; al volver a cerrarlo se ajustará la diferencia.';
+  }
+
+  @override
+  String get pickingReopenAction => 'Cambiar de todas formas';
+
+  @override
   String unitCompactSummary(int selected, int total, int residual) {
     return '$selected de $total tuyas · $residual sin reclamar';
   }
