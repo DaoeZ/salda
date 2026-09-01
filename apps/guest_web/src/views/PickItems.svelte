@@ -111,6 +111,12 @@
   </p>
 </header>
 
+<!-- A5: un rechazo de las reglas tiene que verse. Antes la casilla revertía
+     sola y nadie explicaba por qué. -->
+{#if guest.error}
+  <p class="write-error" role="alert">{guest.error}</p>
+{/if}
+
 {#each guest.tickets.filter((t) => t.pickable) as ticket (ticket.id)}
   <section>
     <h2>{ticket.merchantName}</h2>
@@ -246,6 +252,15 @@
     color: var(--on-surface-variant);
     font-weight: 500;
     margin: var(--space-lg) 0 var(--space-sm);
+  }
+  .write-error {
+    margin: 0 0 var(--space-md);
+    padding: var(--space-md);
+    border-radius: var(--radius-card);
+    background: var(--color-negative-muted);
+    color: var(--color-negative);
+    font-size: 14px;
+    line-height: 1.4;
   }
   .lines {
     display: grid;
