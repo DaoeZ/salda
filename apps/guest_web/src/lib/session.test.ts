@@ -47,6 +47,41 @@ describe('ficha de ticket (A6)', () => {
   });
 });
 
+describe('estado de cierre de consumo (A19)', () => {
+  it('un gasto anterior al protocolo no lo declara', () => {
+    const t = ticketInfoFrom('t1', 'a1', {}, 'Cena', 'byItem');
+    expect(t.pickingModelVersion).toBe(0);
+    expect(t.pickingOpen).toEqual([]);
+  });
+
+  it('un gasto bajo el protocolo enumera a quién se espera', () => {
+    const t = ticketInfoFrom(
+      't1',
+      'a1',
+      {
+        pickingModelVersion: 1,
+        // `false` no es pendiente: solo cuenta quien sigue en el mapa.
+        picking: { open: { p1: true, p2: true, p3: false } },
+      },
+      'Cena',
+      'byItem',
+    );
+    expect(t.pickingModelVersion).toBe(1);
+    expect(t.pickingOpen.sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('un gasto ya cerrado no espera a nadie', () => {
+    const t = ticketInfoFrom(
+      't1',
+      'a1',
+      { pickingModelVersion: 1, picking: { open: {} } },
+      'Cena',
+      'byItem',
+    );
+    expect(t.pickingOpen).toEqual([]);
+  });
+});
+
 describe('mensajes de escritura rechazada (A5)', () => {
   it('permiso denegado explica que la selección no se guardó', () => {
     expect(describeWriteError({ code: 'permission-denied' })).toMatch(

@@ -81,6 +81,25 @@ export function unitUpdate(
 }
 
 /**
+ * A19: devolver a alguien a «eligiendo».
+ *
+ * Va en el MISMO lote que el cambio de reparto porque las Rules lo exigen:
+ * un «he terminado» no puede sobrevivir a un cambio de la selección que
+ * declaraba. `lastTarget` dice a quién afecta, y es lo que la regla verifica.
+ */
+export function pickingOpenUpdate(pid: string): Record<string, unknown> {
+  return { 'picking.lastTarget': pid, [`picking.open.${pid}`]: true };
+}
+
+/** «He terminado»: mi pid sale de la lista de pendientes (A19). */
+export function pickingFinishUpdate(
+  pid: string,
+  remove: unknown,
+): Record<string, unknown> {
+  return { 'picking.lastTarget': pid, [`picking.open.${pid}`]: remove };
+}
+
+/**
  * Fija MIS unidades reclamadas (0 = quitarme). Las reglas validan que el
  * peso sea entero y no supere las unidades de la línea.
  */

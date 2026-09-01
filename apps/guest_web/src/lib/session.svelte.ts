@@ -20,6 +20,7 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 
 import {
@@ -27,6 +28,8 @@ import {
   setUnits,
   toggleSelf,
   unitIsPickedBy,
+  pickingFinishUpdate,
+  pickingOpenUpdate,
   unitUpdate,
   usesUnitModel,
   type Assignment,
@@ -81,6 +84,10 @@ export interface SettlementInfo {
 export interface LineInfo {
   id: string;
   path: string;
+  /** Ticket al que pertenece: la reapertura de A19 se escribe ahí. */
+  ticketPath: string;
+  /** A19: el gasto sigue el protocolo, así que tocarla reabre a su dueño. */
+  usesPicking: boolean;
   name: string;
   quantityMilli: number;
   totalPrice: number;
@@ -95,6 +102,10 @@ export interface TicketInfo {
   pickable: boolean; // modo efectivo byItem
   /** Lo que declara el ticket; `undefined` = hereda el de la sesión. */
   splitModeOverride: string | undefined;
+  /** A19: 1 = el gasto espera a que todo el mundo termine de elegir. */
+  pickingModelVersion: number;
+  /** pids que todavía no han dicho «he terminado». */
+  pickingOpen: string[];
   lines: LineInfo[];
 }
 
@@ -114,6 +125,8 @@ export function ticketInfoFrom(
 ): Omit<TicketInfo, 'lines'> {
   const merchant = data.merchant as { name?: string } | undefined;
   const splitModeOverride = data.splitModeOverride as string | undefined;
+  const open = (data.picking as { open?: Record<string, boolean> } | undefined)
+    ?.open ?? {};
   return {
     id,
     accountId,
@@ -121,6 +134,10 @@ export function ticketInfoFrom(
     grandTotal: (data.grandTotal as number) ?? 0,
     splitModeOverride,
     pickable: (splitModeOverride ?? sessionMode) === 'byItem',
+    pickingModelVersion: (data.pickingModelVersion as number) ?? 0,
+    pickingOpen: Object.entries(open)
+      .filter(([, pendiente]) => pendiente === true)
+      .map(([pid]) => pid),
   };
 }
 
@@ -355,8 +372,28 @@ class GuestSession {
   async setLineUnit(line: LineInfo, unit: number, selected: boolean): Promise<void> {
     if (!this.myPid) return;
     const pid = this.myPid;
+    await this.write(async () => {
+      const batch = writeBatch(db);
+      batch.update(doc(db, line.path), unitUpdate(unit, pid, selected, deleteField()));
+      // A19: cambiar lo que consumo me devuelve a «eligiendo», en el MISMO
+      // commit. Un gasto anterior al protocolo no lleva esta mitad: las
+      // Rules rechazarían el lote entero.
+      if (line.usesPicking) {
+        batch.update(doc(db, line.ticketPath), pickingOpenUpdate(pid));
+      }
+      await batch.commit();
+    });
+  }
+
+  /** «He terminado de elegir» en este gasto (A19). */
+  async finishPicking(ticket: TicketInfo): Promise<void> {
+    if (!this.myPid) return;
+    const pid = this.myPid;
     await this.write(() =>
-      updateDoc(doc(db, line.path), unitUpdate(unit, pid, selected, deleteField())),
+      updateDoc(
+        doc(db, 'sessions', this.sid, 'accounts', ticket.accountId, 'tickets', ticket.id),
+        pickingFinishUpdate(pid, deleteField()),
+      ),
     );
   }
 
@@ -455,6 +492,8 @@ class GuestSession {
               actual.lines = snap.docs.map((d) => ({
                 id: d.id,
                 path: d.ref.path,
+                ticketPath: ticket.ref.path,
+                usesPicking: actual.pickingModelVersion === 1,
                 name: (d.data().name as string) ?? '',
                 quantityMilli: (d.data().quantityMilli as number) ?? 1000,
                 totalPrice: (d.data().totalPrice as number) ?? 0,
