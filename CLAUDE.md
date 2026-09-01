@@ -539,6 +539,7 @@ firebase CLI → keyring del SO del desarrollador.
 | `docs/ESPACIOS.md` | Contrato ADR-030: relaciones, grupos, contexto obligatorio y compatibilidad histórica |
 | `docs/ACTIVIDAD.md` | Contrato P6/ADR-031: cronología autoritativa, audiencia y eventos |
 | `docs/CHAT.md` | Contrato P7/ADR-032: chat contextual, privacidad temporal y alcance |
+| `docs/CIERRE_DE_CONSUMO.md` | Contrato A19/ADR-041: `picking.open`, economía congelada, `ledgerIds` y el techo de Rules que no se puede romper |
 
 ## 11. Próximos pasos concretos (en orden)
 
@@ -572,6 +573,14 @@ firebase CLI → keyring del SO del desarrollador.
   puede cuadrar al céntimo con el comercio mal leído o una cantidad equivocada: por
   eso la revisión dice «El total cuadra», nunca «el ticket cuadra», y editar a mano y
   «Analizar con IA» siguen disponibles con el total cuadrado.
+- **Techo de Rules en el reparto por unidades (A19)**: la rama de
+  `lines/{lid}` admite UN acceso de documento adicional, y `validUnitWrite` se
+  evalúa UNA sola vez, izada a la rama. Antes la llamaban las dos funciones de
+  autoridad por separado; con esa duplicación, añadir la comprobación de
+  reapertura agotaba las 1000 expresiones en el camino de A10 sobre un MANUAL.
+  Si vuelves a meterla dentro de `canPickOwnUnit`/`canAssignWithProvenance`, o
+  añades un segundo `get`/`getAfter`, revienta. Lo vigila
+  `backend/firestore/test/picking.test.mjs`.
 - **Functions**: `maxInstances: 3` y europe-west1 en `setGlobalOptions` son el techo de
   coste (spec §12.4) — no subirlos sin consultar al usuario.
 - **Presupuesto de peso de la web**: `chunkSizeWarningLimit: 300` en vite.config.ts;

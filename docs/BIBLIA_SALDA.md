@@ -1758,6 +1758,55 @@ receptor puede deshacerla; su espejo en `economicPayments` es derivado y
 recompute lo retira). Si algún día molesta visualmente, se aborda como
 problema de recompute, no de A2.
 
+### ADR-041: El reparto no cuenta hasta que todo el mundo termina (A19)
+
+**Contexto.** Elegir consumo se escribía y se publicaba a la vez: cada toque
+disparaba un recompute que creaba liquidaciones y obligaciones P5 firmes desde
+un reparto a medio hacer. Con ADR-021 (lo no reclamado es de quien pagó), esos
+estados intermedios no eran aproximados sino falsos, y además **cobrables**.
+La investigación descartó la hipótesis inicial: las escrituras punteadas por
+par (unidad, persona) ya eran correctas bajo concurrencia —medido: dos
+personas, dos dispositivos del mismo uid, ráfagas y offline conservan todo—.
+La causa raíz es una ambigüedad: «no he mirado» y «no consumí nada» son
+indistinguibles mirando las líneas. Falta un bit.
+
+**Decisión.** Dos campos en el documento del ticket (`pickingModelVersion` y
+`picking`). Un gasto `byItem` es económicamente firme cuando ningún
+participante ACTIVO sigue en `picking.open` y la topología no ha cambiado
+desde el cierre. Toda escritura de reparto debe dejar abierto al pid afectado
+—lo exigen las Rules con un único `getAfter`—, así que un «he terminado»
+obsoleto es imposible, no improbable. Un ticket reabierto **congela** su
+última economía firme (`picking.firmContribution`) en vez de retirarla, y el
+universo del LIBRO (`ledgerIds`) se separa del universo del REPARTO
+(`activeIds`). Contrato: `docs/CIERRE_DE_CONSUMO.md`.
+
+**Alternativas descartadas.** `schemaVersion: 3` con `pending` por unidad,
+generaciones, `unitIds` generacionales y mapas invertidos: resolvían un
+problema de concurrencia que no existía, a cambio de migración y doble
+esquema. Debounce del recompute: reduce la frecuencia de los estados falsos,
+no los elimina, y un temporizador no explica a nadie cuándo cuenta su
+selección. Segunda proyección económica provisional: rompía la invariante de
+un solo motor —`settlements` es la simplificación de `balances`, no un dato
+paralelo—. Retirar la economía del ticket reabierto: medido, fabrica una
+liquidación inversa por el importe entero, nueva y cobrable, solo por estar
+editando.
+
+**Consecuencias.** Ni Functions nuevas (`recomputeOnTicket` ya cubría la ruta,
+y por eso `picking` es un campo y no una subcolección) ni motor nuevo:
+`frozenContribution` produce la entrada de siempre. `assignment`, los motores
+y los vectores dorados quedan intactos. Se arreglan de paso dos fallos
+latentes ajenos a A19: desactivar a alguien con una liquidación confirmada
+lanzaba `unknownParticipant` y dejaba la sesión sin recalcular, y un commit de
+recompute abortado se perdía porque los triggers no llevan `retry`. Sin
+migración de datos históricos. Ventana de rollout: un cliente antiguo puede
+seguir editando mientras el pid esté abierto, y se le deniega en cuanto esté
+cerrado — degrada denegando, nunca corrompiendo.
+
+**Restricción que no se puede romper.** La rama de reparto admite UN acceso de
+documento adicional, y `validUnitWrite` se evalúa una sola vez, izada a la
+rama. Con la duplicación anterior, añadir la comprobación de reapertura
+agotaba las 1000 expresiones en el camino de A10 sobre un MANUAL.
+
 ---
 
 <a name="parte-x"></a>
