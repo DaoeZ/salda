@@ -85,12 +85,21 @@ export interface LineDoc {
   totalPrice: Cents;
   /** Cantidad ×1000; define las unidades reclamables de la línea (P2.1). */
   quantityMilli?: number;
+  /** Unidades declaradas por la línea; entra en la huella de A19. */
+  unitIds?: string[];
   assignment?: {
     type?: string;
     participants?: Record<string, number>;
     schemaVersion?: number;
     units?: Record<string, Record<string, boolean | number>>;
   };
+}
+
+/** Última economía FIRME de un ticket (A19). La escribe SOLO recompute. */
+export interface FirmContribution {
+  paidBy: string;
+  grandTotal: Cents;
+  consumption: Record<string, Cents>;
 }
 
 export interface TicketDoc {
@@ -101,6 +110,13 @@ export interface TicketDoc {
   merchantName?: string;
   date?: string;
   spaceId?: string;
+  /** 1 = el gasto espera a que todos terminen de elegir (A19). */
+  pickingModelVersion?: number;
+  picking?: {
+    open?: Record<string, boolean>;
+    fingerprint?: string;
+    firmContribution?: FirmContribution;
+  };
   lines: LineDoc[];
 }
 
@@ -193,6 +209,17 @@ export interface RecomputeResult {
   ticketEntitlements: TicketEntitlementDraft[];
   /** Espejo de pagos legacy confirmados/pendientes con participantes UID. */
   legacyPayments: LegacyPaymentDraft[];
+  /** Escrituras del protocolo de cierre de consumo (A19). */
+  pickingWrites: Array<{
+    accountId: string;
+    ticketId: string;
+    /** Sellar la topología vigente. */
+    fingerprint?: string;
+    /** Devolver a TODOS los activos a `picking.open`. */
+    reopen?: boolean;
+    /** Congelar la economía del cierre. */
+    firmContribution?: TicketContribution;
+  }>;
 }
 
 export interface TicketEntitlementDraft {
@@ -289,6 +316,13 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
   const economicEntries: EconomicEntryDraft[] = [];
   const ticketParticipants: TicketParticipantProjection[] = [];
   const ticketEntitlements: TicketEntitlementDraft[] = [];
+  const pickingWrites: RecomputeResult['pickingWrites'] = [];
+  /**
+   * Actores con peso económico YA CONTRAÍDO que pueden no estar activos:
+   * los de una contribución congelada en uso y los extremos de una
+   * liquidación confirmada. El libro tiene que poder nombrarlos (A19).
+   */
+  const historicPids = new Set<string>();
 
   for (const account of s.accounts) {
     let accountTotal = 0;
@@ -326,14 +360,71 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         // recae en el pagador, unidad a unidad.
         payerId: paidBy,
       });
-      contributions.push({
-        paidBy,
-        grandTotal: ticket.grandTotal,
-        consumption,
-      });
+      // ── Puerta de firmeza (A19) ──────────────────────────────────────
+      // Firme: la economía es la del reparto real. Reabierto: la última que
+      // fue firme, congelada. Nunca cerrado: ninguna. Lo pagado (`accountTotal`,
+      // arriba) NO depende de esto: es descriptivo, no un balance.
+      const firm = ticketIsFirm(ticket, mode, activeIds);
+      const economic = firm
+        ? { paidBy, grandTotal: ticket.grandTotal, consumption }
+        : frozenContribution(ticket);
+      if (economic) {
+        contributions.push(economic);
+        // Actores con peso económico ya contraído: pueden no estar activos
+        // hoy y aun así tener que ser NOMBRADOS por el libro.
+        if (!firm) {
+          historicPids.add(economic.paidBy);
+          for (const pid of Object.keys(economic.consumption)) {
+            historicPids.add(pid);
+          }
+        }
+      }
+      // La economía que se publica: la viva si el ticket es firme, la
+      // congelada si está reabierto. Todo lo que sigue —obligaciones P5
+      // incluidas— sale de aquí, para que una obligación de un ticket
+      // reabierto sea byte a byte la misma que antes de reabrirlo.
+      const economicPaidBy = economic?.paidBy ?? paidBy;
+      const economicConsumption = economic?.consumption ?? {};
+
+      // ── Sello de topología y congelación (A19) ───────────────────────
+      if (ticket.pickingModelVersion === 1) {
+        const fingerprint = pickingFingerprint(mode, ticket.lines);
+        const stored = ticket.picking?.fingerprint;
+        // Al cerrar se congela la economía del cierre: es la que sostendrá
+        // los pagos si alguien vuelve a abrir el reparto después.
+        const freeze = firm &&
+          comparableContribution(economic) !==
+            comparableContribution(ticket.picking?.firmContribution);
+        if (stored !== fingerprint || freeze) {
+          pickingWrites.push({
+            accountId: account.id,
+            ticketId: ticket.id,
+            ...(stored !== fingerprint ? { fingerprint } : {}),
+            // La PRIMERA vez solo se sella la huella: el ticket acaba de
+            // nacer con su `open` ya sembrado por quien lo creó y no hay
+            // nada que reabrir. Después, cualquier cambio de topología
+            // devuelve a TODOS los activos a elegir — una unidad nueva no
+            // puede convertirse en residual del pagador sin que nadie haya
+            // tenido ocasión de reclamarla.
+            ...(stored !== undefined && stored !== fingerprint
+              ? { reopen: true }
+              : {}),
+            ...(freeze && economic ? { firmContribution: economic } : {}),
+          });
+        }
+      }
 
       // Participa quien consume algo o quien paga. Se proyecta la identidad
       // estable (manualId / claimedByDevice), nunca el nombre.
+      //
+      // OJO: esto sale del consumo VIVO, no del económico. Ni la proyección
+      // de participación ni el derecho histórico esperan al cierre:
+      //  - el enlace de ticket (ADR-036) existe justamente para preguntarle a
+      //    alguien qué consumió: bloquearlo mientras se elige sería al revés;
+      //  - el derecho histórico (A11d) es autoridad de LECTURA y es monótono.
+      //    El pagador lo necesita desde el primer instante: concedido solo al
+      //    cerrar, alguien expulsado del grupo con el reparto aún abierto
+      //    perdería el gasto que pagó él.
       const participatingPids = new Set<string>([paidBy]);
       for (const [pid, amount] of Object.entries(consumption)) {
         if (amount > 0) participatingPids.add(pid);
@@ -392,7 +483,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
       // económicamente pesa igual aunque no tenga cuenta ni dispositivo. Un
       // nombre suelto sin identidad sigue sin publicarse: no se inventa
       // identidad a partir del nombre (ADR-033).
-      const payerActor = actorByPid.get(paidBy);
+      const payerActor = actorByPid.get(economicPaidBy);
       if (payerActor) {
         const byDebtor = new Map<string, Cents>();
         const aliases = s.manualAliases ?? {};
@@ -403,7 +494,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
         // Se compara la IDENTIDAD efectiva, no el actor: los actores
         // históricos siguen intactos en los documentos.
         const payerIdentity = resolveActorIdentity(payerActor, aliases);
-        for (const [pid, amount] of Object.entries(consumption)) {
+        for (const [pid, amount] of Object.entries(economicConsumption)) {
           const debtorActor = actorByPid.get(pid);
           if (!debtorActor || debtorActor === payerActor || amount <= 0) {
             continue;
@@ -445,6 +536,31 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
     .map((st) => ({ from: st.from, to: st.to, amount: st.amount }))
     .concat(s.externalConfirmed ?? []);
 
+  // Una liquidación CONFIRMADA es peso económico contraído: sus dos extremos
+  // tienen que existir en el libro aunque uno ya no participe.
+  for (const settlement of frozen) {
+    historicPids.add(settlement.from);
+    historicPids.add(settlement.to);
+  }
+
+  // ── El universo del LIBRO no es el del REPARTO (A19) ─────────────────
+  //
+  // `activeIds` decide quién puede recibir consumo NUEVO: eso no cambia, y
+  // es lo que reciben `splitTicket` y `sanitizeLine`. El libro, en cambio,
+  // tiene que poder NOMBRAR a cualquiera con peso económico ya contraído,
+  // porque si no puede nombrarlo no puede cuadrarlo.
+  //
+  // Medido: con un único universo, desactivar a alguien que tiene una
+  // liquidación confirmada hacía que `computeBalance` lanzara
+  // `unknownParticipant` y la sesión ENTERA dejaba de recalcularse.
+  //
+  // Estar en el libro NO es estar activo: no da permisos, no permite
+  // seleccionar, no entra en `picking.open` y no recibe consumo nuevo.
+  const ledgerIds = [
+    ...activeIds,
+    ...[...historicPids].filter((pid) => !known.has(pid)).sort(),
+  ];
+
   const legacyPayments: LegacyPaymentDraft[] = [];
   for (const settlement of s.settlements) {
     // `pending` es una sugerencia de recompute, no un pago humano. Solo
@@ -472,7 +588,7 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
   }
 
   const balance = computeBalance({
-    participantIds: activeIds,
+    participantIds: ledgerIds,
     tickets: contributions,
     frozenSettlements: frozen,
   });
@@ -536,6 +652,102 @@ export function computeAggregates(s: SessionSnapshot): RecomputeResult {
     ticketParticipants,
     ticketEntitlements,
     legacyPayments,
+    pickingWrites,
+  };
+}
+
+/**
+ * Serialización estable de una contribución, para poder comparar la del
+ * cierre con la ya congelada sin reescribir el ticket en cada recompute
+ * (y sin disparar una cascada de triggers por nada).
+ */
+function comparableContribution(
+  contribution: TicketContribution | FirmContribution | undefined,
+): string {
+  if (!contribution) return '';
+  const consumption = Object.entries(contribution.consumption)
+    .filter(([, cents]) => cents !== 0)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return JSON.stringify([
+    contribution.paidBy,
+    contribution.grandTotal,
+    consumption,
+  ]);
+}
+
+/**
+ * Huella de la TOPOLOGÍA de reparto de un ticket (A19).
+ *
+ * Cambia si y solo si cambia algo que invalida una elección ya hecha: el
+ * modo efectivo, el conjunto de líneas o los `unitIds` de alguna. NO cambia
+ * con el nombre, el precio ni el total, porque corregir un importe no altera
+ * QUÉ consumió nadie.
+ *
+ * Vive solo en el servidor: ningún cliente la calcula ni la escribe, así que
+ * no hay una tercera implementación que mantener en paridad.
+ */
+export function pickingFingerprint(
+  mode: SplitMode,
+  lines: readonly LineDoc[],
+): string {
+  const parts = [...lines]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map((line) => `${line.id}:${[...(line.unitIds ?? [])].join(',')}`);
+  return `${mode}|${parts.join(';')}`;
+}
+
+/**
+ * ¿Entra este ticket en la economía firme? (A19)
+ *
+ * Un ticket sin `pickingModelVersion` es de antes del protocolo y se comporta
+ * como siempre. A partes iguales el reparto no mira las líneas, así que no
+ * hay nada que esperar. En «cada uno lo suyo» hace falta que todos los
+ * ACTIVOS hayan terminado —a quien ya no participa no se le espera, porque
+ * tampoco va a mover un céntimo— y que la topología no haya cambiado desde
+ * el cierre: si cambió, este mismo recompute está a punto de reabrirlo.
+ */
+export function ticketIsFirm(
+  ticket: TicketDoc,
+  mode: SplitMode,
+  activeIds: readonly string[],
+): boolean {
+  if (ticket.pickingModelVersion !== 1) return true;
+  if (mode === 'equal') return true;
+  const stored = ticket.picking?.fingerprint;
+  if (stored !== undefined &&
+      stored !== pickingFingerprint(mode, ticket.lines)) {
+    return false;
+  }
+  return Object.keys(ticket.picking?.open ?? {})
+    .every((pid) => !activeIds.includes(pid));
+}
+
+/**
+ * Aportación económica de un ticket REABIERTO: la última que fue firme.
+ *
+ * No se retira, se congela. Retirarla dejaría un pago `confirmed` sin la
+ * obligación que lo justificaba, y el modelo leería eso como un sobrepago:
+ * aparecería una liquidación INVERSA por el importe entero, nueva y
+ * cobrable, provocada solo por el hecho de estar editando.
+ *
+ * Se devuelve TAL CUAL, sin reinterpretarla según quién siga activo hoy.
+ * Congelada significa congelada: el `paidBy`, el total y el consumo son los
+ * del cierre. Quien figure aquí y ya no esté activo entra igualmente en el
+ * universo del LIBRO (ver `ledgerIds`), que es lo que permite que la
+ * economía del último cierre siga cuadrando byte a byte.
+ *
+ * `undefined` = el ticket nunca llegó a ser firme, así que no ha podido
+ * generar ningún pago y sale de la economía sin descuadrar nada.
+ */
+export function frozenContribution(
+  ticket: TicketDoc,
+): TicketContribution | undefined {
+  const frozen = ticket.picking?.firmContribution;
+  if (!frozen) return undefined;
+  return {
+    paidBy: frozen.paidBy,
+    grandTotal: frozen.grandTotal,
+    consumption: { ...frozen.consumption },
   };
 }
 
@@ -630,7 +842,17 @@ function sanitizeLine(
 
 // ── Lectura de Firestore y escritura de agregados ─────────────────────────
 
-export async function recomputeSession(sid: string): Promise<void> {
+/** ¿Abortó el commit porque otra ejecución escribió antes? (gRPC 9) */
+const isStaleWrite = (error: unknown): boolean =>
+  (error as { code?: number } | null)?.code === 9;
+
+/** Intentos máximos ante un conflicto de precondición. Acotado a propósito. */
+const RECOMPUTE_ATTEMPTS = 3;
+
+export async function recomputeSession(
+  sid: string,
+  attempt = 0,
+): Promise<void> {
   const db = getFirestore();
   const sessionRef = db.doc(`sessions/${sid}`);
   const sessionSnap = await sessionRef.get();
@@ -677,10 +899,14 @@ export async function recomputeSession(sid: string): Promise<void> {
                 ?.name,
             date: ticketDoc.data().date as string | undefined,
             spaceId: ticketDoc.data().spaceId as string | undefined,
+            pickingModelVersion:
+              ticketDoc.data().pickingModelVersion as number | undefined,
+            picking: ticketDoc.data().picking as TicketDoc['picking'],
             lines: linesSnap.docs.map((l) => ({
               id: l.id,
               totalPrice: (l.data().totalPrice as number) ?? 0,
               quantityMilli: l.data().quantityMilli as number | undefined,
+              unitIds: l.data().unitIds as string[] | undefined,
               assignment: l.data().assignment,
             })),
           };
@@ -911,6 +1137,7 @@ export async function recomputeSession(sid: string): Promise<void> {
   // (y notificaciones/lecturas de listeners) innecesarias.
   const current = sessionSnap.data() ?? {};
   const unchanged =
+    result.pickingWrites.length === 0 &&
     entitlementWrites.size === 0 &&
     JSON.stringify(current.totals) === JSON.stringify(result.sessionTotals) &&
     JSON.stringify(current.balances) === JSON.stringify(result.balances) &&
@@ -932,14 +1159,23 @@ export async function recomputeSession(sid: string): Promise<void> {
       totals: result.accountTotals[accountDoc.id],
     });
   }
-  batch.update(sessionRef, {
-    totals: result.sessionTotals,
-    balances: result.balances,
-    pendingSettlements: result.pendingSettlements,
-    participantsCount: snapshot.participants.length,
-    computeVersion: FieldValue.increment(1),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  // Serialización de resultados (A19). El batch ENTERO aborta si alguien
+  // escribió la sesión después de nuestra lectura, así que una ejecución que
+  // llegó tarde con datos viejos no puede sobrescribir la economía que otra
+  // acaba de publicar — el caso crítico es «A leyó el ticket abierto, B lo
+  // leyó cerrado y publicó, A commitea después y lo borra».
+  batch.update(
+    sessionRef,
+    {
+      totals: result.sessionTotals,
+      balances: result.balances,
+      pendingSettlements: result.pendingSettlements,
+      participantsCount: snapshot.participants.length,
+      computeVersion: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { lastUpdateTime: sessionSnap.updateTime },
+  );
   for (const id of result.settlementSync.removals) {
     batch.delete(sessionRef.collection('settlements').doc(id));
   }
@@ -1064,7 +1300,49 @@ export async function recomputeSession(sid: string): Promise<void> {
     });
   }
 
-  await batch.commit();
+  // ── Protocolo de cierre de consumo (A19) ─────────────────────────────
+  // Rutas punteadas, nunca el mapa entero: si alguien está pulsando «he
+  // terminado» a la vez, las escrituras se funden en vez de pisarse.
+  for (const write of result.pickingWrites) {
+    const ticketRef = sessionRef
+      .collection('accounts').doc(write.accountId)
+      .collection('tickets').doc(write.ticketId);
+    batch.update(ticketRef, {
+      ...(write.fingerprint !== undefined
+        ? { 'picking.fingerprint': write.fingerprint }
+        : {}),
+      ...(write.reopen
+        ? Object.fromEntries(
+            snapshot.participants
+              .filter((p) => p.active !== false)
+              .map((p) => [`picking.open.${p.id}`, true]),
+          )
+        : {}),
+      // La economía del cierre se congela ENTERA y de una pieza: por campos
+      // sueltos, una escritura a medias dejaría un consumo que no suma el
+      // total y `BalanceEngine` lanzaría `consumptionMismatch`.
+      ...(write.firmContribution !== undefined
+        ? { 'picking.firmContribution': write.firmContribution }
+        : {}),
+    });
+  }
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    // Los triggers de Firestore NO llevan `retry`, así que un commit
+    // abortado se perdería sin más y el estado quedaría obsoleto para
+    // siempre. El reintento tiene que ser nuestro, y acotado: se relee todo
+    // desde cero, nunca es un bucle.
+    if (isStaleWrite(error) && attempt + 1 < RECOMPUTE_ATTEMPTS) {
+      logger.info('Recompute obsoleto; se repite con datos frescos', {
+        sid,
+        attempt,
+      });
+      return recomputeSession(sid, attempt + 1);
+    }
+    throw error;
+  }
   logger.info('Sesión recalculada', {
     sid,
     grandTotal: result.sessionTotals.grandTotal,
