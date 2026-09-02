@@ -8,7 +8,7 @@
 
 **Tech Stack:** Firestore Security Rules · Cloud Functions v2 TypeScript (solo `recompute`, ya existente) · Flutter + Riverpod v3 · Svelte 5 + TS · `@firebase/rules-unit-testing` + Emulator Suite · `fake_cloud_firestore` · vitest · `node --test`.
 
-**Spec:** este plan implementa el modelo aprobado por el usuario el 2026-08-31 sobre las mediciones de las dos rondas de investigación A19, resumidas en «Mediciones que sostienen este plan». El contrato vivo se escribe en la Tarea 14 (`docs/CIERRE_DE_CONSUMO.md`); desde ahí, plan y contrato se leen juntos. El documento exploratorio `docs/superpowers/plans/2026-08-30-a19-borrador-de-consumo-v3.md` queda **derogado**: ninguna de sus decisiones aplica.
+**Spec:** este plan implementa el modelo aprobado por el usuario el 2026-08-31 sobre las mediciones de las dos rondas de investigación A19, resumidas en «Mediciones que sostienen este plan». El contrato vivo se escribe en la Tarea 14 (`docs/CIERRE_DE_CONSUMO.md`); desde ahí, plan y contrato se leen juntos. Un plan exploratorio previo basado en `schemaVersion 3` quedó **descartado** durante la investigación: ninguna de sus decisiones aplica.
 
 ## Global Constraints
 
