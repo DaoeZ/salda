@@ -206,10 +206,22 @@ Decisiones clave:
   por membresía.
 - **Archivar** oculta el espacio de la lista principal, conserva miembros,
   tickets e historial, bloquea invitaciones/edición/vínculos nuevos y es
-  reversible. No existe el borrado de espacios en P4 (nada destructivo).
-  P5 permite consultar y liquidar una deuda ya originada porque el pago es
-  bilateral y no muta el espacio; no se pueden crear tickets nuevos mientras
-  el espacio permanezca archivado.
+  reversible. P5 permite consultar y liquidar una deuda ya originada porque el
+  pago es bilateral y no muta el espacio; no se pueden crear tickets nuevos
+  mientras el espacio permanezca archivado.
+  **Archivar NO saca al espacio de la economía activa**: sus obligaciones siguen
+  contando en los balances (no hay una sola referencia a `archived` en
+  `economic_repository.dart`, `recompute.ts` ni `economicPayments.ts`).
+- **Eliminar** — **NO IMPLEMENTADO todavía**. Hasta el 2026-09-04 la
+  documentación decía que «archivar es la única baja» (ADR-028). Esa afirmación
+  queda **superada** por el contrato de **A4**, que distingue expresamente
+  **Archivado ≠ Eliminado** y es una decisión de producto **cerrada**: eliminar
+  será un estado propio, solo del owner, posible incluso con saldos pendientes
+  bajo confirmación reforzada, que congela la economía activa, aparece en
+  «Eliminados», avisa individualmente a cada miembro, es restaurable durante 7
+  días y después queda como historial readonly que no afecta a balances activos.
+  Hoy `SpaceStatus` solo tiene `active|archived` y `spaces` **no tiene
+  `allow delete`** en Rules. Contrato completo en `docs/BACKLOG_SALDA.md` § A4.
 - **Administradores (ADR-038)**: `members/{uid}.role: 'admin'|'member'`, ausente
   = miembro. Apareció con una necesidad real —un cobro dirigido a alguien SIN
   cuenta no lo podía confirmar nadie más que el propietario—, no por simetría
@@ -515,7 +527,27 @@ Play App Signing si se publica en Play— o los App Links dejarán de
 verificarse en esas variantes.
 
 **Pendiente de Hosting**: servir `/g/{token}` como página de aterrizaje para
-quien NO tenga la app instalada (hoy responde el SPA de invitados).
+quien NO tenga la app instalada (hoy responde el SPA de invitados con
+`OpenInAppView`, que solo dice «ábrelo en la app»).
+
+**⚠️ Tensión abierta con el contrato de A5 (2026-09-04, auditoría).** El
+mecanismo descrito arriba —un token opaco por GRUPO, reutilizable, revocable y
+no enumerable— **ya cumple** la parte de A5 que pide «un único enlace del
+contexto, no uno por persona», y resuelve la identidad por UID cuando quien lo
+abre tiene cuenta. Faltan dos cosas que este ADR **no** cubre y que A5 sí exige:
+
+1. **La mitad web.** «Sin app / sin cuenta → web» está al 0% mientras `/g/` siga
+   siendo una invitación a instalar la app.
+2. **Identidades MANUAL.** A5 quiere que la web ofrezca elegir «Soy Tete» entre
+   las identidades guest/manual disponibles. ADR-035 lo excluye expresamente
+   («Manual: no aplica — no tiene dispositivo») y ADR-036 **rev. 2** retiró ese
+   mismo selector de los enlaces de ticket **por una vulnerabilidad real**: un
+   enlace emitido para una persona servía para quedarse con la identidad
+   económica de otra y, vía ADR-037, pedir la vinculación de su historial.
+
+Ninguno de los dos ADR queda superado. A5 necesita un ADR propio que explique
+cómo ofrece el selector sin reabrir la suplantación. Ver
+`docs/BACKLOG_SALDA.md` § A5.
 
 ## Tickets y política de privacidad
 
@@ -679,6 +711,18 @@ reparto de terceros (A10) exigen `managesGroupOf`, que excluye relaciones.
 una línea del modelo de pesos NO es lossless —los pesos no dicen qué unidad
 concreta se compartía—, así que esa conversión sigue siendo del dueño de la
 sesión y explícita. Los tickets creados hoy nacen ya con unidades.
+
+**DEUDA ACEPTADA (confirmada en la auditoría del 2026-09-04).** Quien administra
+**no puede** tocar una casilla que su dueño ya se autoseleccionó: la asignación
+existe y su procedencia —vacía, por ser autoselección— no se reescribe, así que
+firmar deniega, y no firmar también, porque asignar por otra persona exige
+firma. Es una limitación de Rules, no del cliente, y la denegación es **limpia**
+(no un presupuesto de expresiones agotado). Está fijada por test en
+`backend/firestore/test/unit_assignment.test.mjs` («la admin todavía no puede
+marcar lo que su dueño autoseleccionó»). El rodeo es pedirle a esa persona que
+suelte la unidad. **Esto NO reabre A10**, que queda RESUELTO: el workflow normal
+—asignar a cuentas, manuales e invitados, compartir, retirar y reasignar— está
+completo. Ver `docs/BACKLOG_SALDA.md` § A10.
 
 ## Eliminar un gasto (A2, ADR-040)
 

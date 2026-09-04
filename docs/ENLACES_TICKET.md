@@ -23,6 +23,17 @@ Los enlaces del esquema 1 ya emitidos **dejan de identificar a nadie** —el
 `targetManualId` ausente no coincide con ningún `manualId`—; el dueño solo
 puede revocarlos, no reactivarlos.
 
+> **⚠️ Conflicto abierto con el contrato de A5 (2026-09-04, auditoría).** El
+> contrato de **A5** («enlace único de grupo para guests y personas manuales»)
+> pide un enlace compartible en el que la web muestre las identidades
+> guest/manual disponibles y quien lo abra elija «Soy Tete». Eso es
+> **exactamente el esquema 1 que esta revisión retiró**, y por la razón que se
+> explica arriba. **Esta rev. 2 sigue vigente y NO queda superada.** A5 no puede
+> implementarse sin un ADR que explique cómo ofrece ese selector sin reabrir la
+> suplantación —por ejemplo acotando qué identidades se publican, exigiendo una
+> prueba adicional del destinatario, o separando «entrar al grupo» de
+> «identificarse como una persona concreta»—. Ver `docs/BACKLOG_SALDA.md` § A5.
+
 ## Qué resuelve
 
 Compartir **un ticket concreto** con quien no tiene por qué entrar en el

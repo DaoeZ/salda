@@ -5,10 +5,18 @@
 > de tocar código. La especificación `docs/ESPECIFICACION.md` v2.0 es **definitiva y
 > congelada** y manda sobre este resumen.
 >
-> **Existe además `docs/BIBLIA_SALDA.md`** — la referencia estratégica y técnica
-> definitiva: visión de producto vigente (centrada en GRUPOS), ADRs, Contrato del
-> Proyecto, lista negra, checklists, métricas, roadmap R1–R4 y postmortems.
-> **Orden de lectura obligatorio: este archivo → ESPECIFICACION.md → BIBLIA_SALDA.md.**
+> **Los tres documentos de referencia, y qué es cada uno:**
+>
+> | Documento | Qué es |
+> |---|---|
+> | **`docs/BACKLOG_SALDA.md`** | **Contrato y estado canónico de A1–A20 + N1–N3.** Fuente ÚNICA. Si un commit, un plan o una conversación dice otra cosa sobre un A#, manda este archivo. |
+> | **`docs/BIBLIA_CODIGO_SALDA.md`** | **Memoria técnica acumulativa de sesiones**: decisiones, errores cometidos, trampas del código, invariantes transversales. Una entrada por sesión de cierre. |
+> | **`docs/BIBLIA_SALDA.md`** | Referencia estratégica y técnica **histórica**: visión de producto, ADRs, Contrato del Proyecto, lista negra, checklists, métricas, roadmap R1–R4 y postmortems. |
+>
+> **Orden de lectura obligatorio al empezar cualquier sesión:**
+> 1. este archivo → 2. `docs/BACKLOG_SALDA.md` → 3. `docs/BIBLIA_CODIGO_SALDA.md`
+> → 4. el código, los tests y Git. `docs/ESPECIFICACION.md` v2.0 sigue siendo
+> definitiva y congelada para requisitos y modelo de datos.
 
 ---
 
@@ -45,6 +53,21 @@
 - No hagas `git commit` ni `git push` salvo petición explícita del usuario en ese turno.
 - No des una tarea por terminada con `dart analyze --fatal-infos`, tests o goldens
   relevantes en rojo (ver §12 "Comandos de verificación por fase").
+- **Antes de trabajar un bug o funcionalidad nueva, en este orden:** (1) lee este
+  archivo; (2) lee `docs/BACKLOG_SALDA.md`; (3) lee `docs/BIBLIA_CODIGO_SALDA.md`;
+  (4) inspecciona el código, los tests y Git. No deduzcas el estado de nada por el
+  nombre de un commit ni por documentación suelta.
+- **Una sesión fresca por bug o bloque coherente.** No encadenes un bug nuevo
+  después de cerrar el actual: se cierra, se documenta y se para.
+- **⚠️ Las etiquetas `A#` internas del plan de A19 NO son IDs del backlog.** El plan
+  `docs/superpowers/plans/2026-08-31-a19-cierre-de-consumo.md` y varios commits usan
+  `A1`…`A7` como números de tarea propios. `A19 (A4)` (participante desactivado) no
+  es A4 (eliminar grupo); `A19 (A5/A6)` (errores visibles en la web, tickets en vivo)
+  no es A5 ni A6. **Nunca infieras el significado de un A# por una etiqueta: consulta
+  `docs/BACKLOG_SALDA.md` primero.**
+- **`salda-prod` es una frontera absoluta.** No se despliega, no se toca y no se
+  promociona sin una ventana explícita pedida por el usuario en ese turno. Lo mismo
+  para `main`: el trabajo vive en su rama.
 
 ---
 
@@ -376,14 +399,19 @@ packages/ocr_parser/        Dart puro: OcrDocument/OcrRect (agnóstico de motor)
                             LineBuilder (geometría) → ReceiptParser (registry por país)
                             → EsReceiptParser (perfiles + reglas). test/corpus/ =
                             corpus de regresión con harness de métricas por campo
-packages/ai_providers/      Esqueleto para M6 (contrato AiReceiptProvider + adaptadores)
+packages/ai_providers/      COMPLETO (M6): contrato AiReceiptProvider, prompt canónico,
+                            parseAiResponse, adaptadores Claude/Gemini/OpenAI-compatible
 apps/mobile/                Flutter Android+iOS (org dev.salda, proyecto salda_mobile):
-                            core/{theme,routing,utils} · l10n/ (ARB es + generated/)
-                            features/home · features/scan · features/review
-apps/guest_web/             Svelte 5 + Vite + TS. Placeholder hasta M4. SIN dinero.
+                            core/{config,diagnostics,firebase,routing,theme,ui,utils}
+                            l10n/ (ARB es + generated/) · 14 features:
+                            activity · ai · auth · chat · economy · friends · home
+                            people · profile · review · scan · sessions · settings · spaces
+apps/guest_web/             Svelte 5 + Vite + TS. Web de invitados REAL (M4). SIN dinero:
+                            pinta los agregados que escribe la function.
 backend/functions/          Cloud Functions v2 TS (europe-west1, maxInstances 3):
+                            21 functions exportadas desde src/index.ts
                             src/domain/ = espejo TS de los motores; src/test/golden
-backend/firestore/          firestore.rules + storage.rules (deny-all) + índices
+backend/firestore/          firestore.rules (matriz §13.2, 472 tests) + storage.rules + índices
 firebase.json / .firebaserc Config + Emulator Suite (default: demo-salda)
 .github/workflows/ci.yml    CI: dart+flutter · guest-web · functions (job rules en M3)
 ```
@@ -516,6 +544,8 @@ firebase CLI → keyring del SO del desarrollador.
 
 | Archivo | Qué es / por qué consultarlo |
 |---|---|
+| **`docs/BACKLOG_SALDA.md`** | **Contrato y estado canónico de A1–A20 + N1–N3.** Léelo ANTES de tocar cualquier A#. Incluye el aviso de colisión de numeración con las tareas internas de A19 |
+| **`docs/BIBLIA_CODIGO_SALDA.md`** | Memoria técnica acumulativa por sesión: decisiones, errores, trampas del código e invariantes transversales |
 | `docs/ESPECIFICACION.md` | Spec v2.0 congelada: requisitos RF/RNF, matriz de seguridad §13.2, modelo de datos §7, guía de diseño §3, roadmap §19 |
 | `packages/domain/lib/src/money.dart` | Money + allocateProportionally: LA primitiva de redondeo |
 | `packages/domain/lib/src/engines/split_engine.dart` | Reparto por ticket (modos, pesos, política de líneas sin asignar) |

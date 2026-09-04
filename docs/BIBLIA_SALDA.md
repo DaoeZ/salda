@@ -674,7 +674,14 @@ alertas de métricas recomendadas en spec §12.4.
 <a name="parte-vi"></a>
 # PARTE VI — CALIDAD, RENDIMIENTO Y SEGURIDAD
 
-## §36. Estrategia de testing [HECHO: 251 tests]
+## §36. Estrategia de testing [HECHO: ~1.551 tests — medidos el 2026-09-04]
+
+> **Recuento real** (la cifra anterior, «251», databa de M5 e inducía a error):
+> `packages/domain` **130** · `packages/ocr_parser` **33** · `apps/mobile`
+> **650** (5 skip) · `backend/functions` **203** · Rules contra emulador **472**
+> (11 ficheros en `backend/firestore/test/`) · `apps/guest_web` **63** (vitest,
+> 9 ficheros). Los cinco primeros bloques y la web se ejecutaron en verde
+> durante la auditoría del 2026-09-04; los de Rules se contaron por inspección.
 
 | Capa | Tipo | Qué cubre | Dónde |
 |---|---|---|---|
@@ -801,7 +808,10 @@ el embrión del timeline.
   firmada) → API abierta a scripts con la config pública.
 
 **Media**:
-- **DT-4** El feed `activity/` se escribe pero no se muestra (timeline UI).
+- ~~**DT-4** El feed `activity/` se escribe pero no se muestra (timeline UI).~~
+  **RESUELTA por P6 (ADR-031)**: hay pantalla global `/home/activity`, sección y
+  cronología por espacio, tiempo real y paginación. Contrato en
+  `docs/ACTIVIDAD.md`. *(Corregido el 2026-09-04.)*
 - **DT-5** Agregado te-deben/debes calculado sobre la página cargada del historial.
 - **DT-6** Microinteracciones spec §3.6 sin implementar (escaneo, container
   transform, haptics).
@@ -905,8 +915,8 @@ a TODAS.
 3. **App Check** (DT-3) · dep: firma release + Play Integrity · M · riesgo:
    bloquear clientes legítimos → modo monitor 1 semana antes de enforce ·
    CA: métricas de verificación >99 % antes de enforce.
-4. **Timeline de actividad en el detalle** (DT-4) · S · CA: eventos existentes
-   listados en vivo; escritura de eventos faltantes (confirmaciones).
+4. ~~**Timeline de actividad en el detalle** (DT-4)~~ — **HECHO en P6**
+   (ADR-031, `docs/ACTIVIDAD.md`). *(Corregido el 2026-09-04.)*
 5. **Chip offline + cola visible** · S · CA: modo avión → chip + edición sigue
    funcionando → reconexión sincroniza.
 6. **Pulido spec §3.6**: línea de escaneo, container transform, haptics (DT-6) · M.
@@ -931,8 +941,9 @@ a TODAS.
 18. Perfil de usuario + avatar · S · **HECHO P2**. 19. Amistades canónicas por
     UID, independientes de personas frecuentes y de relaciones económicas · M ·
     **HECHO P3** (ADR-027).
-20. [Evaluar tras uso real] chat ligero por grupo (Firestore está hecho para
-    esto; decidir con el principio de simplicidad en la mano).
+20. ~~[Evaluar tras uso real] chat ligero por grupo~~ — **HECHO en P7**
+    (ADR-032, `docs/CHAT.md`): `spaces/{spaceId}/messages`, acotado a
+    `createdAt >= members/{uid}.joinedAt`. *(Corregido el 2026-09-04.)*
 
 ### Fase R4 — 1.0 pública
 21. Página de producto + dominio definitivo + rebranding si procede (cambiar
@@ -944,6 +955,15 @@ a TODAS.
 R3 puede solaparse con R2 salvo el punto 16 que conviene tras la beta inicial.
 
 ## §54. Estrategia de migración al modelo centrado en grupos
+
+> **⚠️ SECCIÓN HISTÓRICA — derogada por ADR-030 (2026-09-04).** La tabla de abajo
+> describe el modelo ANTERIOR a la reestructuración Relaciones/Grupos. Hoy la
+> raíz visible del producto es **`spaces`** —`relationship` reserva una pareja
+> canónica de UID y `group` representa contextos de tres o más miembros—, los
+> miembros son UID en `spaces/{id}/members`, el timeline es P6 (ADR-031) y el
+> chat es P7 (ADR-032). Se conserva porque explica de dónde viene el modelo
+> actual y por qué no hubo migración de datos. **Fuente vigente:
+> `docs/ESPACIOS.md` y ADR-030.**
 
 **Conclusión de la auditoría: NO hay migración de datos — hay evolución de
 superficie.** El modelo actual YA es grupos:
@@ -1057,6 +1077,7 @@ Incremental por construcción; térmico ilegible ≠ marca perdida; corpus como 
 **Decisión:** las líneas sin consumidores se atribuyen al **pagador del ticket** (neto cero para él en esa parte: la pagó y la "consume"); a medida que la gente reclama, la parte del pagador se reduce hasta quedar solo lo suyo. La conversión vive en `recompute.sanitizeLine` (que conoce al pagador); el motor puro NO cambia (paridad y vectores dorados intactos) y se le pasa `unassignedPolicy: 'error'` como red de seguridad. `splitAmongAll` sigue siendo una capacidad pura del motor (tested) reservada al futuro "finalizar y repartir sobrantes con confirmación" (RF-46), pero NUNCA se usa en el cálculo continuo.
 **Consecuencias:** + fin de la media previa; Σ==grandTotal siempre; redondeo único preservado (ADR-007); + tests de regresión que blindan el caso exacto reportado y los límites (compartir 2/3/4, dejar de compartir, IVA/descuentos, tickets grandes, múltiples grupos). − el pagador ve una parte alta mientras el grupo no ha reclamado sus productos (correcto y transitorio; la UI puede indicarlo).
 **Revisión futura:** si se implementa el "finalizar ticket" explícito (RF-46), decidir allí si los sobrantes se dejan al pagador o se reparten con confirmación.
+**Tensión abierta con A9 (2026-09-04, auditoría):** el contrato de **A9** —reparto inteligente en relaciones de EXACTAMENTE dos personas— propone que, con solo dos participantes, lo no reclamado se infiera como consumo de la contraparte en vez de recaer en el pagador, con confirmación explícita antes de hacerlo firme. **ADR-021 NO queda superada: sigue siendo la regla vigente e implementada** (`recompute.ts`, `sanitizeLine`). A9 sería una **excepción futura acotada al caso bilateral** y requiere ADR propio antes de tocar código. Ver `docs/BACKLOG_SALDA.md` § A9.
 
 ### ADR-022: Progreso sobre obligaciones y separación histórico/actual
 **Estado:** Aceptada · **Fecha:** 2026-07-15 (P0.3)
@@ -1238,6 +1259,16 @@ consolidados por espacio serán un cambio de recompute en su propia fase.
 Contrato en `docs/ESPACIOS.md`.
 **Revisión:** al llegar los balances consolidados, decidir si el espacio
 referencia sesiones completas además de tickets sueltos.
+**⚠️ SUPERADA EN UN PUNTO — «archivar es la única baja» (2026-09-04):** el
+contrato de **A4** distingue expresamente **Archivado ≠ Eliminado** y es una
+decisión de producto **cerrada**. Eliminar un grupo pasa a existir como estado
+propio: solo el owner, posible incluso con saldos pendientes bajo confirmación
+reforzada, congela la economía activa, aparece en «Eliminados», avisa
+individualmente a cada miembro, es restaurable durante 7 días y después queda
+como historial readonly que no afecta a balances activos. **El resto de ADR-028
+sigue íntegramente vigente** (propietario en un solo campo, membresías por UID,
+invitaciones deterministas, tickets vinculables): lo único superado es la
+afirmación de que archivar es la única baja. Ver `docs/BACKLOG_SALDA.md` § A4.
 
 ### ADR-029: Obligaciones derivadas y pagos bilaterales autoritativos
 **Estado:** Aceptada · **Fecha:** 2026-07-19 (P5)
@@ -1520,6 +1551,15 @@ aterrizaje para quien no tenga la app. Contrato en `docs/ESPACIOS.md`.
 este mecanismo en vez de inventar otro; y en el Sprint 6 tener presente que
 un MANUAL y un INVITADO que sean la misma persona siguen siendo dos actores
 distintos — entrar por enlace no lo empeora, pero tampoco lo resuelve.
+**Tensión con el alcance futuro de A5 (2026-09-04, auditoría), sin resolver:**
+el contrato de **A5** quiere que este mismo enlace sirva también a las personas
+**MANUAL** y que la web ofrezca elegir identidad. Este ADR lo excluye
+expresamente («MANUAL no aplica: no tiene dispositivo») y reserva el selector a
+los enlaces de TICKET, que a su vez lo retiraron por vulnerabilidad en ADR-036
+rev. 2. Además sigue **pendiente la página de aterrizaje de `/g/{token}`**: hoy
+la web muestra «ábrelo en la app» (`OpenInAppView.svelte`), así que el requisito
+de A5 «sin app/cuenta → web» está sin cubrir. No se da por resuelta ninguna de
+las dos cosas. Ver `docs/BACKLOG_SALDA.md` § A5.
 
 ### ADR-036: Enlace de ticket con identificación temporal, no vinculación
 **Estado:** Aceptada · **Fecha:** 2026-07-25 (Sprint 5)
@@ -1557,6 +1597,15 @@ suplantación silenciosa. Contrato en `docs/ENLACES_TICKET.md`.
 **Revisión:** en el Sprint 6, sustituir o invalidar estas pruebas al vincular
 —un MANUAL con `linkedUid` ya deja de ser elegible en Rules— sin tocar el
 historial económico, del que nunca formaron parte.
+**⚠️ CONFLICTO ABIERTO con el contrato de A5 (2026-09-04, auditoría):** A5 pide
+**un único enlace de grupo** en el que la web muestre las identidades
+guest/manual disponibles y quien lo abra elija «Soy Tete». Eso es exactamente el
+**esquema 1 retirado por esta rev. 2**, cuya vulnerabilidad está documentada
+arriba: un enlace generado para Pedro servía para quedarse con la identidad
+económica de Ana y, vía ADR-037, para pedir la vinculación de su historial.
+**ADR-036 rev. 2 NO queda superada: sigue vigente.** A5 no puede implementarse
+sin un ADR que explique cómo ofrece ese selector sin reabrir la suplantación.
+Ver `docs/BACKLOG_SALDA.md` § A5.
 
 ### ADR-037: Vinculación por ALIAS, con aprobación del anfitrión
 **Estado:** Aceptada · **Fecha:** 2026-07-26 (Sprint 6)
@@ -1608,6 +1657,55 @@ La traza mínima es `linkRetryCount`, `linkRetryRequestedAt`,
 escribir esos campos.
 **Revisión:** decidir si la actividad (P6) debe registrar la vinculación como
 un hecho más de la cronología.
+
+### ADR-038: Autoridad económica por obligación y representación de manuales (A17/A18)
+**Estado:** Aceptada · **Fecha:** 2026-08-18 (`8d5ffba`, `5cc4007`, docs `edc43ab`)
+> *Registrada en este índice el 2026-09-04: la auditoría A1–A20 detectó que
+> ADR-038 existía en los contratos (`docs/RELACIONES_ECONOMICAS.md` §«Permisos y
+> liquidación por obligación», `docs/ESPACIOS.md`) pero **faltaba aquí**, entre
+> ADR-037 y ADR-039. Es justo el ADR que fija quién puede confirmar un cobro.*
+
+**Contexto:** «Confirmar recepción» aparecía en Economía global pero no en la
+portada de la relación ni en «Balance con X», y una parte de la deuda no era
+confirmable por nadie porque el deudor nunca la había declarado. Hacía falta
+decidir quién tiene autoridad sobre el dinero y sobre qué unidad se liquida.
+**Decisión:** [HECHO] **el receptor del dinero es quien confirma que lo ha
+recibido.** Ser propietario o administrador de un espacio NO da acceso al saldo
+de una cuenta ajena; solo permite **representar** a un participante MANUAL, que
+por definición no puede confirmar nada. Vincular ese manual (ADR-037) termina la
+representación sin revocar nada.
+- `economicActingRole` / `canConfirmReceipt` en `packages/domain` con espejo TS
+  (`backend/functions/src/domain/economicAuthority.ts`): un único predicado para
+  interfaz, Functions y —en su forma de lectura— Rules.
+- `settleEconomicEntries` liquida obligaciones **concretas** y escribe UN pago
+  por cada una (`allocations` + `economicEntryId`), así que un saldo agregado
+  nunca se convierte en una obligación nueva ni pierde su ticket. Importe por
+  defecto = lo pendiente de esa deuda; el parcial es la excepción. **Dos techos
+  obligatorios**: lo vivo en la obligación y lo vivo en el saldo bilateral (este
+  último impide cobrar dos veces una deuda ya saldada por una liquidación de
+  sesión, que no deja asignación por ticket). Idempotente por id determinista.
+- Si el actor obra por el lado acreedor la liquidación nace `confirmed`; por el
+  deudor, `pending`: **«Ya he pagado» es un aviso, nunca una precondición.**
+- `resolveEconomicPayment` acepta representación y solo consulta el espacio
+  cuando hay una identidad sin cuenta implicada (entre dos cuentas, coste cero).
+- Rules: `members/{uid}.role` como **única** delegación (solo la concede el
+  propietario, nadie nace admin, un INVITADO no puede serlo); lectura extra de
+  obligaciones con parte manual para quien administra su espacio, filtrada por
+  `hasManualParty` (derivado e inmutable) para que la consulta sea demostrable.
+- **Administrar un gasto ≠ administrar pagos**: un admin puede corregir el
+  ticket que originó una deuda (A11c) sin adquirir autoridad para confirmar que
+  un usuario registrado ha recibido dinero.
+
+**Consecuencias:** cierra A17 (autoridad) y A18 (liquidación por obligación), y
+es la base sobre la que A20 lleva «Confirmar recepción» a las cinco superficies
+de balance con su desglose real. Un pago legado no lo resuelve la callable de
+P5 por diseño: la app escribe en su `settlements/{id}`.
+**Tests:** 32 de planificación y validación en functions, 8 de Rules sobre
+permisos económicos, 9 de dominio y 16 de app.
+**Nota (2026-09-04):** el destinatario de `notifyOnSettlement` sigue siendo
+`session.ownerUid`, que desde este ADR **no es necesariamente el receptor
+económico**. Ver `docs/BACKLOG_SALDA.md` § N1 (hallazgo H1) antes de cablear
+notificaciones.
 
 ### ADR-039: Expulsión con evidencia por CICLO y bloqueo separado (A11d)
 **Estado:** Aceptada · **Fecha:** 2026-08-26 (A11d)
