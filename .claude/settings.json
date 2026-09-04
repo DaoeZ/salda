@@ -1,0 +1,126 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "PowerShell(git status*)",
+      "PowerShell(git diff*)",
+      "PowerShell(git log*)",
+      "PowerShell(git show*)",
+      "Bash(dart analyze*)",
+      "Bash(dart test*)",
+      "Bash(dart format*)",
+      "Bash(dart run design_tokens:generate*)",
+      "Bash(flutter analyze*)",
+      "Bash(flutter test*)",
+      "Bash(flutter pub get*)",
+      "PowerShell(dart analyze*)",
+      "PowerShell(dart test*)",
+      "PowerShell(dart format*)",
+      "PowerShell(dart run design_tokens:generate*)",
+      "PowerShell(flutter analyze*)",
+      "PowerShell(flutter test*)",
+      "PowerShell(flutter pub get*)",
+      "Bash(npm test*)",
+      "Bash(npm run check*)",
+      "Bash(npm run build*)",
+      "Bash(npm ci*)",
+      "Bash(node --test*)",
+      "PowerShell(npm test*)",
+      "PowerShell(npm run check*)",
+      "PowerShell(npm run build*)",
+      "PowerShell(npm ci*)",
+      "PowerShell(node --test*)",
+      "Bash(firebase emulators:exec*)",
+      "PowerShell(firebase emulators:exec*)"
+    ],
+    "ask": [
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "PowerShell(git commit*)",
+      "PowerShell(git push*)",
+      "Bash(firebase *)",
+      "PowerShell(firebase *)"
+    ],
+    "deny": [
+      "Bash(git reset --hard*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git clean -f*)",
+      "Bash(git clean -df*)",
+      "Bash(git clean -fd*)",
+      "Bash(firebase deploy --only hosting*)",
+      "Bash(firebase use prod*)",
+      "Bash(firebase use salda-prod*)",
+      "PowerShell(git reset --hard*)",
+      "PowerShell(git push --force*)",
+      "PowerShell(git push -f*)",
+      "PowerShell(git clean -f*)",
+      "PowerShell(git clean -df*)",
+      "PowerShell(git clean -fd*)",
+      "PowerShell(firebase deploy --only hosting*)",
+      "PowerShell(firebase use prod*)",
+      "PowerShell(firebase use salda-prod*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/serviceAccount*.json)",
+      "Read(**/*.jks)",
+      "Read(**/*.keystore)",
+      "Read(**/dev-keystore.properties)",
+      "Read(**/key.properties)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-guard.ps1\"",
+            "timeout": 15,
+            "statusMessage": "Comprobando que el comando no toque produccion ni sea destructivo..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/posttooluse-write-edit.ps1\"",
+            "timeout": 30,
+            "statusMessage": "Formateando .dart y anotando validacion pendiente..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-validate.ps1\"",
+            "timeout": 600,
+            "statusMessage": "Validando SALDA antes de terminar (analyze/tests solo si hubo cambios relevantes)..."
+          }
+        ]
+      }
+    ]
+  },
+  "worktree": {
+    "baseRef": "head",
+    "symlinkDirectories": [
+      "apps/guest_web/node_modules",
+      "backend/functions/node_modules",
+      "backend/firestore/node_modules"
+    ]
+  }
+}

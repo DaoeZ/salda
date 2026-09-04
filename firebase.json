@@ -15,7 +15,8 @@
   ],
   "hosting": {
     "public": "apps/guest_web/dist",
-    "ignore": ["firebase.json", "**/.*"],
+    "appAssociation": "NONE",
+    "ignore": ["firebase.json"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
     "headers": [
       {

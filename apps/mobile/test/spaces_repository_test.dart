@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:salda_mobile/features/spaces/data/spaces_repository.dart';
@@ -24,11 +26,61 @@ void main() {
       expect(space['name'], 'Viaje a Lisboa');
       expect(space['ownerUid'], 'uid-a');
       expect(space['status'], 'active');
-      expect(space['schemaVersion'], 1);
+      expect(space['schemaVersion'], 2);
+      expect(space['kind'], 'group');
       expect(
         (await firestore.doc('spaces/$id/members/uid-a').get()).exists,
         true,
       );
+    });
+
+    test(
+      'relación usa id canónico y reserva exactamente los dos UID',
+      () async {
+        final created = await repoFor(
+          'uid-b',
+        ).createRelationship(toUid: 'uid-a', name: 'Ana y Bruno');
+        final id = created.id;
+
+        expect(created.outcome, RelationshipOutcome.created);
+        expect(id, relationshipSpaceId('uid-a', 'uid-b'));
+        expect(id, relationshipSpaceId('uid-b', 'uid-a'));
+        final space = (await firestore.doc('spaces/$id').get()).data()!;
+        expect(space['kind'], 'relationship');
+        expect(space['relationshipUids'], ['uid-a', 'uid-b']);
+        expect(
+          (await firestore.doc('spaceInvites/${id}_uid-a').get()).data(),
+          containsPair('status', 'pending'),
+        );
+
+        // BUG-3: antes esto era `alreadyMember`, que la pantalla mostraba
+        // como «no se pudo completar la acción». Ahora se distingue: la
+        // creó la otra persona, así que lo correcto es ACEPTAR.
+        expect(
+          () => repoFor(
+            'uid-a',
+          ).createRelationship(toUid: 'uid-b', name: 'Duplicada'),
+          throwsA(
+            isA<SpaceFailure>().having(
+              (failure) => failure.code,
+              'code',
+              SpaceFailureCode.invitedByOther,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('espacio histórico sin kind se interpreta como grupo', () async {
+      await firestore.doc('spaces/legacy').set({
+        'name': 'Histórico',
+        'ownerUid': 'uid-a',
+        'status': 'active',
+      });
+      await firestore.doc('spaces/legacy/members/uid-a').set({'uid': 'uid-a'});
+
+      final spaces = await repoFor('uid-a').watchMySpaces().first;
+      expect(spaces.single.kind, SpaceKind.group);
     });
 
     test('watchMySpaces lista los espacios de MIS membresías', () async {
@@ -41,44 +93,101 @@ void main() {
       expect(spaces.single.name, 'Piso');
     });
 
+    test('watchMySpaces.first emite y cancela sin bloquear', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+
+      final spaces = await repo.watchMySpaces().first.timeout(
+        const Duration(seconds: 2),
+      );
+
+      expect(spaces.map((space) => space.id), [id]);
+    });
+
+    test(
+      'watchMySpaces reemite cambios vivos de padre y ordena membresías',
+      () async {
+        final repo = repoFor('uid-a');
+        await firestore.doc('spaces/first').set({
+          'name': 'Primero',
+          'ownerUid': 'uid-a',
+          'status': 'active',
+          'createdAt': DateTime(2026, 1, 1),
+          'updatedAt': DateTime(2026, 1, 1),
+        });
+        await firestore.doc('spaces/first/members/uid-a').set({'uid': 'uid-a'});
+        await firestore.doc('spaces/second').set({
+          'name': 'Segundo',
+          'ownerUid': 'uid-a',
+          'status': 'active',
+          'createdAt': DateTime(2026, 2, 1),
+          'updatedAt': DateTime(2026, 2, 1),
+        });
+        await firestore.doc('spaces/second/members/uid-a').set({
+          'uid': 'uid-a',
+        });
+        final iterator = StreamIterator(repo.watchMySpaces());
+        addTearDown(iterator.cancel);
+
+        Future<List<Space>> nextWithCount(int count) async {
+          while (await iterator.moveNext()) {
+            if (iterator.current.length == count) return iterator.current;
+          }
+          throw StateError('El stream terminó antes de emitir $count espacios');
+        }
+
+        final initial = await nextWithCount(2);
+        expect(initial.map((space) => space.id), ['second', 'first']);
+
+        await firestore.doc('spaces/first').update({
+          'name': 'Renombrado',
+          'status': 'archived',
+          'updatedAt': DateTime(2026, 3, 1),
+        });
+        final changed = await nextWithCount(2);
+        expect(changed.map((space) => space.id), ['first', 'second']);
+        expect(changed.first.name, 'Renombrado');
+        expect(changed.first.status, SpaceStatus.archived);
+      },
+    );
+
     test('archivar y reactivar', () async {
       final repo = repoFor('uid-a');
       final id = await repo.createSpace('Peña');
       await repo.setStatus(id, SpaceStatus.archived);
-      expect(
-        (await repo.watchSpace(id).first)!.status,
-        SpaceStatus.archived,
-      );
+      expect((await repo.watchSpace(id).first)!.status, SpaceStatus.archived);
       await repo.setStatus(id, SpaceStatus.active);
       expect((await repo.watchSpace(id).first)!.isActive, true);
     });
 
-    test('transferencia: un solo doc; a no-miembro falla; a mí mismo, no-op',
-        () async {
-      final repoA = repoFor('uid-a');
-      final id = await repoA.createSpace('Familia');
-      await firestore.doc('spaces/$id/members/uid-b').set({
-        'uid': 'uid-b',
-        'joinedAt': DateTime(2026, 7),
-      });
+    test(
+      'transferencia: un solo doc; a no-miembro falla; a mí mismo, no-op',
+      () async {
+        final repoA = repoFor('uid-a');
+        final id = await repoA.createSpace('Familia');
+        await firestore.doc('spaces/$id/members/uid-b').set({
+          'uid': 'uid-b',
+          'joinedAt': DateTime(2026, 7),
+        });
 
-      await repoA.transferOwnership(id, 'uid-b');
-      expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
+        await repoA.transferOwnership(id, 'uid-b');
+        expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
 
-      await expectLater(
-        repoFor('uid-b').transferOwnership(id, 'uid-x'),
-        throwsA(
-          isA<SpaceFailure>().having(
-            (f) => f.code,
-            'code',
-            SpaceFailureCode.targetUnavailable,
+        await expectLater(
+          repoFor('uid-b').transferOwnership(id, 'uid-x'),
+          throwsA(
+            isA<SpaceFailure>().having(
+              (f) => f.code,
+              'code',
+              SpaceFailureCode.targetUnavailable,
+            ),
           ),
-        ),
-      );
-      // Idempotente: transferirse a sí mismo no cambia nada.
-      await repoFor('uid-b').transferOwnership(id, 'uid-b');
-      expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
-    });
+        );
+        // Idempotente: transferirse a sí mismo no cambia nada.
+        await repoFor('uid-b').transferOwnership(id, 'uid-b');
+        expect((await repoA.watchSpace(id).first)!.ownerUid, 'uid-b');
+      },
+    );
   });
 
   group('invitaciones', () {
@@ -89,8 +198,7 @@ void main() {
       await repoA.invite(id, 'Viaje', 'uid-b');
       final inviteId = SpaceInvite.idFor(id, 'uid-b');
       expect(
-        (await firestore.doc('spaceInvites/$inviteId').get())
-            .data()!['status'],
+        (await firestore.doc('spaceInvites/$inviteId').get()).data()!['status'],
         'pending',
       );
 
@@ -116,8 +224,7 @@ void main() {
       );
     });
 
-    test('aceptar une al receptor y resuelve la invitación en batch',
-        () async {
+    test('aceptar une al receptor y resuelve la invitación en batch', () async {
       final repoA = repoFor('uid-a');
       final repoB = repoFor('uid-b');
       final id = await repoA.createSpace('Viaje');
@@ -148,8 +255,10 @@ void main() {
       final again = await repoB.watchMyInvites().first;
       expect(again.single.id, invite.id);
       expect(again.single.status, SpaceInviteStatus.pending);
-      expect((await firestore.collection('spaceInvites').get()).docs,
-          hasLength(1));
+      expect(
+        (await firestore.collection('spaceInvites').get()).docs,
+        hasLength(1),
+      );
     });
 
     test('cancelar deja la invitación fuera de las pendientes', () async {
@@ -163,34 +272,36 @@ void main() {
   });
 
   group('membresía', () {
-    test('el owner no puede salir; un miembro sí (solo su doc social)',
-        () async {
-      final repoA = repoFor('uid-a');
-      final id = await repoA.createSpace('Piso');
-      await firestore.doc('spaces/$id/members/uid-b').set({
-        'uid': 'uid-b',
-        'joinedAt': DateTime(2026, 7),
-      });
+    test(
+      'el owner no puede salir; un miembro sí (solo su doc social)',
+      () async {
+        final repoA = repoFor('uid-a');
+        final id = await repoA.createSpace('Piso');
+        await firestore.doc('spaces/$id/members/uid-b').set({
+          'uid': 'uid-b',
+          'joinedAt': DateTime(2026, 7),
+        });
 
-      await expectLater(
-        repoA.leave(id),
-        throwsA(
-          isA<SpaceFailure>().having(
-            (f) => f.code,
-            'code',
-            SpaceFailureCode.ownerCannotLeave,
+        await expectLater(
+          repoA.leave(id),
+          throwsA(
+            isA<SpaceFailure>().having(
+              (f) => f.code,
+              'code',
+              SpaceFailureCode.ownerCannotLeave,
+            ),
           ),
-        ),
-      );
+        );
 
-      await repoFor('uid-b').leave(id);
-      expect(
-        (await firestore.doc('spaces/$id/members/uid-b').get()).exists,
-        false,
-      );
-      // El espacio y su otro miembro siguen intactos.
-      expect((await firestore.doc('spaces/$id').get()).exists, true);
-    });
+        await repoFor('uid-b').leave(id);
+        expect(
+          (await firestore.doc('spaces/$id/members/uid-b').get()).exists,
+          false,
+        );
+        // El espacio y su otro miembro siguen intactos.
+        expect((await firestore.doc('spaces/$id').get()).exists, true);
+      },
+    );
 
     test('expulsar borra SOLO la membresía', () async {
       final repoA = repoFor('uid-a');
@@ -207,6 +318,88 @@ void main() {
     });
   });
 
+  group('participantes manuales (ADR-033)', () {
+    test('alta: identidad opaca y estable, nunca el nombre', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      final manual = await repo.addManualParticipant(id, '  Lucía  ');
+
+      expect(manual.displayName, 'Lucía');
+      expect(manual.id, isNotEmpty);
+      expect(manual.id, isNot(contains('Lucía')));
+      // El actor económico es lo que viaja a las obligaciones.
+      expect(manual.actor, 'manual:${manual.id}');
+      expect(manual.linkedUid, isNull); // vinculación: fase futura
+
+      final raw =
+          (await firestore
+                  .doc('spaces/$id/manualParticipants/${manual.id}')
+                  .get())
+              .data()!;
+      expect(raw['manualId'], manual.id);
+      expect(raw['linkedUid'], isNull);
+      expect(raw['schemaVersion'], 1);
+    });
+
+    test('renombrar NO cambia la identidad económica', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      final manual = await repo.addManualParticipant(id, 'Lucia');
+
+      await repo.renameManualParticipant(id, manual.id, 'Lucía Gómez');
+
+      final listed = await repo.watchManualParticipants(id).first;
+      expect(listed.single.id, manual.id); // misma identidad
+      expect(listed.single.displayName, 'Lucía Gómez');
+      expect(listed.single.actor, manual.actor);
+    });
+
+    test('nombre vacío o desmesurado: rechazado', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      await expectLater(
+        repo.addManualParticipant(id, '   '),
+        throwsA(isA<SpaceFailure>()),
+      );
+      await expectLater(
+        repo.addManualParticipant(id, 'x' * 41),
+        throwsA(isA<SpaceFailure>()),
+      );
+    });
+
+    test('conviven varios y se listan por antigüedad', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Peña');
+      final first = await repo.addManualParticipant(id, 'Ana');
+      final second = await repo.addManualParticipant(id, 'Bruno');
+
+      final listed = await repo.watchManualParticipants(id).first;
+      expect(listed.map((m) => m.id), [first.id, second.id]);
+      expect(listed.map((m) => m.actor).toSet().length, 2); // ids únicos
+    });
+
+    test('retirar borra la identidad, no el historial economico', () async {
+      final repo = repoFor('uid-a');
+      final id = await repo.createSpace('Piso');
+      final manual = await repo.addManualParticipant(id, 'Lucía');
+      // Una obligación ya derivada conserva el actor aunque se retire.
+      await firestore.doc('economicEntries/e1').set({
+        'memberUids': ['uid-a'],
+        'debtorUid': manual.actor,
+        'creditorUid': 'uid-a',
+        'amount': 500,
+        'currency': 'EUR',
+      });
+
+      await repo.removeManualParticipant(id, manual.id);
+
+      expect(await repo.watchManualParticipants(id).first, isEmpty);
+      final entry = (await firestore.doc('economicEntries/e1').get()).data()!;
+      expect(entry['debtorUid'], manual.actor);
+      expect(entry['amount'], 500);
+    });
+  });
+
   group('tickets', () {
     const ticketPath = 'sessions/s1/accounts/a1/tickets/t1';
 
@@ -219,27 +412,17 @@ void main() {
       });
     });
 
-    test('vincular, sobrescribir (máximo un espacio) y desvincular',
-        () async {
+    test('vincular, sobrescribir (máximo un espacio) y desvincular', () async {
       final repo = repoFor('uid-a');
       await repo.linkTicket(ticketPath, 'sp1');
-      expect(
-        (await firestore.doc(ticketPath).get()).data()!['spaceId'],
-        'sp1',
-      );
+      expect((await firestore.doc(ticketPath).get()).data()!['spaceId'], 'sp1');
 
       // Máximo un espacio: vincular a otro sobrescribe, nunca duplica.
       await repo.linkTicket(ticketPath, 'sp2');
-      expect(
-        (await firestore.doc(ticketPath).get()).data()!['spaceId'],
-        'sp2',
-      );
+      expect((await firestore.doc(ticketPath).get()).data()!['spaceId'], 'sp2');
 
       await repo.unlinkTicket(ticketPath);
-      expect(
-        (await firestore.doc(ticketPath).get()).data()!['spaceId'],
-        '',
-      );
+      expect((await firestore.doc(ticketPath).get()).data()!['spaceId'], '');
       // Nada más cambió en el ticket (participantes/importes intactos).
       expect(
         (await firestore.doc(ticketPath).get()).data()!['grandTotal'],
@@ -263,11 +446,256 @@ void main() {
       expect(tickets.single.sessionId, 's1');
     });
 
-    test('compatibilidad: un ticket sin spaceId no aparece en ningún espacio',
-        () async {
-      final tickets =
-          await repoFor('uid-a').watchSpaceTickets('sp1').first;
-      expect(tickets, isEmpty);
+    test('tickets se ordenan por creación, fecha heredada y ruta', () async {
+      final repo = repoFor('uid-a');
+      for (final ticket in [
+        (
+          'sessions/s1/accounts/a/tickets/old',
+          DateTime(2026, 1, 1),
+          '2026-06-01',
+        ),
+        (
+          'sessions/s1/accounts/a/tickets/new',
+          DateTime(2026, 3, 1),
+          '2020-01-01',
+        ),
+        ('sessions/s1/accounts/a/tickets/date', null, '2026-02-01'),
+        ('sessions/s1/accounts/a/tickets/path-a', null, null),
+        ('sessions/s1/accounts/a/tickets/path-z', null, null),
+      ]) {
+        await firestore.doc(ticket.$1).set({
+          'spaceId': 'sp1',
+          'grandTotal': 100,
+          'merchant': {'name': ticket.$1},
+          if (ticket.$2 != null) 'createdAt': ticket.$2,
+          if (ticket.$3 != null) 'date': ticket.$3,
+        });
+      }
+
+      final tickets = await repo.watchSpaceTickets('sp1').first;
+      expect(tickets.map((ticket) => ticket.id), [
+        'new',
+        'old',
+        'date',
+        'path-z',
+        'path-a',
+      ]);
+    });
+
+    test(
+      'compatibilidad: un ticket sin spaceId no aparece en ningún espacio',
+      () async {
+        final tickets = await repoFor('uid-a').watchSpaceTickets('sp1').first;
+        expect(tickets, isEmpty);
+      },
+    );
+  });
+
+  group('BUG-3: invitaciones de relacion segun la cuenta', () {
+    // El id es canonico, asi que el resultado depende de la historia con ESA
+    // persona. Antes cualquier documento preexistente aborta ba con un error
+    // generico y dejaba un callejon sin salida permanente.
+    Future<void> seedProfiles() async {
+      for (final uid in ['uid-a', 'uid-b']) {
+        await firestore.doc('profiles/$uid').set({'displayName': uid});
+      }
+    }
+
+    test('crear en AMBOS sentidos produce el MISMO id canonico', () async {
+      await seedProfiles();
+      final ida = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+      expect(ida.outcome, RelationshipOutcome.created);
+
+      // La otra persona intenta crearla: mismo espacio canonico.
+      expect(
+        relationshipSpaceId('uid-b', 'uid-a'),
+        relationshipSpaceId('uid-a', 'uid-b'),
+      );
+    });
+
+    test('si la creo la OTRA persona, se dice que hay que aceptar', () async {
+      await seedProfiles();
+      await repoFor('uid-b').createRelationship(toUid: 'uid-a', name: 'B y A');
+
+      // uid-a intenta crearla: antes -> alreadyMember -> error generico.
+      expect(
+        () =>
+            repoFor('uid-a').createRelationship(toUid: 'uid-b', name: 'A y B'),
+        throwsA(
+          isA<SpaceFailure>().having(
+            (f) => f.code,
+            'code',
+            SpaceFailureCode.invitedByOther,
+          ),
+        ),
+      );
+    });
+
+    test('tras un RECHAZO se puede volver a invitar', () async {
+      await seedProfiles();
+      final creada = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+      await repoFor('uid-b').rejectInvite('${creada.id}_uid-b');
+
+      // Antes esto era imposible para siempre con esa persona.
+      final reintento = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+      expect(reintento.outcome, RelationshipOutcome.reinvited);
+      expect(reintento.id, creada.id);
+      final invite =
+          (await firestore.doc('spaceInvites/${creada.id}_uid-b').get())
+              .data()!;
+      expect(invite['status'], 'pending');
+    });
+
+    test('repetir la creacion no duplica nada (idempotente)', () async {
+      await seedProfiles();
+      final primera = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+      final segunda = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+
+      expect(segunda.id, primera.id);
+      expect(segunda.outcome, RelationshipOutcome.alreadyInvited);
+      final invites = await firestore.collection('spaceInvites').get();
+      expect(invites.docs, hasLength(1));
+    });
+
+    test('con la relacion ya ACTIVA lo dice y no reescribe', () async {
+      await seedProfiles();
+      final creada = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+      // uid-b acepta.
+      final invite = (await repoFor('uid-b').watchMyInvites().first).single;
+      await repoFor('uid-b').acceptInvite(invite);
+
+      final otra = await repoFor(
+        'uid-a',
+      ).createRelationship(toUid: 'uid-b', name: 'A y B');
+      expect(otra.outcome, RelationshipOutcome.alreadyActive);
+      expect(otra.id, creada.id);
+    });
+
+    test('el owner NO depende del orden lexicografico', () async {
+      await seedProfiles();
+      // 'uid-b' > 'uid-a': el creador es el mayor.
+      final creada = await repoFor(
+        'uid-b',
+      ).createRelationship(toUid: 'uid-a', name: 'B y A');
+      final space = (await firestore.doc('spaces/${creada.id}').get()).data()!;
+      expect(space['ownerUid'], 'uid-b');
+      expect(space['relationshipUids'], ['uid-a', 'uid-b']);
+    });
+
+    test('crear una relacion consigo mismo se rechaza', () async {
+      expect(
+        () => repoFor('uid-a').createRelationship(toUid: 'uid-a', name: 'Yo'),
+        throwsA(
+          isA<SpaceFailure>().having(
+            (f) => f.code,
+            'code',
+            SpaceFailureCode.notAllowed,
+          ),
+        ),
+      );
+    });
+  });
+
+  group('BUG-2: relacion ACCOUNT + MANUAL (el caso de Pablo)', () {
+    test('crea una relacion de DOS identidades sin cuenta ajena', () async {
+      final rel = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
+      expect(rel.outcome, RelationshipOutcome.created);
+
+      final space = (await firestore.doc('spaces/${rel.id}').get()).data()!;
+      // Es una RELACION, no un grupo.
+      expect(space['kind'], 'relationship');
+      expect(space['schemaVersion'], 3);
+      // Una sola cuenta; la segunda plaza es el manual.
+      expect(space['relationshipUids'], ['uid-a']);
+      expect(space['relationshipManualId'], isNotNull);
+      // El id ya NO deriva de dos UID: por eso el caso es posible.
+      expect(rel.id, isNot(contains('~')));
+
+      final manual =
+          (await firestore
+                  .doc(
+                    'spaces/${rel.id}/manualParticipants/'
+                    '${space['relationshipManualId']}',
+                  )
+                  .get())
+              .data()!;
+      expect(manual['displayName'], 'Pablo');
+      // Preparado para la vinculacion del Sprint 6.
+      expect(manual['linkedUid'], isNull);
+    });
+
+    test('aparece en Inicio como relacion, con su nombre', () async {
+      final rel = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
+      final mias = await repoFor('uid-a').watchMySpaces().first;
+      final relacion = mias.singleWhere((s) => s.id == rel.id);
+      expect(relacion.isRelationship, isTrue);
+      expect(relacion.isManualRelationship, isTrue);
+      expect(relacion.name, 'Pablo');
+    });
+
+    test('el actor economico del manual es manual:{id}', () async {
+      final rel = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
+      final manuales = await repoFor(
+        'uid-a',
+      ).watchManualParticipants(rel.id).first;
+      expect(manuales, hasLength(1));
+      // Es la clave con la que se escribiran sus obligaciones.
+      expect(manuales.single.actor, 'manual:${manuales.single.id}');
+    });
+
+    test('un nombre vacio o demasiado largo se rechaza', () async {
+      for (final malo in ['', '   ', 'x' * 41]) {
+        expect(
+          () => repoFor(
+            'uid-a',
+          ).createRelationshipWithManual(name: 'R', manualName: malo),
+          throwsA(isA<SpaceFailure>()),
+        );
+      }
+    });
+
+    test(
+      'ACCOUNT + ACCOUNT sigue usando el id canonico, sin duplicados',
+      () async {
+        await firestore.doc('profiles/uid-b').set({'displayName': 'B'});
+        final rel = await repoFor(
+          'uid-a',
+        ).createRelationship(toUid: 'uid-b', name: 'A y B');
+        // El esquema anterior no cambia: id canonico y dos UID.
+        expect(rel.id, relationshipSpaceId('uid-a', 'uid-b'));
+        final space = (await firestore.doc('spaces/${rel.id}').get()).data()!;
+        expect(space['schemaVersion'], 2);
+        expect(space.containsKey('relationshipManualId'), isFalse);
+      },
+    );
+
+    test('varias relaciones MANUAL conviven: no comparten id', () async {
+      final pablo = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Pablo', manualName: 'Pablo');
+      final marta = await repoFor(
+        'uid-a',
+      ).createRelationshipWithManual(name: 'Marta', manualName: 'Marta');
+      // Con el id canonico esto era imposible: no hay UID que las distinga.
+      expect(pablo.id, isNot(marta.id));
     });
   });
 }

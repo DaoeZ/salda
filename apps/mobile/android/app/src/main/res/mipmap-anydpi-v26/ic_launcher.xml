@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive Icon (Android 8+). El FONDO ya es definitivo: el verde de marca
+     tomado de los tokens. El FOREGROUND espera al símbolo aprobado; hasta
+     entonces se mantiene el recurso heredado para no inventar un dibujo
+     provisional que después haya que desaprender.
+
+     Para activarlo: colocar ic_launcher_foreground.png en cada mipmap-* y
+     descomentar la línea de foreground. Ver assets/brand/README.md. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/saldaLauncherBackground" />
+    <foreground android:drawable="@mipmap/ic_launcher" />
+    <!-- <foreground android:drawable="@mipmap/ic_launcher_foreground" /> -->
+</adaptive-icon>

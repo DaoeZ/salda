@@ -18,14 +18,14 @@ class DraftLine {
   });
 
   factory DraftLine.fromExtracted(ExtractedLine line) => DraftLine(
-        name: line.name,
-        quantityMilli: line.quantityMilli,
-        unitPrice: line.unitPrice,
-        totalPrice: line.totalPrice,
-        confidence: line.confidence,
-        sourceText: line.sourceText,
-        alternatives: line.alternatives,
-      );
+    name: line.name,
+    quantityMilli: line.quantityMilli,
+    unitPrice: line.unitPrice,
+    totalPrice: line.totalPrice,
+    confidence: line.confidence,
+    sourceText: line.sourceText,
+    alternatives: line.alternatives,
+  );
 
   final String name;
   final int quantityMilli;
@@ -43,16 +43,39 @@ class DraftLine {
     Money? unitPrice,
     bool clearUnitPrice = false,
     Money? totalPrice,
-  }) =>
-      DraftLine(
-        name: name ?? this.name,
-        quantityMilli: quantityMilli ?? this.quantityMilli,
-        unitPrice: clearUnitPrice ? null : (unitPrice ?? this.unitPrice),
-        totalPrice: totalPrice ?? this.totalPrice,
-        confidence: 1.0, // editado por el usuario = verdad
-        sourceText: sourceText,
-        alternatives: const [], // ya no aplican
-      );
+  }) => DraftLine(
+    name: name ?? this.name,
+    quantityMilli: quantityMilli ?? this.quantityMilli,
+    unitPrice: clearUnitPrice ? null : (unitPrice ?? this.unitPrice),
+    totalPrice: totalPrice ?? this.totalPrice,
+    confidence: 1.0, // editado por el usuario = verdad
+    sourceText: sourceText,
+    alternatives: const [], // ya no aplican
+  );
+}
+
+/// Precio unitario que sobrevive a la edición de una línea (A15).
+///
+/// El unitario es informativo: el reparto usa el TOTAL de la línea y la
+/// cantidad. En cuanto cambia cualquiera de esos dos, un unitario que venía
+/// del OCR deja de poder demostrarse, y conservarlo sería guardar un dato que
+/// ya sabemos que puede mentir — la misma decisión que tomó A11c después de
+/// guardar, donde directamente se borra.
+///
+/// Tampoco se recalcula `total / cantidad`: eso inventaría un precio que el
+/// ticket no dice (ofertas, pesos, redondeos). Solo se conserva si lo escribe
+/// una persona, o si no ha cambiado nada que lo sostenga.
+Money? unitPriceAfterEdit(
+  DraftLine? original, {
+  required int quantityMilli,
+  required Money total,
+  required Money? typed,
+}) {
+  if (original == null) return typed; // línea nueva: lo que escriba manda
+  if (typed != original.unitPrice) return typed; // edición explícita
+  final mismaCantidad = original.quantityMilli == quantityMilli;
+  final mismoTotal = original.totalPrice == total;
+  return mismaCantidad && mismoTotal ? typed : null;
 }
 
 /// Estado de la revisión de un ticket antes de guardarlo (M3 lo persiste).
@@ -71,6 +94,7 @@ class ReviewDraftState {
     this.grandTotal,
     this.issues = const [],
     this.sourceConfidence = 1.0,
+    this.manuallyEdited = false,
   });
 
   factory ReviewDraftState.fromExtraction(ReceiptExtraction e) =>
@@ -104,6 +128,16 @@ class ReviewDraftState {
   final List<ReceiptIssue> issues;
   final double sourceConfidence;
 
+  /// ¿Hay trabajo del usuario que una revisión con IA se llevaría por
+  /// delante? La IA devuelve el ticket entero y sustituye el borrador; sin
+  /// esta marca, corregir algo a mano y pedir después una revisión perdía la
+  /// corrección en silencio.
+  ///
+  /// Vive solo en memoria a propósito: no viaja en el contrato canónico ni
+  /// se persiste. Si la app muere y el borrador se recupera del disco, se
+  /// vuelve a partir de «sin editar» — se pierde un aviso, nunca un dato.
+  final bool manuallyEdited;
+
   Money get computedTotal {
     var sum = Money.zero;
     for (final l in lines) {
@@ -119,12 +153,10 @@ class ReviewDraftState {
   /// computed − grandTotal; null si aún no hay total.
   Money? get delta => grandTotal == null ? null : computedTotal - grandTotal!;
 
-  bool get balanced {
-    final d = delta;
-    if (d == null) return false;
-    final tolerance = grandTotal!.abs().cents ~/ 100;
-    return d.abs().cents <= (tolerance > 2 ? tolerance : 2);
-  }
+  /// SOLO habla de aritmética: la suma de líneas coincide con el total. No
+  /// dice nada del comercio, de los nombres ni de las cantidades (A15).
+  bool get balanced =>
+      grandTotal != null && receiptAmountsBalance(computedTotal, grandTotal!);
 
   /// El banner de baja confianza se muestra si el origen era dudoso
   /// o el estado actual no cuadra.
@@ -134,39 +166,37 @@ class ReviewDraftState {
   /// Serialización para el draft persistente: el estado editable vuelve al
   /// contrato canónico (lo editado lleva confianza 1.0 = verdad del usuario).
   ReceiptExtraction toExtraction() => ReceiptExtraction(
-        engine: engine,
-        merchantName: merchantName == null
-            ? const Extracted.missing()
-            : Extracted(merchantName, 1.0),
-        brandKey: brandKey,
-        category: category,
-        date: date == null
-            ? const Extracted.missing()
-            : Extracted(date, 1.0),
-        time: time == null
-            ? const Extracted.missing()
-            : Extracted(time, 1.0),
-        lines: [
-          for (final l in lines)
-            ExtractedLine(
-              name: l.name,
-              quantityMilli: l.quantityMilli,
-              unitPrice: l.unitPrice,
-              totalPrice: l.totalPrice,
-              confidence: l.confidence,
-              sourceText: l.sourceText,
-              alternatives: l.alternatives,
-            ),
-        ],
-        taxes: taxes,
-        discounts: discounts,
-        tip: tip == null ? const Extracted.missing() : Extracted(tip, 1.0),
-        grandTotal: grandTotal == null
-            ? const Extracted.missing()
-            : Extracted(grandTotal, 1.0),
-        issues: issues,
-      );
+    engine: engine,
+    merchantName: merchantName == null
+        ? const Extracted.missing()
+        : Extracted(merchantName, 1.0),
+    brandKey: brandKey,
+    category: category,
+    date: date == null ? const Extracted.missing() : Extracted(date, 1.0),
+    time: time == null ? const Extracted.missing() : Extracted(time, 1.0),
+    lines: [
+      for (final l in lines)
+        ExtractedLine(
+          name: l.name,
+          quantityMilli: l.quantityMilli,
+          unitPrice: l.unitPrice,
+          totalPrice: l.totalPrice,
+          confidence: l.confidence,
+          sourceText: l.sourceText,
+          alternatives: l.alternatives,
+        ),
+    ],
+    taxes: taxes,
+    discounts: discounts,
+    tip: tip == null ? const Extracted.missing() : Extracted(tip, 1.0),
+    grandTotal: grandTotal == null
+        ? const Extracted.missing()
+        : Extracted(grandTotal, 1.0),
+    issues: issues,
+  );
 
+  /// Toda mutación del usuario pasa por aquí, así que `manuallyEdited` se
+  /// marca en un solo sitio en vez de en siete.
   ReviewDraftState copyWith({
     String? merchantName,
     String? date,
@@ -174,22 +204,23 @@ class ReviewDraftState {
     List<DraftLine>? lines,
     Money? grandTotal,
     List<ReceiptIssue>? issues,
-  }) =>
-      ReviewDraftState(
-        engine: engine,
-        merchantName: merchantName ?? this.merchantName,
-        brandKey: brandKey,
-        category: category,
-        date: date ?? this.date,
-        time: time ?? this.time,
-        lines: lines ?? this.lines,
-        discounts: discounts,
-        taxes: taxes,
-        tip: tip,
-        grandTotal: grandTotal ?? this.grandTotal,
-        issues: issues ?? this.issues,
-        sourceConfidence: sourceConfidence,
-      );
+    bool manuallyEdited = true,
+  }) => ReviewDraftState(
+    engine: engine,
+    merchantName: merchantName ?? this.merchantName,
+    brandKey: brandKey,
+    category: category,
+    date: date ?? this.date,
+    time: time ?? this.time,
+    lines: lines ?? this.lines,
+    discounts: discounts,
+    taxes: taxes,
+    tip: tip,
+    grandTotal: grandTotal ?? this.grandTotal,
+    issues: issues ?? this.issues,
+    sourceConfidence: sourceConfidence,
+    manuallyEdited: manuallyEdited,
+  );
 }
 
 class ReviewDraft extends Notifier<ReviewDraftState?> {
@@ -245,8 +276,7 @@ class ReviewDraft extends Notifier<ReviewDraftState?> {
   void removeLine(int index) {
     final s = state;
     if (s == null) return;
-    state = s.copyWith(
-        lines: [...s.lines]..removeAt(index), issues: const []);
+    state = s.copyWith(lines: [...s.lines]..removeAt(index), issues: const []);
     _persist();
   }
 
@@ -258,5 +288,6 @@ class ReviewDraft extends Notifier<ReviewDraftState?> {
   }
 }
 
-final reviewDraftProvider =
-    NotifierProvider<ReviewDraft, ReviewDraftState?>(ReviewDraft.new);
+final reviewDraftProvider = NotifierProvider<ReviewDraft, ReviewDraftState?>(
+  ReviewDraft.new,
+);

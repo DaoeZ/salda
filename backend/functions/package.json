@@ -10,8 +10,9 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "test": "npm run build && node --test \"lib/test/**/*.test.js\"",
-    "serve": "npm run build && firebase emulators:start --only functions"
+    "test": "npm run build && node --test \"lib/test/**/*.test.js\" --test-skip-pattern=\"\\.it\\.\"",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "test:integration": "npm run build && node --test --test-concurrency=1 \"lib/test/integration/**/*.it.test.js\""
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",

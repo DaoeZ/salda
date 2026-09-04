@@ -72,7 +72,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewGrandTotal => 'Total del ticket';
 
   @override
-  String get reviewBalanced => 'El ticket cuadra';
+  String get reviewBalanced => 'El total cuadra';
+
+  @override
+  String get reviewBalancedHint =>
+      'Que cuadre solo dice que las cuentas salen. Revisa el establecimiento, los nombres y las cantidades.';
+
+  @override
+  String get reviewAiWithoutPhoto =>
+      'Sin la foto original: la IA revisará los datos ya extraídos, no el ticket.';
+
+  @override
+  String get reviewAiOverwriteTitle => '¿Revisar de nuevo con IA?';
+
+  @override
+  String get reviewAiOverwriteBody =>
+      'La IA volverá a interpretar el ticket entero y sustituirá los cambios que has hecho a mano.';
+
+  @override
+  String get reviewAiOverwriteConfirm => 'Revisar igualmente';
+
+  @override
+  String get reviewEditTotalTitle => 'Total del ticket';
+
+  @override
+  String get reviewEditTotalHint =>
+      'El dinero realmente pagado. Cambiarlo no toca los productos.';
 
   @override
   String reviewMismatch(String amount) {
@@ -277,13 +302,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authErrorInvalidCredential => 'Email o contraseña incorrectos';
 
   @override
+  String get authErrorGoogleInvalidCredential =>
+      'No se pudo validar el acceso con Google. Vuelve a intentarlo.';
+
+  @override
   String get authErrorEmailInUse => 'Ya existe una cuenta con ese email';
 
   @override
   String get authErrorWeakPassword => 'La contraseña es demasiado corta';
 
   @override
-  String get authErrorNetwork => 'Sin conexión. Inténtalo de nuevo.';
+  String get authErrorNetwork =>
+      'No se pudo conectar con el servicio. Inténtalo de nuevo.';
 
   @override
   String get authErrorTooManyRequests =>
@@ -299,6 +329,22 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get authErrorCredentialAlreadyInUse =>
       'Ese acceso ya pertenece a otra cuenta. Cierra esta sesión y entra con la cuenta existente; no hemos movido tus datos.';
+
+  @override
+  String get authErrorAccountMismatch =>
+      'La cuenta de Google seleccionada no coincide. Prueba con la cuenta correcta.';
+
+  @override
+  String get authErrorConfiguration =>
+      'No se pudo iniciar sesión. La aplicación necesita una revisión de configuración.';
+
+  @override
+  String get authErrorGoogleUnavailable =>
+      'El acceso con Google no está disponible ahora. Inténtalo de nuevo.';
+
+  @override
+  String get authErrorTemporary =>
+      'El servicio no está disponible ahora. Inténtalo de nuevo.';
 
   @override
   String get authErrorCancelled => 'Has cancelado el acceso.';
@@ -484,7 +530,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get allSettled => 'Todo saldado 🎉';
 
   @override
-  String get activityEmpty => 'Sin actividad todavía';
+  String get activityEmpty =>
+      'Aquí aparecerá lo que vaya pasando: tickets, pagos, espacios y miembros.';
 
   @override
   String get accountsEmpty => 'Sin cuentas todavía';
@@ -705,6 +752,111 @@ class AppLocalizationsEs extends AppLocalizations {
       'Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.';
 
   @override
+  String get ticketPickError =>
+      'No se pudo guardar tu selección. Puede que la cuenta ya esté cerrada.';
+
+  @override
+  String ticketSplitEqualHint(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Este gasto se reparte a partes iguales entre $count personas. Los productos son el detalle de la compra, no el reparto.',
+      one:
+          'Este gasto se reparte a partes iguales. Los productos son el detalle de la compra, no el reparto.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketCorrectAction => 'Corregir gasto';
+
+  @override
+  String get ticketCorrectDone => 'Terminar corrección';
+
+  @override
+  String get ticketCorrectBanner =>
+      'Estás corrigiendo el gasto. Los cambios recalculan los balances y quedan firmados con tu nombre.';
+
+  @override
+  String get ticketCorrectHeaderTitle => 'Corregir el ticket';
+
+  @override
+  String get ticketCorrectImpactTitle => 'Se perderán asignaciones';
+
+  @override
+  String ticketCorrectImpactBody(String names) {
+    return '$names dejará de tener consumo asignado aquí. No se traslada a nadie más y los balances se recalculan. Los pagos ya registrados se mantienen.';
+  }
+
+  @override
+  String get ticketCorrectError =>
+      'No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.';
+
+  @override
+  String get ticketDeleteAction => 'Eliminar gasto';
+
+  @override
+  String get ticketDeleteTitle => '¿Eliminar este gasto?';
+
+  @override
+  String get ticketDeleteBody =>
+      'El gasto desaparecerá con su foto y su reparto, y los balances se recalcularán. No se puede deshacer.';
+
+  @override
+  String get ticketDeletePaymentsTitle => 'Este gasto tiene pagos registrados';
+
+  @override
+  String ticketDeletePaymentsBody(int count, String amount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hay $count pagos confirmados por $amount en total. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.',
+      one:
+          'Hay 1 pago confirmado de $amount. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketDeleteDeclarationsTitle =>
+      'Y pagos declarados sin confirmar';
+
+  @override
+  String ticketDeleteDeclarationsBody(int count, String amount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hay $count pagos declarados por $amount pendientes de confirmación. Tampoco se eliminan, y si se confirman más tarde contarán como dinero recibido.',
+      one:
+          'Hay 1 pago declarado de $amount pendiente de confirmación. Tampoco se elimina, y si se confirma más tarde contará como dinero recibido.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketDeleteError =>
+      'No se pudo eliminar el gasto. Puede que la cuenta esté cerrada o que no tengas permiso.';
+
+  @override
+  String get ticketDeleted => 'Gasto eliminado';
+
+  @override
+  String ticketCorrectedBy(String name, DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return 'Corregido por $name · $dateString';
+  }
+
+  @override
+  String ticketSplitYourShare(String amount) {
+    return 'Te corresponden $amount.';
+  }
+
+  @override
   String get lineForAll => 'Para todos';
 
   @override
@@ -734,6 +886,57 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String unitAssignTitle(int number) {
+    return '¿Quién consume la unidad $number?';
+  }
+
+  @override
+  String unitAssignResidual(String payer) {
+    return 'Sin nadie marcado, esta unidad corre a cargo de $payer.';
+  }
+
+  @override
+  String get unitAssignShareHint =>
+      'Marca a varias personas para repartir esta unidad entre ellas.';
+
+  @override
+  String get pickingOpenTitle => 'Aún estáis eligiendo';
+
+  @override
+  String get pickingOpenBody =>
+      'Este gasto no entra en las cuentas hasta que todo el mundo termine.';
+
+  @override
+  String pickingWaitingFor(String names) {
+    return 'Falta $names';
+  }
+
+  @override
+  String get pickingClosedTitle => 'Reparto cerrado';
+
+  @override
+  String get pickingClosedBody => 'Las cuentas de este gasto ya son firmes.';
+
+  @override
+  String get pickingFinishAction => 'He terminado';
+
+  @override
+  String pickingFinishForOther(String name) {
+    return 'Terminar por $name';
+  }
+
+  @override
+  String get pickingReopenTitle => '¿Volver a abrir el reparto?';
+
+  @override
+  String pickingReopenBody(int count, String amount) {
+    return 'Este gasto ya estaba cerrado y hay $count pago(s) confirmado(s) por $amount. Las cuentas se quedan como están mientras lo revisáis; al volver a cerrarlo se ajustará la diferencia.';
+  }
+
+  @override
+  String get pickingReopenAction => 'Cambiar de todas formas';
+
+  @override
   String unitCompactSummary(int selected, int total, int residual) {
     return '$selected de $total tuyas · $residual sin reclamar';
   }
@@ -751,6 +954,195 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String settlementAwaitsReceiver(String name) {
     return 'Confirmará $name al recibir el dinero';
+  }
+
+  @override
+  String get activityTitle => 'Actividad';
+
+  @override
+  String get activitySeeAll => 'Ver toda';
+
+  @override
+  String get activityLoadError =>
+      'No se pudo cargar la actividad. Comprueba la conexión.';
+
+  @override
+  String get activityRetry => 'Reintentar';
+
+  @override
+  String get activityLoadMore => 'Cargar más';
+
+  @override
+  String get activityGone => 'Ese elemento ya no está disponible.';
+
+  @override
+  String get activityActorFallback => 'Alguien';
+
+  @override
+  String get activityUnknown => 'Actividad';
+
+  @override
+  String get activityNow => 'ahora';
+
+  @override
+  String activityMinutesAgo(int n) {
+    return 'hace $n min';
+  }
+
+  @override
+  String activityHoursAgo(int n) {
+    return 'hace $n h';
+  }
+
+  @override
+  String activityDaysAgo(int n) {
+    return 'hace $n d';
+  }
+
+  @override
+  String activitySpaceCreated(String space) {
+    return 'Creó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceRenamed(String space) {
+    return 'Editó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceArchived(String space) {
+    return 'Archivó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceReactivated(String space) {
+    return 'Reactivó el espacio \"$space\"';
+  }
+
+  @override
+  String activitySpaceTransferred(String space) {
+    return 'Transfirió el espacio \"$space\"';
+  }
+
+  @override
+  String activityInviteSent(String space) {
+    return 'Envió una invitación a \"$space\"';
+  }
+
+  @override
+  String activityMemberJoined(String space) {
+    return 'Se unió a \"$space\"';
+  }
+
+  @override
+  String activityMemberLeft(String space) {
+    return 'Salió de \"$space\"';
+  }
+
+  @override
+  String activityMemberRemoved(String space) {
+    return 'Eliminó a un miembro de \"$space\"';
+  }
+
+  @override
+  String activityTicketCreated(String ticket) {
+    return 'Añadió el ticket $ticket';
+  }
+
+  @override
+  String activityTicketUpdated(String ticket) {
+    return 'Modificó el ticket $ticket';
+  }
+
+  @override
+  String activityTicketLinked(String ticket, String space) {
+    return 'Vinculó $ticket al espacio \"$space\"';
+  }
+
+  @override
+  String activityTicketUnlinked(String ticket) {
+    return 'Desvinculó el ticket $ticket';
+  }
+
+  @override
+  String activityTicketDeleted(String ticket) {
+    return 'Eliminó el ticket $ticket';
+  }
+
+  @override
+  String get activityPaymentMarked => 'Marcó un pago como enviado';
+
+  @override
+  String get activityPaymentConfirmed => 'Confirmó que recibió un pago';
+
+  @override
+  String get activityPaymentCancelled => 'Canceló un pago';
+
+  @override
+  String get guestNameTitle => 'Tu nombre';
+
+  @override
+  String get guestNameBody =>
+      'Estás usando Salda como invitado: no hace falta cuenta. Elige el nombre con el que te verán en los grupos y relaciones.';
+
+  @override
+  String get guestNameLabel => 'Nombre visible';
+
+  @override
+  String get guestNameRequired => 'Escribe un nombre para continuar';
+
+  @override
+  String get guestNameSaved => 'Nombre guardado';
+
+  @override
+  String get guestNameError =>
+      'No se pudo guardar el nombre. Inténtalo de nuevo.';
+
+  @override
+  String get guestNameBannerTitle => 'Elige tu nombre para participar';
+
+  @override
+  String get guestNameBannerAction => 'Elegir nombre';
+
+  @override
+  String get guestLimitsBody =>
+      'Como invitado participas en gastos y balances. Crear grupos o relaciones, invitar personas y tener perfil público requieren una cuenta. Podrás crear gastos si el anfitrión lo permite.';
+
+  @override
+  String get guestBadge => 'Invitado';
+
+  @override
+  String get guestPolicyTitle => 'Permitir gastos a los invitados';
+
+  @override
+  String get guestPolicyBody =>
+      'Si lo activas, los invitados de este contexto podrán crear gastos.';
+
+  @override
+  String get manualParticipantsTitle => 'Personas sin cuenta';
+
+  @override
+  String get manualParticipantsEmpty =>
+      'Añade a quien no use Salda: solo necesitas su nombre y participará en los gastos igual que los demás.';
+
+  @override
+  String get manualParticipantAdd => 'Añadir';
+
+  @override
+  String get manualParticipantName => 'Nombre';
+
+  @override
+  String get manualParticipantHint => 'Sin cuenta · participa en los gastos';
+
+  @override
+  String get manualParticipantRename => 'Cambiar el nombre';
+
+  @override
+  String get manualParticipantRemove => 'Quitar del contexto';
+
+  @override
+  String manualParticipantRemoveBody(String name) {
+    return '$name dejará de aparecer en los gastos nuevos. Su historial, sus deudas y sus pagos no se tocan.';
   }
 
   @override
@@ -786,6 +1178,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get spaceOwnerBadge => 'Propietario';
+
+  @override
+  String get personUnnamed => 'Persona sin nombre';
 
   @override
   String get spaceGone => 'Ya no tienes acceso a este espacio.';
@@ -848,6 +1243,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String relationshipInviteText(String name) {
+    return '$name quiere compartir gastos contigo';
+  }
+
+  @override
   String get spaceInviteAccept => 'Unirme';
 
   @override
@@ -862,12 +1262,22 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get spaceRemoveMemberTitle => 'Eliminar del espacio';
+  String get spaceRemoveMemberTitle => 'Expulsar del grupo';
 
   @override
   String spaceRemoveMemberBody(String name) {
-    return '$name dejará de ver este espacio. Sus tickets, pagos e historial no se tocan.';
+    return '$name saldrá del grupo y dejará de ver el contenido nuevo. Sus deudas y pagos anteriores no desaparecen, y podrá seguir consultando los gastos en los que participó. Para que vuelva tendrás que invitarle otra vez.';
   }
+
+  @override
+  String get spaceAccessRevokedTitle => 'Ya no tienes acceso a este grupo';
+
+  @override
+  String get spaceAccessRevokedBody =>
+      'Alguien que administra el grupo te ha sacado, o has salido desde otro dispositivo. Tus deudas y pagos no han cambiado: siguen en Economía, junto a los gastos en los que participaste.';
+
+  @override
+  String get spaceAccessRevokedAction => 'Volver a mis contextos';
 
   @override
   String get spaceTicketsTitle => 'Tickets del espacio';
@@ -883,8 +1293,30 @@ class AppLocalizationsEs extends AppLocalizations {
   String get spaceAddTicket => 'Añadir ticket';
 
   @override
+  String get ticketGoneTitle => 'Este gasto ya no está disponible';
+
+  @override
+  String get ticketGoneBody =>
+      'Puede que se haya borrado o que hayas perdido el acceso a su contexto.';
+
+  @override
   String get spaceActionError =>
       'No se pudo completar la acción. Inténtalo de nuevo.';
+
+  @override
+  String get socialEmailNotVerified =>
+      'Verifica tu correo antes de compartir gastos.';
+
+  @override
+  String get socialProfileNotReady =>
+      'Necesitamos terminar de preparar tu perfil. Inténtalo de nuevo.';
+
+  @override
+  String get profileRequiredForSocial => 'Necesario para compartir gastos';
+
+  @override
+  String get spaceSessionNotReady =>
+      'Tu sesión aún no está lista para compartir gastos. Comprueba que has verificado el correo y completado tu perfil, y vuelve a entrar.';
 
   @override
   String get spaceLinkTooltip => 'Espacio compartido';
@@ -902,6 +1334,68 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get spaceUnlinked => 'Ticket desvinculado';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatDescription =>
+      'Coordina los gastos dentro de esta relación o grupo.';
+
+  @override
+  String get chatReadOnly =>
+      'El contexto está archivado. El chat es de solo lectura.';
+
+  @override
+  String get chatEmptyTitle => 'Todavía no hay mensajes';
+
+  @override
+  String get chatEmptyBody =>
+      'Escribe el primero para coordinaros dentro de este contexto.';
+
+  @override
+  String get chatMessageHint => 'Escribe un mensaje';
+
+  @override
+  String get chatSend => 'Enviar mensaje';
+
+  @override
+  String get chatSending => 'Enviando…';
+
+  @override
+  String get chatSendError =>
+      'No se pudo enviar el mensaje. Revisa la conexión e inténtalo de nuevo.';
+
+  @override
+  String get chatLoadError =>
+      'No se pudo cargar el chat. Revisa la conexión y vuelve a intentarlo.';
+
+  @override
+  String get chatLoadOlder => 'Cargar mensajes anteriores';
+
+  @override
+  String get chatUnavailable => 'Ya no tienes acceso a este chat.';
+
+  @override
+  String get chatYou => 'Tú';
+
+  @override
+  String get chatAuthorFallback => 'Miembro';
+
+  @override
+  String get chatMessageActions => 'Acciones del mensaje';
+
+  @override
+  String get chatDelete => 'Eliminar mensaje';
+
+  @override
+  String get chatDeleteTitle => '¿Eliminar este mensaje?';
+
+  @override
+  String get chatDeleteBody => 'Se eliminará del chat para todos los miembros.';
+
+  @override
+  String get chatDeleteError => 'No se pudo eliminar el mensaje.';
 
   @override
   String get profileTitle => 'Perfil público';
@@ -929,6 +1423,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get profileSaveError =>
       'No se pudo guardar. Comprueba la conexión o prueba otro nombre de usuario.';
+
+  @override
+  String get profileLoadError =>
+      'No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.';
 
   @override
   String get profileBannerTitle => 'Completa tu perfil público';
@@ -1145,7 +1643,70 @@ class AppLocalizationsEs extends AppLocalizations {
   String get economyInSpace => 'Espacio vinculado';
 
   @override
-  String get economyMarkPaid => 'Marcar como pagado';
+  String get economyMarkPaid => 'Ya he pagado';
+
+  @override
+  String get economyObligationsTitle => 'Deudas pendientes';
+
+  @override
+  String economyOwesTo(String debtor, String creditor) {
+    return '$debtor debe a $creditor';
+  }
+
+  @override
+  String economySettleTitle(String name) {
+    return 'Cobrar a $name';
+  }
+
+  @override
+  String economySettleSelected(int count) {
+    return 'Confirmar recepción ($count)';
+  }
+
+  @override
+  String get economySettleHint =>
+      'Marca lo que ya has recibido. Cada deuda se confirma por separado y conserva su ticket.';
+
+  @override
+  String get economyNoOpenObligations => 'No queda nada por cobrar.';
+
+  @override
+  String get economyDeclaredByPayer => 'Dice que ya te ha pagado';
+
+  @override
+  String get economyPartialPayment => 'Registrar pago parcial';
+
+  @override
+  String get economyPartialAmount => 'Importe recibido';
+
+  @override
+  String get economySettleSuccess => 'Cobro confirmado.';
+
+  @override
+  String economyRepresentingNotice(String name) {
+    return '$name no tiene cuenta en Salda: confirmas en su nombre.';
+  }
+
+  @override
+  String economyOnBehalfOf(String name) {
+    return 'Confirmado en nombre de $name';
+  }
+
+  @override
+  String get spaceMemberRoleAdmin => 'Administrador';
+
+  @override
+  String get spaceMemberRoleMember => 'Miembro';
+
+  @override
+  String get spaceMakeAdmin => 'Nombrar administrador';
+
+  @override
+  String get spaceRemoveAdmin => 'Retirar administrador';
+
+  @override
+  String get spaceAdminExplanation =>
+      'Un administrador gestiona el contexto y puede confirmar cobros de las personas sin cuenta. Nunca puede tocar el saldo de quien sí la tiene.';
 
   @override
   String get economyPaymentAmount => 'Importe pagado';
@@ -1196,9 +1757,758 @@ class AppLocalizationsEs extends AppLocalizations {
   String get spaceEconomicTitle => 'Tu balance en este espacio';
 
   @override
+  String get spaceEconomicEmptyTitle => 'Sin movimientos todavía';
+
+  @override
+  String get spaceEconomicSettled =>
+      'Estáis en paz: nadie debe nada en este espacio.';
+
+  @override
+  String get spaceEconomicSpent => 'Gastado aquí';
+
+  @override
+  String spaceTicketsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gastos',
+      one: '1 gasto',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get spaceEconomicEmpty =>
       'Todavía no tienes movimientos económicos identificados en este espacio.';
 
   @override
   String get commonRetry => 'Reintentar';
+
+  @override
+  String get balanceHeroTitle => 'Tu saldo';
+
+  @override
+  String get balanceSettled => 'Estás en paz';
+
+  @override
+  String get balanceSettledBody => 'Nadie te debe y no debes nada.';
+
+  @override
+  String get balanceTheyOweYou => 'Te deben';
+
+  @override
+  String get balanceYouOwe => 'Debes';
+
+  @override
+  String get balanceNetPositive => 'A tu favor';
+
+  @override
+  String get balanceNetNegative => 'En tu contra';
+
+  @override
+  String get homeQuickScan => 'Escanear ticket';
+
+  @override
+  String get homeQuickMore => 'Más';
+
+  @override
+  String get homeSpacesTitle => 'Tus contextos';
+
+  @override
+  String get homeNoSpacesTitle => 'Todavía no compartes gastos con nadie';
+
+  @override
+  String get homeNoSpacesBody =>
+      'Crea una relación para las cuentas de dos, o un grupo para un piso, un viaje o una cena.';
+
+  @override
+  String get homeActivityRecent => 'Reciente';
+
+  @override
+  String get homeMenuTitle => 'Menú';
+
+  @override
+  String get contextPendingShort => 'Pendiente';
+
+  @override
+  String get contextAccountRequiredTitle => 'Necesitas una cuenta';
+
+  @override
+  String get economySettledBadge => 'Saldado';
+
+  @override
+  String get economyNoPaymentsBody =>
+      'Cuando marques o confirmes un pago, quedará aquí con su fecha.';
+
+  @override
+  String get friendProfileRequiredBody =>
+      'Tu perfil público es lo que permite que otras personas te encuentren y te agreguen.';
+
+  @override
+  String get aiProvidersSection => 'Proveedores';
+
+  @override
+  String get peopleSectionTitle => 'Quién participa';
+
+  @override
+  String get splitSectionTitle => 'Cómo se reparte';
+
+  @override
+  String get splitEqualHelp =>
+      'El importe se divide a partes iguales entre todas las personas.';
+
+  @override
+  String get splitByItemHelp =>
+      'Cada persona elige lo que consumió; lo no reclamado recae en quien pagó.';
+
+  @override
+  String get createDisabledHelp =>
+      'Necesitas al menos dos personas para repartir un gasto.';
+
+  @override
+  String get ticketPhotoTitle => 'Foto del ticket';
+
+  @override
+  String get ticketFallbackName => 'Gasto';
+
+  @override
+  String get ticketNoLinesBody =>
+      'Este gasto se reparte por su importe total, sin detalle de productos.';
+
+  @override
+  String get reviewTicketData => 'Datos del ticket';
+
+  @override
+  String get reviewTotalsTitle => 'Desglose';
+
+  @override
+  String get reviewNoLinesTitle => 'El ticket no tiene lineas';
+
+  @override
+  String get reviewNoLinesBody =>
+      'Anade al menos un producto para poder repartir el gasto entre varias personas.';
+
+  @override
+  String get relationshipNeedsAcceptanceBody =>
+      'En cuanto acepte podreis registrar gastos y ver el saldo entre los dos.';
+
+  @override
+  String get groupNeedsMembersBody =>
+      'Invita a alguien con cuenta, comparte el enlace del grupo o anade a una persona sin cuenta.';
+
+  @override
+  String get activityLoadingSubject => '…';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personas',
+      one: '1 persona',
+      zero: 'Sin personas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get spaceKindRelationship => 'Relación';
+
+  @override
+  String get spaceKindGroup => 'Grupo';
+
+  @override
+  String get personKindManual => 'Sin cuenta';
+
+  @override
+  String get personKindGuest => 'Invitado';
+
+  @override
+  String get personKindOwner => 'Propietario';
+
+  @override
+  String get emptyTicketsTitle => 'Sin gastos todavía';
+
+  @override
+  String get emptyTicketsBody =>
+      'Escanea un ticket o apunta un gasto a mano y aparecerá aquí.';
+
+  @override
+  String get emptyActivityTitle => 'Sin movimientos';
+
+  @override
+  String get emptyActivityBody =>
+      'Aquí se irá anotando lo que ocurra en tus contextos.';
+
+  @override
+  String get emptyChatTitle => 'Sin mensajes';
+
+  @override
+  String get emptyChatBody =>
+      'Escribe el primero: la conversación es privada de este contexto.';
+
+  @override
+  String get historyTitle => 'Histórico sin organizar';
+
+  @override
+  String get contextCreate => 'Crear';
+
+  @override
+  String get contextAccountRequired =>
+      'Convierte tu cuenta de invitado para crear relaciones y grupos permanentes.';
+
+  @override
+  String get contextInvitations => 'Invitaciones';
+
+  @override
+  String get contextInvitationPending => 'Quiere compartir gastos contigo';
+
+  @override
+  String get relationshipsTitle => 'Relaciones';
+
+  @override
+  String get relationshipsEmpty =>
+      'Crea una relación para compartir gastos con otra persona';
+
+  @override
+  String get groupsTitle => 'Grupos';
+
+  @override
+  String get groupsEmpty => 'Crea un grupo para tres o más personas';
+
+  @override
+  String get relationshipCreate => 'Nueva relación';
+
+  @override
+  String get relationshipCreateHelp => 'Gastos entre dos personas';
+
+  @override
+  String get relationshipAlreadyInvited =>
+      'Ya le habías invitado. Sigue pendiente de que acepte.';
+
+  @override
+  String get relationshipReinvited => 'Le hemos vuelto a enviar la invitación.';
+
+  @override
+  String get relationshipAlreadyActive => 'Ya tenéis una relación activa.';
+
+  @override
+  String get relationshipInvitedByOther =>
+      'Esa persona ya te invitó. Acepta su invitación desde Inicio.';
+
+  @override
+  String get relationshipIncompatible =>
+      'Esta relación tiene datos antiguos que no podemos completar. Avísanos antes de reintentar.';
+
+  @override
+  String get relationshipNotAllowed =>
+      'No puedes crear una relación contigo mismo.';
+
+  @override
+  String get relationshipManualTitle => 'Añadir a alguien sin cuenta';
+
+  @override
+  String get relationshipManualBody =>
+      'Participa en gastos, saldos y pagos igual que tú. Si se registra más adelante, podréis vincularlo sin perder el historial.';
+
+  @override
+  String get relationshipManualName => 'Su nombre';
+
+  @override
+  String get relationshipNoAccountTitle => '¿No tiene cuenta en Salda?';
+
+  @override
+  String get relationshipNoAccountBody =>
+      'Una relación son dos cuentas. Para compartir gastos con alguien sin cuenta, crea un grupo: admite personas añadidas a mano y enlaces de invitación.';
+
+  @override
+  String get relationshipSearchHelp =>
+      'Busca a la persona con la que quieres compartir gastos.';
+
+  @override
+  String get groupCreate => 'Nuevo grupo';
+
+  @override
+  String get groupCreateHelp => 'Gastos entre tres o más personas';
+
+  @override
+  String get ticketContextMissing =>
+      'Abre una relación o un grupo antes de crear el ticket.';
+
+  @override
+  String get relationshipNeedsAcceptance =>
+      'La otra persona debe aceptar la invitación antes de crear tickets.';
+
+  @override
+  String get groupNeedsMembers =>
+      'Añade a alguien más al grupo antes de crear tickets. Si no tiene la app, añádelo como persona sin cuenta.';
+
+  @override
+  String get contextChoose => 'Elige una relación o grupo';
+
+  @override
+  String get ticketContextLocked =>
+      'Este ticket pertenece a su contexto y no se puede desvincular';
+
+  @override
+  String get commonConfirm => 'Confirmar';
+
+  @override
+  String get spaceLinkTitle => 'Enlace del grupo';
+
+  @override
+  String get spaceLinkAction => 'Compartir enlace';
+
+  @override
+  String get spaceLinkEmpty =>
+      'Crea un enlace para que otras personas se unan a este grupo sin que tengas que buscarlas.';
+
+  @override
+  String get spaceLinkCreate => 'Crear enlace';
+
+  @override
+  String get spaceLinkHint =>
+      'Cualquiera con este enlace puede unirse al grupo. Revócalo cuando ya no lo necesites.';
+
+  @override
+  String get spaceLinkRotate => 'Generar un enlace nuevo';
+
+  @override
+  String get spaceLinkRotateConfirm =>
+      'El enlace actual dejará de funcionar y tendrás que repartir el nuevo. ¿Continuar?';
+
+  @override
+  String get spaceLinkRevoke => 'Revocar el enlace';
+
+  @override
+  String get spaceLinkRevokeConfirm =>
+      'Nadie más podrá unirse con este enlace. Los miembros actuales se quedan. ¿Continuar?';
+
+  @override
+  String get spaceLinkError => 'No hemos podido cargar el enlace';
+
+  @override
+  String get joinTitle => 'Unirse a un grupo';
+
+  @override
+  String get joinEntry => 'Unirme con un enlace';
+
+  @override
+  String get joinPasteHint => 'Pega aquí el enlace que te han enviado.';
+
+  @override
+  String get joinPasteLabel => 'Enlace del grupo';
+
+  @override
+  String get joinLookup => 'Continuar';
+
+  @override
+  String get joinInvitedTo => 'Te invitan a';
+
+  @override
+  String get joinIdentifyHint =>
+      'Identifícate para unirte. No hace falta crear una cuenta.';
+
+  @override
+  String get joinWithAccount => 'Entrar con mi cuenta';
+
+  @override
+  String get joinAction => 'Unirme al grupo';
+
+  @override
+  String get joinLinkInvalid =>
+      'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.';
+
+  @override
+  String get joinLinkError =>
+      'No hemos podido unirte al grupo. Inténtalo otra vez.';
+
+  @override
+  String get joinCreateAccount => 'Crear una cuenta';
+
+  @override
+  String get joinVerifyEmail =>
+      'Verifica tu correo para entrar en el grupo. Guardamos el enlace: al volver entrarás directamente.';
+
+  @override
+  String get joinVerifyEmailAction => 'Verificar mi correo';
+
+  @override
+  String get joinGuestNameHint => '¿Cómo quieres que te vean en el grupo?';
+
+  @override
+  String get ticketLinkTitle => 'Ticket compartido';
+
+  @override
+  String get ticketLinkAction => 'Compartir este ticket';
+
+  @override
+  String get ticketLinkSharedWithYou => 'Te han compartido el ticket de';
+
+  @override
+  String ticketLinkAreYou(String name) {
+    return '¿Eres $name?';
+  }
+
+  @override
+  String get ticketLinkAreYouHelp =>
+      'Este enlace se creó para esa persona. Si no eres tú, pide el tuyo a quien te lo envió.';
+
+  @override
+  String ticketLinkIAm(String name) {
+    return 'Sí, soy $name';
+  }
+
+  @override
+  String get ticketLinkNotMe => 'No soy esa persona';
+
+  @override
+  String get ticketLinkNoManuals =>
+      'Este enlace ya no identifica a nadie de este ticket.';
+
+  @override
+  String get ticketLinkManualTaken =>
+      'Otra persona ya usó este enlace. Pide uno nuevo a quien te lo envió.';
+
+  @override
+  String ticketLinkFor(String name) {
+    return 'Enlace para $name';
+  }
+
+  @override
+  String get ticketLinkChooseTarget => '¿Para quién es el enlace?';
+
+  @override
+  String get ticketLinkChooseTargetHelp =>
+      'Cada persona recibe su propio enlace: solo podrá identificarse como ella misma.';
+
+  @override
+  String get ticketLinkNoTargets =>
+      'Este ticket no tiene participantes sin cuenta a los que enviar un enlace.';
+
+  @override
+  String get ticketLinkInvalid =>
+      'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.';
+
+  @override
+  String get ticketLinkError =>
+      'No hemos podido abrir el ticket. Inténtalo otra vez.';
+
+  @override
+  String get ticketLinkGone => 'Este ticket ya no está disponible.';
+
+  @override
+  String get ticketLinkLines => 'Productos';
+
+  @override
+  String get ticketLinkTotal => 'Total';
+
+  @override
+  String get ticketLinkRelease => 'No soy yo';
+
+  @override
+  String get ticketLinkTemporary =>
+      'Identificación temporal, solo en este dispositivo';
+
+  @override
+  String ticketLinkViewingAs(String name) {
+    return 'Estás viendo el ticket como $name';
+  }
+
+  @override
+  String get ticketLinkEmpty =>
+      'Crea un enlace para que quien no tenga cuenta pueda ver este ticket.';
+
+  @override
+  String get ticketLinkCreate => 'Crear enlace del ticket';
+
+  @override
+  String get ticketLinkHint =>
+      'Quien reciba este enlace verá solo este ticket, nunca el resto del grupo.';
+
+  @override
+  String get ticketLinkRevoke => 'Revocar el enlace';
+
+  @override
+  String get manualLinkRequestsTitle => 'Solicitudes de identidad';
+
+  @override
+  String manualLinkRequestBody(String name, String manual) {
+    return '$name dice ser $manual';
+  }
+
+  @override
+  String get manualLinkRequestHelp =>
+      'Si lo aceptas, esa persona pasará a ver sus gastos y su saldo. No cambia nada de lo ya registrado.';
+
+  @override
+  String get manualLinkAccept => 'Aceptar';
+
+  @override
+  String get manualLinkReject => 'Rechazar';
+
+  @override
+  String get manualLinkAccepted => 'Solicitud aceptada; vinculando…';
+
+  @override
+  String get manualLinkRejected => 'Solicitud rechazada';
+
+  @override
+  String get manualLinkError => 'No hemos podido completar la operación';
+
+  @override
+  String get manualLinkAsk => 'Soy yo';
+
+  @override
+  String get manualLinkAskSent =>
+      'Solicitud enviada. El anfitrión debe aceptarla.';
+
+  @override
+  String get manualLinkPending => 'Pendiente de que el anfitrión lo acepte';
+
+  @override
+  String get manualLinkLinked => 'Identidad vinculada';
+
+  @override
+  String manualLinkPendingInSpace(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count solicitudes',
+      one: '1 solicitud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get manualLinkProcessing =>
+      'Vinculando… tendrás acceso en unos segundos';
+
+  @override
+  String get manualLinkFailed =>
+      'No hemos podido completar la vinculación. Avisa al anfitrión.';
+
+  @override
+  String get manualLinkFailedLegacy =>
+      'Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.';
+
+  @override
+  String get manualLinkRetryStarted =>
+      'Reintento iniciado. La vinculación se actualizará en breve.';
+
+  @override
+  String get manualLinkRetrySuccess => 'Vinculación completada.';
+
+  @override
+  String get manualLinkRetryInProgress => 'La vinculación ya está en curso.';
+
+  @override
+  String get manualLinkRetryCooldown =>
+      'Ya se ha solicitado un reintento. Comprueba el estado en unos segundos.';
+
+  @override
+  String get manualLinkRetryCheck =>
+      'La vinculación está en un estado antiguo. Comprueba el estado más tarde.';
+
+  @override
+  String get ticketLinkPreparing => 'Preparando el enlace…';
+
+  @override
+  String get ticketLinkNotReady =>
+      'El ticket todavía se está procesando. Inténtalo de nuevo en unos segundos.';
+
+  @override
+  String get spaceLinkExpiryLabel => 'Caducidad';
+
+  @override
+  String get spaceLinkExpiryNever => 'Sin caducidad';
+
+  @override
+  String get spaceLinkExpiry1d => '1 día';
+
+  @override
+  String get spaceLinkExpiry7d => '7 días';
+
+  @override
+  String get spaceLinkExpiry30d => '30 días';
+
+  @override
+  String spaceLinkExpiresOn(DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return 'Caduca el $dateString';
+  }
+
+  @override
+  String get accountHubTitle => 'Cuenta';
+
+  @override
+  String get accountHubProfile => 'Perfil';
+
+  @override
+  String get accountHubPayments => 'Cobros';
+
+  @override
+  String get accountHubPreferences => 'Preferencias';
+
+  @override
+  String get accountHubData => 'Datos';
+
+  @override
+  String get accountHubAdvanced => 'Avanzado';
+
+  @override
+  String get accountHubOpenSettings => 'Abrir ajustes';
+
+  @override
+  String get personasTitle => 'Personas';
+
+  @override
+  String get personasRequests => 'Solicitudes recibidas';
+
+  @override
+  String get personasContacts => 'Tus contactos';
+
+  @override
+  String get personasSearch => 'Buscar personas';
+
+  @override
+  String get homeBalances => 'Balances';
+
+  @override
+  String get balanceMultipleCurrencies => 'Varias monedas';
+
+  @override
+  String homeSeeBalances(int count) {
+    return 'Ver mis $count balances';
+  }
+
+  @override
+  String get homeRecent => 'Recientes';
+
+  @override
+  String get homeSeeAllSpaces => 'Ver todos los espacios';
+
+  @override
+  String get homeAttention => 'Necesita tu atención';
+
+  @override
+  String homeSeePending(int count) {
+    return 'Ver las $count pendientes';
+  }
+
+  @override
+  String get homeSpacesLoading =>
+      'Estamos cargando tus espacios. Inténtalo de nuevo en un momento.';
+
+  @override
+  String get homeSpacesUnavailable =>
+      'No hemos podido cargar tus espacios. Inténtalo de nuevo.';
+
+  @override
+  String get homeNoActiveSpaces =>
+      'Crea o abre un espacio antes de añadir un gasto.';
+
+  @override
+  String get homeAdd => 'Añadir';
+
+  @override
+  String get homeAddExpense => 'Gasto o ticket';
+
+  @override
+  String get homeAddRelationship => 'Relación';
+
+  @override
+  String get homeAddGroup => 'Grupo';
+
+  @override
+  String get homeAddJoin => 'Unirme con un enlace';
+
+  @override
+  String get homeGuestEconomyTitle => 'Tu participación';
+
+  @override
+  String get homeGuestEconomyBody =>
+      'Consulta tus balances dentro de cada espacio.';
+
+  @override
+  String get homeSearchSpaces => 'Buscar espacios';
+
+  @override
+  String get homeNoSearchResults =>
+      'No hay espacios que coincidan con la búsqueda.';
+
+  @override
+  String get routeNotFoundTitle => 'No encontramos esta pantalla';
+
+  @override
+  String get routeNotFoundBody =>
+      'Puede que el enlace haya caducado o ya no esté disponible.';
+
+  @override
+  String get routeGoHome => 'Volver a Inicio';
+
+  @override
+  String get routeBack => 'Volver';
+
+  @override
+  String get spaceManageTitle => 'Gestionar';
+
+  @override
+  String get spaceManageGroupTitle => 'Gestionar grupo';
+
+  @override
+  String get spaceManagePeople => 'Personas';
+
+  @override
+  String get spaceManagePermissions => 'Permisos';
+
+  @override
+  String get spaceManageInformationHistory => 'Información e historial';
+
+  @override
+  String get spaceManageIdentity => 'Identidad';
+
+  @override
+  String get spaceManageInvitationLink => 'Invitación y vinculación';
+
+  @override
+  String get spaceManageOptions => 'Opciones';
+
+  @override
+  String get spaceManageRequests => 'Solicitudes';
+
+  @override
+  String get spaceManageActions => 'Acciones';
+
+  @override
+  String get spaceManageLinking => 'Vinculación';
+
+  @override
+  String get spaceManageActivity => 'Actividad';
+
+  @override
+  String get spaceManageChat => 'Chat';
+
+  @override
+  String get spaceCoverGroupBalance => 'En este grupo';
+
+  @override
+  String get spaceCoverRelationshipBalance => 'Entre vosotros';
+
+  @override
+  String get spaceCoverViewBalance => 'Ver balance';
+
+  @override
+  String get spaceCoverViewBalances => 'Ver balances';
+
+  @override
+  String get spaceCoverViewAll => 'Ver todos';
+
+  @override
+  String get spaceTicketsAllTitle => 'Todos los tickets';
+
+  @override
+  String get spaceBalancesAllTitle => 'Balances del espacio';
 }

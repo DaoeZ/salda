@@ -1,0 +1,16 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "dev.salda.salda_mobile",
+      "sha256_cert_fingerprints": [
+        "A8:44:AB:39:C7:D5:F6:EC:E5:6A:BC:A8:70:EF:86:54:68:FC:E0:53:71:9A:86:0A:60:40:3D:FE:27:A9:A0:F4",
+        "FD:13:54:A4:1F:B7:76:C5:54:4E:38:E3:12:82:BB:BD:35:95:EA:A0:E2:47:DD:8A:D6:A9:80:CB:70:02:FB:D2",
+        "AC:1A:4A:6A:96:29:CB:EA:9A:4D:8C:D9:E5:45:81:A2:F7:85:B9:12:D3:C8:49:5E:3F:BA:A4:6A:E5:24:22:B5"
+      ]
+    }
+  }
+]

@@ -11,8 +11,9 @@ class MlKitReceiptOcr implements ReceiptOcr {
   Future<OcrDocument> recognize(String imagePath) async {
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     try {
-      final result =
-          await recognizer.processImage(InputImage.fromFilePath(imagePath));
+      final result = await recognizer.processImage(
+        InputImage.fromFilePath(imagePath),
+      );
       return OcrDocument([
         for (final block in result.blocks)
           for (final line in block.lines)

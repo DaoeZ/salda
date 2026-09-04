@@ -1,5 +1,9 @@
 # P5 — Relaciones económicas y balances consolidados
 
+> ADR-030 no cambia este cálculo: los tickets nuevos nacen dentro de una
+> relación o grupo y llevan `spaceId`; las entradas históricas sin contexto
+> siguen participando en el balance y nunca se reasocian automáticamente.
+
 Estado: implementado. Este documento define el contrato económico global de Salda.
 No redefine el reparto de tickets ni introduce una segunda fuente de verdad.
 
@@ -59,6 +63,15 @@ A→B original - B→A original - A→B confirmado + B→A confirmado
 El signo determina deudor y acreedor. El detalle conserva ambos movimientos brutos y
 permite llegar a cada ticket. El resultado no depende del orden de lectura. No se netean
 monedas distintas y no se reasignan acreedores mediante simplificación multilateral.
+
+**Un pago no depende de que su obligación siga existiendo** (A2, ADR-040). Al
+eliminar un gasto desaparece su `economicEntry`, pero el pago no: sigue
+contando en el neteo y puede dejar el saldo INVERTIDO —quien pagó pasa a ser
+acreedor por lo que ya había entregado—. Es la consecuencia correcta de que el
+dinero se moviera de verdad. Sus `allocations` conservan el id de la
+obligación borrada: son el contexto histórico del pago y no se reasignan a
+otra deuda. Una declaración `pending` tampoco se cancela y su receptor puede
+confirmarla después, con el mismo efecto.
 
 ## Liquidaciones
 
@@ -150,6 +163,107 @@ Compatibilidad:
   en `users/{uid}`. La operación es autoritativa, idempotente y está limitada a
   200 sesiones por tipo de acceso para mantener el techo de coste; superar ese
   límite exige una reconstrucción administrativa explícita.
+
+## Permisos y liquidación por obligación (ADR-038)
+
+Estado: implementado. Corrige tres incoherencias reales observadas en dispositivo
+y no introduce una segunda arquitectura: reutiliza `economicEntries`,
+`economicPayments` y su campo `allocations`.
+
+### Quién confirma un cobro
+
+**El receptor del dinero, y nadie más.** Ser propietario o administrador de un
+espacio NO da acceso al saldo de una cuenta ajena; si lo diera, el balance de una
+persona registrada dependería de la buena fe de otra.
+
+La única excepción es la que el producto necesita para cerrar: un participante
+MANUAL (ADR-033) no tiene cuenta ni dispositivo, así que un cobro dirigido a él
+no podría confirmarse jamás. Entonces —y solo entonces— lo confirma el
+propietario o un administrador del espacio que custodia esa identidad.
+
+El predicado vive en un único sitio, `economicActingRole`
+(`packages/domain/lib/src/identity/economic_authority.dart` y su espejo TS), y lo
+consumen la interfaz, las Functions y —en su forma de lectura— las Rules:
+
+| Acreedor | Quién puede confirmar |
+|---|---|
+| Cuenta | **Solo** esa cuenta |
+| `manual:{id}` sin vincular | Propietario o administrador del espacio |
+| `manual:{id}` **vinculado** (ADR-037) | **Solo** la cuenta vinculada |
+
+La representación es temporal por construcción: vincular termina con ella sin
+revocar nada, porque nunca fue un permiso concedido sino la ausencia de alguien
+capaz de ejercerlo.
+
+**Rol de administrador**: `spaces/{id}/members/{uid}.role: 'admin'|'member'`
+(ausente = `member`). El propietario único sigue siendo `ownerUid` —la
+transferencia sigue siendo la escritura atómica de UN documento—; `role` es la
+única delegación, solo la concede el propietario, nadie nace administrador y un
+INVITADO no puede serlo (no tiene cuenta con la que administrar).
+
+**Lectura**: una obligación con parte manual la lee también quien administra su
+espacio. La regla es VIVA (se evalúa contra la membresía del momento), así que
+retirar a un administrador cierra el acceso al instante y no hay proyección que
+reconstruir. Para que la consulta sea demostrable documento a documento,
+`recompute` escribe `hasManualParty` —propiedad derivada e inmutable de la
+obligación— y el cliente filtra por ella: sin ese filtro la consulta arrastraría
+deudas entre dos cuentas y Firestore la deniega entera. Esa denegación **es** la
+garantía de que un administrador nunca ve una deuda cuenta↔cuenta ajena.
+
+### Una liquidación por obligación, nunca por el agregado
+
+`settleEconomicEntries` recibe obligaciones concretas y escribe **un
+`economicPayment` por cada una**, con `allocations: {entryId: importe}` y
+`economicEntryId`. Un saldo agregado —«Test te debe 14,73 €»— es un RESUMEN de
+sus deudas (Familycash 6,75 + t familycash 7,98) y jamás se convierte en una
+obligación nueva: confirmar las dos a la vez es comodidad de la interfaz y
+produce dos liquidaciones, cada una con su ticket.
+
+- **El importe por defecto es el pendiente de esa deuda**: el camino normal no
+  pide teclear nada. El **pago parcial** es la excepción, se pide desde el menú
+  de esa obligación y pertenece a ella, no al saldo global.
+- **Dos techos, ambos obligatorios**: lo que queda vivo en la obligación
+  (importe − asignado por pagos no cancelados) y lo que queda vivo en el saldo
+  bilateral. El segundo es lo que impide cobrar dos veces una deuda ya saldada
+  por una liquidación de sesión, que no deja asignación por ticket.
+- **Idempotencia** por id determinista `settle_{entryId}_{idempotencyKey}`.
+- Si el actor obra por el lado ACREEDOR, la liquidación nace `confirmed`; si obra
+  por el lado deudor, nace `pending` (una declaración).
+
+### «Ya he pagado» es un aviso, no una precondición
+
+El deudor puede declarar que pagó y el receptor recibe ese aviso, pero **no hace
+falta para cobrar**: el receptor confirma directamente una deuda pendiente
+aunque el deudor no haya abierto Salda nunca (puede haber pagado en mano). Vale
+igual en el flujo de sesión: `pending → confirmed` ya lo autorizaba `isReceiver`,
+y ahora la app y la web de invitados lo ofrecen.
+
+Por lo mismo, **«Pagos por confirmar» son DECLARACIONES**, no todas las deudas
+pendientes: una deuda que nadie ha declarado no aparece ahí, pero se cobra desde
+su balance.
+
+### Las mismas acciones en todas las superficies
+
+Economía global, la portada de una relación o de un grupo, «Balance con X» y el
+detalle de una relación llegan al MISMO sistema de confirmación; el saldo es el
+punto de entrada a las deudas que lo explican. Todas leen del mismo ledger por
+streams, así que una confirmación hecha en cualquiera de ellas se refleja en las
+demás y en otros clientes conectados.
+
+Un pago legado (proyección de una liquidación de sesión) no lo resuelve la
+callable de P5 por diseño: la app escribe en su `settlements/{id}`, que es donde
+vive. Antes Economía ofrecía el botón igualmente y la acción moría con un error.
+
+**Terminología única** para la misma operación: «Confirmar recepción» (receptor)
+y «Ya he pagado» (pagador), en la app y en la web de invitados.
+
+### Fuera de alcance
+
+Que un administrador edite tickets/gastos creados por otros. Un ticket vive en
+`sessions/{sid}` y solo lo edita el dueño de la sesión; los miembros del espacio
+ven únicamente su RESUMEN. Cambiarlo toca la frontera espacio↔sesión y la
+privacidad de líneas y foto: es un subsistema de autoridad distinto y se decidirá
+aparte.
 
 ## Límites de P5
 

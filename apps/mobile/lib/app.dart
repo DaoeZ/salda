@@ -7,8 +7,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'l10n/generated/app_localizations.dart';
 
-/// Raíz de la aplicación. El nombre visible procede del branding generado
-/// (fuente única en packages/design_tokens) — nunca se hardcodea.
+/// Raíz de la aplicación. El nombre visible procede del branding generado.
 class SaldaApp extends ConsumerWidget {
   const SaldaApp({super.key});
 
@@ -23,6 +22,9 @@ class SaldaApp extends ConsumerWidget {
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: ref.watch(appRouterProvider),
       debugShowCheckedModeBanner: false,
+      // No se limita el escalado: las pantallas refluyen con la preferencia
+      // de accesibilidad de la persona usuaria.
+      builder: (_, child) => child ?? const SizedBox.shrink(),
     );
   }
 }

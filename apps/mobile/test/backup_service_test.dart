@@ -26,34 +26,40 @@ void main() {
       uid: () => 'owner',
       shareCodeFactory: () => 'ORIGINAL-CODE-123456',
     );
-    final created = await repo.createSession(const NewSessionInput(
-      name: 'Viaje',
-      splitModeDefault: SplitMode.byItem,
-      participantNames: ['Edgar', 'Alba'],
-      ticket: NewTicketInput(
-        kind: 'scanned',
-        merchantName: 'Hotel',
-        engine: 'mlkit',
-        confidence: 0.9,
-        grandTotal: Money(10000),
-        lines: [NewLineInput(name: 'Noche', totalPrice: Money(10000))],
+    final created = await repo.createSession(
+      const NewSessionInput(
+        name: 'Viaje',
+        splitModeDefault: SplitMode.byItem,
+        participantNames: ['Edgar', 'Alba'],
+        ticket: NewTicketInput(
+          kind: 'scanned',
+          merchantName: 'Hotel',
+          engine: 'mlkit',
+          confidence: 0.9,
+          grandTotal: Money(10000),
+          lines: [NewLineInput(name: 'Noche', totalPrice: Money(10000))],
+        ),
       ),
-    ));
+    );
     final sid = created.sessionId;
     // Referencia de la foto del ticket (P0.2): debe sobrevivir al backup.
-    final ticket = (await firestore
-            .collection('sessions/$sid/accounts/a0/tickets')
-            .get())
-        .docs
-        .single;
-    await ticket.reference
-        .update({'imagePath': 'receipts/$sid/${ticket.id}/original.jpg'});
-    await firestore.doc('sessions/$sid/settlements/st1').set({
-      'from': 'p1', 'to': 'p0', 'amount': 5000, 'state': 'confirmed',
+    final ticket =
+        (await firestore.collection('sessions/$sid/accounts/a0/tickets').get())
+            .docs
+            .single;
+    await ticket.reference.update({
+      'imagePath': 'receipts/$sid/${ticket.id}/original.jpg',
     });
-    await firestore
-        .doc('users/owner')
-        .set({'displayName': 'Edgar', 'paymentMethods': {'bizumPhone': '6'}});
+    await firestore.doc('sessions/$sid/settlements/st1').set({
+      'from': 'p1',
+      'to': 'p0',
+      'amount': 5000,
+      'state': 'confirmed',
+    });
+    await firestore.doc('users/owner').set({
+      'displayName': 'Edgar',
+      'paymentMethods': {'bizumPhone': '6'},
+    });
     return sid;
   }
 
@@ -62,8 +68,7 @@ void main() {
     final backup = await service.exportAll();
 
     expect(backup['format'], 'appcuentas-backup');
-    expect(service.summarize(backup),
-        (sessions: 1, tickets: 1, lines: 1));
+    expect(service.summarize(backup), (sessions: 1, tickets: 1, lines: 1));
 
     // Importa en una cuenta NUEVA (migración de dispositivo/cuenta).
     final fresh = FakeFirebaseFirestore();
@@ -79,36 +84,37 @@ void main() {
     expect(session['ownerUid'], 'nueva-cuenta'); // forzado al importador
     expect(session['shareCode'], 'NEW-SHARE-CODE-9999'); // quemado el viejo
 
-    final ticket = (await fresh
-            .collection('sessions/$sid/accounts/a0/tickets')
-            .get())
-        .docs
-        .single;
+    final ticket =
+        (await fresh.collection('sessions/$sid/accounts/a0/tickets').get())
+            .docs
+            .single;
     // La referencia de la foto sobrevive a la restauración (P0.2).
-    expect(ticket.data()['imagePath'],
-        'receipts/$sid/${ticket.id}/original.jpg');
+    expect(
+      ticket.data()['imagePath'],
+      'receipts/$sid/${ticket.id}/original.jpg',
+    );
     final lines = await fresh
-        .collection(
-            'sessions/$sid/accounts/a0/tickets/${ticket.id}/lines')
+        .collection('sessions/$sid/accounts/a0/tickets/${ticket.id}/lines')
         .get();
     expect(lines.docs.single.data()['totalPrice'], 10000);
 
-    final settlement =
-        (await fresh.doc('sessions/$sid/settlements/st1').get()).data()!;
+    final settlement = (await fresh.doc('sessions/$sid/settlements/st1').get())
+        .data()!;
     expect(settlement['state'], 'confirmed'); // las congeladas sobreviven
 
     final user = (await fresh.doc('users/nueva-cuenta').get()).data()!;
     expect((user['paymentMethods'] as Map)['bizumPhone'], '6');
   });
 
-  test('replace borra las sesiones propias que no están en la copia',
-      () async {
+  test('replace borra las sesiones propias que no están en la copia', () async {
     await seedSession();
     final backup = await service.exportAll();
 
     // Sesión posterior que NO está en el backup.
     await firestore.doc('sessions/extra').set({
-      'ownerUid': 'owner', 'name': 'Posterior', 'status': 'open',
+      'ownerUid': 'owner',
+      'name': 'Posterior',
+      'status': 'open',
     });
 
     await service.import(backup, replace: true);
@@ -117,7 +123,9 @@ void main() {
     await service.import(backup, replace: false);
     // En modo fusionar no se borra nada ajeno a la copia.
     await firestore.doc('sessions/extra2').set({
-      'ownerUid': 'owner', 'name': 'Otra', 'status': 'open',
+      'ownerUid': 'owner',
+      'name': 'Otra',
+      'status': 'open',
     });
     await service.import(backup, replace: false);
     expect((await firestore.doc('sessions/extra2').get()).exists, isTrue);

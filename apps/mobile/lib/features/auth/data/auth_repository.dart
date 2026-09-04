@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -29,6 +30,32 @@ class AppUser {
 
   /// Cuenta apta para las futuras funciones de perfil y ámbito social.
   bool get isFullAccount => !isAnonymous && emailVerified;
+
+  /// Igualdad de VALOR: userChanges() re-emite tras cada reload/refresh de
+  /// token aunque nada cambie, y los providers que observan la identidad
+  /// (router incluido) no deben reaccionar a una emisión idéntica: recrear
+  /// el GoRouter reinicia la pila de navegación y cierra pantallas en uso.
+  @override
+  bool operator ==(Object other) =>
+      other is AppUser &&
+      other.uid == uid &&
+      other.email == email &&
+      other.displayName == displayName &&
+      other.photoUrl == photoUrl &&
+      other.isAnonymous == isAnonymous &&
+      other.emailVerified == emailVerified &&
+      other.providerIds.length == providerIds.length &&
+      other.providerIds.containsAll(providerIds);
+
+  @override
+  int get hashCode => Object.hash(
+    uid,
+    email,
+    displayName,
+    photoUrl,
+    isAnonymous,
+    emailVerified,
+  );
 }
 
 enum AuthFailureCode {
@@ -40,16 +67,73 @@ enum AuthFailureCode {
   userDisabled,
   operationNotAllowed,
   credentialAlreadyInUse,
+  accountMismatch,
+  configuration,
+  googleUnavailable,
+  temporary,
   cancelled,
+  unknown,
+}
+
+enum AuthFailureProvider { firebase, google, unknown }
+
+enum AuthFailureStage {
+  emailAuthentication,
+  emailAccountCreation,
+  emailLink,
+  googleInitialization,
+  googleAccountSelection,
+  googleCredentialCreation,
+  firebaseAuthentication,
+  firebaseLink,
+  tokenRefresh,
   unknown,
 }
 
 /// Error estable y presentable: la UI nunca depende de códigos de Firebase.
 class AuthFailure implements Exception {
-  const AuthFailure(this.code);
+  const AuthFailure(
+    this.code, {
+    this.cause,
+    this.stackTrace,
+    this.provider = AuthFailureProvider.unknown,
+    this.stage = AuthFailureStage.unknown,
+    this.technicalCode,
+  });
 
   final AuthFailureCode code;
+
+  /// Datos de diagnóstico internos; la UI nunca los presenta.
+  final Object? cause;
+  final StackTrace? stackTrace;
+  final AuthFailureProvider provider;
+  final AuthFailureStage stage;
+  final String? technicalCode;
+
+  @override
+  String toString() => 'AuthFailure(code: $code)';
 }
+
+typedef AuthFailureReporter = void Function(AuthFailure failure);
+
+/// Línea de diagnóstico deliberadamente sin descripción, detalles ni PII.
+String authFailureLogLine(AuthFailure failure) =>
+    'platform=${defaultTargetPlatform.name} '
+    'provider=${failure.provider.name} '
+    'stage=${failure.stage.name} '
+    'exception=${failure.cause?.runtimeType ?? 'none'} '
+    'technicalCode=${failure.technicalCode ?? 'none'} '
+    'category=${failure.code.name}';
+
+void reportAuthFailure(AuthFailure failure) {
+  if (!shouldReportAuthFailure(failure)) return;
+  final trace = failure.stackTrace?.toString().split('\n').take(3).join('\n');
+  debugPrint('auth_failure ${authFailureLogLine(failure)}');
+  if (trace != null && trace.isNotEmpty) debugPrint(trace);
+}
+
+bool shouldReportAuthFailure(AuthFailure failure) =>
+    failure.code != AuthFailureCode.cancelled;
 
 /// Puerto de bajo nivel. Separarlo permite probar todas las transiciones de
 /// identidad sin inicializar Firebase ni abrir el selector nativo de Google.
@@ -108,6 +192,12 @@ class DefaultAuthRepository implements AuthRepository {
     final wasAnonymous = _gateway.currentUser?.isAnonymous ?? false;
     if (wasAnonymous) {
       await _gateway.linkEmailAccount(email, password);
+      // CONVERSIÓN: `User.isAnonymous` pasa a false al instante, pero el ID
+      // TOKEN conserva `sign_in_provider: 'anonymous'` hasta que caduca. Las
+      // Rules leen el token, no el objeto local, así que sin este refresco
+      // la app se cree con cuenta completa mientras el servidor la sigue
+      // tratando como invitada y deniega TODA escritura social.
+      await _gateway.reloadUser(refreshToken: true);
     } else {
       await _gateway.createEmailAccount(email, password);
     }
@@ -119,6 +209,9 @@ class DefaultAuthRepository implements AuthRepository {
   Future<void> signInWithGoogle() async {
     if (_gateway.currentUser?.isAnonymous ?? false) {
       await _gateway.linkGoogleAccount();
+      // Mismo motivo que en `register`: sin refrescar el token, las Rules
+      // siguen viendo una sesión anónima.
+      await _gateway.reloadUser(refreshToken: true);
     } else {
       await _gateway.signInWithGoogle();
     }
@@ -153,11 +246,16 @@ class DefaultAuthRepository implements AuthRepository {
 }
 
 class FirebaseAuthGateway implements AuthGateway {
-  FirebaseAuthGateway(this._auth, {GoogleSignIn? googleSignIn})
-    : _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
+  FirebaseAuthGateway(
+    this._auth, {
+    GoogleSignIn? googleSignIn,
+    AuthFailureReporter? failureReporter,
+  }) : _googleSignIn = googleSignIn ?? GoogleSignIn.instance,
+       _failureReporter = failureReporter ?? reportAuthFailure;
 
   final FirebaseAuth _auth;
   final GoogleSignIn _googleSignIn;
+  final AuthFailureReporter _failureReporter;
   Future<void>? _googleInitialization;
 
   AppUser? _map(User? user) => user == null
@@ -188,6 +286,7 @@ class FirebaseAuthGateway implements AuthGateway {
         password: password,
       )).user,
     ),
+    stage: AuthFailureStage.emailAuthentication,
   );
 
   @override
@@ -198,6 +297,7 @@ class FirebaseAuthGateway implements AuthGateway {
         password: password,
       )).user,
     ),
+    stage: AuthFailureStage.emailAccountCreation,
   );
 
   @override
@@ -207,21 +307,29 @@ class FirebaseAuthGateway implements AuthGateway {
         EmailAuthProvider.credential(email: email, password: password),
       )).user,
     ),
+    stage: AuthFailureStage.emailLink,
   );
 
   @override
-  Future<AppUser> signInWithGoogle() => _guard(() async {
+  Future<AppUser> signInWithGoogle() async {
     final credential = await _googleCredential();
-    return _required((await _auth.signInWithCredential(credential)).user);
-  });
+    return _guard(
+      () async =>
+          _required((await _auth.signInWithCredential(credential)).user),
+      stage: AuthFailureStage.firebaseAuthentication,
+    );
+  }
 
   @override
-  Future<AppUser> linkGoogleAccount() => _guard(() async {
+  Future<AppUser> linkGoogleAccount() async {
     final credential = await _googleCredential();
-    return _required(
-      (await _requiredFirebaseUser().linkWithCredential(credential)).user,
+    return _guard(
+      () async => _required(
+        (await _requiredFirebaseUser().linkWithCredential(credential)).user,
+      ),
+      stage: AuthFailureStage.firebaseLink,
     );
-  });
+  }
 
   @override
   Future<AppUser> signInAnonymously() =>
@@ -245,7 +353,7 @@ class FirebaseAuthGateway implements AuthGateway {
       await _auth.currentUser?.getIdToken(true);
     }
     return _map(_auth.currentUser);
-  });
+  }, stage: AuthFailureStage.tokenRefresh);
 
   @override
   Future<void> sendPasswordReset(String email) =>
@@ -268,10 +376,19 @@ class FirebaseAuthGateway implements AuthGateway {
           ? null
           : _googleServerClientId,
     );
-    await _googleInitialization;
-    final account = await _googleSignIn.authenticate();
-    final authentication = account.authentication;
-    return GoogleAuthProvider.credential(idToken: authentication.idToken);
+    // google_sign_in 7.x exige inicializar una sola vez por instancia.
+    await _guardGoogleStage(
+      () => _googleInitialization!,
+      AuthFailureStage.googleInitialization,
+    );
+    final account = await _guardGoogleStage(
+      _googleSignIn.authenticate,
+      AuthFailureStage.googleAccountSelection,
+    );
+    return _guardGoogleStage(() {
+      final authentication = account.authentication;
+      return GoogleAuthProvider.credential(idToken: authentication.idToken);
+    }, AuthFailureStage.googleCredentialCreation);
   }
 
   User _requiredFirebaseUser() {
@@ -286,23 +403,62 @@ class FirebaseAuthGateway implements AuthGateway {
     return mapped;
   }
 
-  Future<T> _guard<T>(Future<T> Function() action) async {
+  Future<T> _guard<T>(
+    Future<T> Function() action, {
+    AuthFailureStage stage = AuthFailureStage.unknown,
+  }) async {
     try {
       return await action();
-    } on AuthFailure {
-      rethrow;
-    } on FirebaseAuthException catch (error) {
-      throw AuthFailure(_mapFirebaseCode(error.code));
-    } on GoogleSignInException catch (error) {
-      if (error.code == GoogleSignInExceptionCode.canceled) {
-        throw const AuthFailure(AuthFailureCode.cancelled);
-      }
-      throw const AuthFailure(AuthFailureCode.unknown);
-    } on TimeoutException {
-      throw const AuthFailure(AuthFailureCode.network);
-    } on Object {
-      throw const AuthFailure(AuthFailureCode.unknown);
+    } on AuthFailure catch (failure, stackTrace) {
+      final enriched = enrichAuthFailure(
+        failure,
+        stackTrace,
+        provider: AuthFailureProvider.firebase,
+        stage: stage,
+      );
+      _report(enriched);
+      throw enriched;
+    } on Object catch (error, stackTrace) {
+      final failure = mapAuthFailure(
+        error,
+        stackTrace,
+        provider: AuthFailureProvider.firebase,
+        stage: stage,
+      );
+      _report(failure);
+      throw failure;
     }
+  }
+
+  Future<T> _guardGoogleStage<T>(
+    FutureOr<T> Function() action,
+    AuthFailureStage stage,
+  ) async {
+    try {
+      return await action();
+    } on AuthFailure catch (failure, stackTrace) {
+      final enriched = enrichAuthFailure(
+        failure,
+        stackTrace,
+        provider: AuthFailureProvider.google,
+        stage: stage,
+      );
+      _report(enriched);
+      throw enriched;
+    } on Object catch (error, stackTrace) {
+      final failure = mapAuthFailure(
+        error,
+        stackTrace,
+        provider: AuthFailureProvider.google,
+        stage: stage,
+      );
+      _report(failure);
+      throw failure;
+    }
+  }
+
+  void _report(AuthFailure failure) {
+    if (shouldReportAuthFailure(failure)) _failureReporter(failure);
   }
 
   Future<void> _guardVoid(Future<void> Function() action) =>
@@ -321,7 +477,11 @@ AuthFailureCode _mapFirebaseCode(String code) => switch (code) {
   'invalid-credential' ||
   'wrong-password' ||
   'user-not-found' ||
-  'invalid-email' => AuthFailureCode.invalidCredential,
+  'invalid-email' ||
+  'invalid-verification-code' ||
+  'invalid-verification-id' ||
+  'missing-verification-code' ||
+  'missing-verification-id' => AuthFailureCode.invalidCredential,
   'email-already-in-use' => AuthFailureCode.emailAlreadyInUse,
   'weak-password' => AuthFailureCode.weakPassword,
   'network-request-failed' => AuthFailureCode.network,
@@ -330,8 +490,90 @@ AuthFailureCode _mapFirebaseCode(String code) => switch (code) {
   'operation-not-allowed' => AuthFailureCode.operationNotAllowed,
   'credential-already-in-use' || 'account-exists-with-different-credential' =>
     AuthFailureCode.credentialAlreadyInUse,
+  'invalid-api-key' ||
+  'app-not-authorized' ||
+  'invalid-app-credential' => AuthFailureCode.configuration,
+  'internal-error' || 'unavailable' => AuthFailureCode.temporary,
   _ => AuthFailureCode.unknown,
 };
+
+AuthFailureCode _mapGoogleCode(GoogleSignInExceptionCode code) =>
+    switch (code) {
+      GoogleSignInExceptionCode.canceled => AuthFailureCode.cancelled,
+      GoogleSignInExceptionCode.interrupted => AuthFailureCode.temporary,
+      GoogleSignInExceptionCode.clientConfigurationError =>
+        AuthFailureCode.configuration,
+      GoogleSignInExceptionCode.providerConfigurationError ||
+      GoogleSignInExceptionCode.uiUnavailable =>
+        AuthFailureCode.googleUnavailable,
+      GoogleSignInExceptionCode.userMismatch => AuthFailureCode.accountMismatch,
+      // The package explicitly permits future enum values.
+      _ => AuthFailureCode.unknown,
+    };
+
+AuthFailure mapAuthFailure(
+  Object error,
+  StackTrace stackTrace, {
+  required AuthFailureProvider provider,
+  required AuthFailureStage stage,
+}) {
+  if (error is AuthFailure) {
+    return enrichAuthFailure(
+      error,
+      stackTrace,
+      provider: provider,
+      stage: stage,
+    );
+  }
+  final technicalCode = switch (error) {
+    FirebaseAuthException() => error.code,
+    GoogleSignInException() => error.code.name,
+    TimeoutException() => 'timeout',
+    _ => 'unknown',
+  };
+  final code = switch (error) {
+    FirebaseAuthException() => _mapFirebaseCode(error.code),
+    GoogleSignInException() => _mapGoogleCode(error.code),
+    TimeoutException() => AuthFailureCode.network,
+    _ => AuthFailureCode.unknown,
+  };
+  return AuthFailure(
+    code,
+    cause: error,
+    stackTrace: stackTrace,
+    provider: provider,
+    stage: stage,
+    technicalCode: technicalCode,
+  );
+}
+
+AuthFailure enrichAuthFailure(
+  AuthFailure failure,
+  StackTrace stackTrace, {
+  required AuthFailureProvider provider,
+  required AuthFailureStage stage,
+}) {
+  final resolvedProvider = failure.provider == AuthFailureProvider.unknown
+      ? provider
+      : failure.provider;
+  final resolvedStage = failure.stage == AuthFailureStage.unknown
+      ? stage
+      : failure.stage;
+  final resolvedStackTrace = failure.stackTrace ?? stackTrace;
+  if (resolvedProvider == failure.provider &&
+      resolvedStage == failure.stage &&
+      identical(resolvedStackTrace, failure.stackTrace)) {
+    return failure;
+  }
+  return AuthFailure(
+    failure.code,
+    cause: failure.cause,
+    stackTrace: resolvedStackTrace,
+    provider: resolvedProvider,
+    stage: resolvedStage,
+    technicalCode: failure.technicalCode,
+  );
+}
 
 final authGatewayProvider = Provider<AuthGateway>(
   (ref) => FirebaseAuthGateway(FirebaseAuth.instance),

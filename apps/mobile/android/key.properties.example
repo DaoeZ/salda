@@ -1,0 +1,23 @@
+# Clave de RELEASE (Google Play) — plantilla SIN secretos.
+#
+# NO es la clave de desarrollo. Son dos claves distintas y no se mezclan:
+#
+#   dev-keystore.properties  → firma de DESARROLLO compartida (salda-dev.jks,
+#                              alias salda-dev). Es la que valida Google
+#                              Sign-In y los App Links hoy. Ver
+#                              dev-keystore.properties.example.
+#   key.properties           → firma de PUBLICACIÓN en Play. Todavía NO existe.
+#
+# Copia este archivo a `key.properties` (gitignorado) SOLO cuando exista una
+# clave de publicación real. Mientras no exista, `flutter build appbundle`
+# se detiene a propósito en vez de firmar con la de desarrollo, que Play
+# rechaza y que cualquiera con el repositorio podría reproducir.
+#
+# Crear esta clave es una decisión con consecuencias permanentes: quien
+# publique la primera versión en Play queda atado a ese certificado (o a
+# Play App Signing) para siempre. No la generes sin decidirlo antes.
+
+storeFile=/ruta/absoluta/fuera/del/repo/salda-release.jks
+storePassword=REEMPLAZAR
+keyAlias=REEMPLAZAR
+keyPassword=REEMPLAZAR

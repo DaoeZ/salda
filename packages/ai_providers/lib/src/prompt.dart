@@ -39,15 +39,19 @@ ReceiptExtraction parseAiResponse(String content, {required String engine}) {
   final end = content.lastIndexOf('}');
   if (start < 0 || end <= start) {
     throw const AiProviderException(
-        AiErrorCode.badResponse, 'La respuesta no contiene JSON');
+      AiErrorCode.badResponse,
+      'La respuesta no contiene JSON',
+    );
   }
   Map<String, dynamic> json;
   try {
-    json = jsonDecode(content.substring(start, end + 1))
-        as Map<String, dynamic>;
+    json =
+        jsonDecode(content.substring(start, end + 1)) as Map<String, dynamic>;
   } on Object {
     throw const AiProviderException(
-        AiErrorCode.badResponse, 'JSON inválido en la respuesta');
+      AiErrorCode.badResponse,
+      'JSON inválido en la respuesta',
+    );
   }
 
   try {
@@ -68,16 +72,18 @@ ReceiptExtraction parseAiResponse(String content, {required String engine}) {
         : Money((json['grandTotal'] as num).toInt());
     if (lines.isEmpty && grandTotal == null) {
       throw const AiProviderException(
-          AiErrorCode.badResponse, 'Sin líneas ni total');
+        AiErrorCode.badResponse,
+        'Sin líneas ni total',
+      );
     }
 
     List<LabeledAmount> amounts(String key) => [
-          for (final e in (json[key] as List? ?? const []))
-            LabeledAmount(
-              (e as Map)['label'] as String? ?? key,
-              Money((e['amount'] as num).toInt()),
-            ),
-        ];
+      for (final e in (json[key] as List? ?? const []))
+        LabeledAmount(
+          (e as Map)['label'] as String? ?? key,
+          Money((e['amount'] as num).toInt()),
+        ),
+    ];
 
     final extraction = ReceiptExtraction(
       engine: engine,
@@ -106,9 +112,9 @@ ReceiptExtraction parseAiResponse(String content, {required String engine}) {
     // igual que hace el parser OCR.
     if (grandTotal != null && lines.isNotEmpty) {
       final delta = extraction.computedTotal - grandTotal;
-      final tolerance =
-          grandTotal.abs().cents ~/ 100 > 2 ? grandTotal.abs().cents ~/ 100 : 2;
-      if (delta.abs().cents > tolerance) {
+      // Mismo margen que el parser y que la revisión: dos céntimos, definido
+      // UNA vez en `domain` (A15). Tres copias de la fórmula divergían.
+      if (!receiptAmountsBalance(extraction.computedTotal, grandTotal)) {
         return ReceiptExtraction(
           engine: engine,
           merchantName: extraction.merchantName,
@@ -135,6 +141,8 @@ ReceiptExtraction parseAiResponse(String content, {required String engine}) {
     rethrow;
   } on Object catch (error) {
     throw AiProviderException(
-        AiErrorCode.badResponse, 'Estructura inesperada: $error');
+      AiErrorCode.badResponse,
+      'Estructura inesperada: $error',
+    );
   }
 }

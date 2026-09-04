@@ -52,6 +52,7 @@ Future<ProviderContainer> _pump(
   required Widget child,
   Size size = const Size(390, 844),
   double textScaleFactor = 1,
+  AsyncValue<PublicProfile?>? profileState,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -73,6 +74,8 @@ Future<ProviderContainer> _pump(
           isFullAccount: () => true,
         ),
       ),
+      if (profileState != null)
+        myProfileProvider.overrideWithValue(profileState),
     ],
   );
   addTearDown(container.dispose);
@@ -132,8 +135,7 @@ void main() {
     );
     await _pump(tester, firestore: firestore, child: const FriendsScreen());
 
-    await tester.tap(find.text('Recibidas'));
-    await tester.pumpAndSettle();
+    expect(find.text('SOLICITUDES RECIBIDAS'), findsOneWidget);
     expect(find.text('Alba'), findsOneWidget);
     expect(find.text('Aceptar'), findsOneWidget);
     expect(find.text('Rechazar'), findsOneWidget);
@@ -172,7 +174,15 @@ void main() {
     expect(find.text('Añadir amigo'), findsOneWidget);
     await tester.tap(find.text('Añadir amigo'));
     await tester.pumpAndSettle();
-    expect(find.text('Solicitud enviada'), findsOneWidget);
+    // Confirmación doble: el SnackBar de éxito y el botón de estado.
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text('Solicitud enviada'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Solicitud enviada'), findsNWidgets(2));
     expect(find.text('Cancelar solicitud'), findsOneWidget);
 
     await tester.tap(find.text('Cancelar solicitud'));
@@ -222,6 +232,34 @@ void main() {
       (await firestore.doc('sessions/economic-history').get()).exists,
       true,
     );
+  });
+
+  testWidgets('profile load error keeps retry distinct from profile setup', (
+    tester,
+  ) async {
+    final firestore = FakeFirebaseFirestore();
+    await _pump(
+      tester,
+      firestore: firestore,
+      child: const FriendsScreen(),
+      profileState: AsyncError<PublicProfile?>(
+        StateError('profile down'),
+        StackTrace.empty,
+      ),
+    );
+
+    expect(
+      find.text(
+        'No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Reintentar'), findsOneWidget);
+    expect(
+      find.text('Completa tu perfil antes de usar las amistades'),
+      findsNothing,
+    );
+    expect(find.text('Crear perfil'), findsNothing);
   });
 
   testWidgets('nombres largos y texto aumentado no provocan overflow', (

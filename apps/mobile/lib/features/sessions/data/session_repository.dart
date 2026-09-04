@@ -28,9 +28,21 @@ abstract interface class SessionRepository {
     String sessionId,
     NewTicketInput ticket, {
     required String payerPid,
+    required String spaceId,
   });
 
   Stream<List<SessionTicket>> watchTickets(String sessionId, String accountId);
+
+  /// Abre UN ticket por derecho histórico (A11d), sin listar nada.
+  ///
+  /// Existe porque la resolución normal recorre las cuentas de la sesión, y
+  /// a quien ya no es miembro no se le permite —deliberadamente— listarlas.
+  /// El derecho histórico guarda la cuenta, así que el ticket se alcanza con
+  /// dos lecturas deterministas. Devuelve null si no hay derecho.
+  Future<HistoricTicket?> fetchHistoricTicket(
+    String sessionId,
+    String ticketId,
+  );
 
   /// Líneas de un ticket (lectura puntual para el detalle).
   Future<List<LineExport>> fetchTicketLines(String ticketPath);
@@ -58,15 +70,68 @@ abstract interface class SessionRepository {
 
   /// Añade o quita un consumidor de UNA unidad mediante ruta punteada. Así
   /// dos dispositivos pueden editar la misma unidad sin pisarse entre sí.
+  ///
+  /// [myPid] es MI participante en este gasto (null si no soy participante).
+  /// Sirve para una sola cosa: decidir si la escritura firma la procedencia.
   Future<void> setUnitConsumer(
     String linePath, {
     required int unit,
     required String participantId,
     required bool selected,
+    String? myPid,
+
+    /// A19: si el gasto sigue el protocolo, la escritura lleva además la
+    /// REAPERTURA del pid afectado, en el mismo commit. Un gasto anterior no
+    /// la lleva: escribirle `picking` haría que las Rules rechazasen el lote.
+    bool usesPicking = false,
+  });
+
+  /// «He terminado de elegir»: [participantId] sale de los pendientes (A19).
+  ///
+  /// Lo hace cada cual con lo suyo y, con la autoridad de A10, por otra
+  /// persona: un MANUAL no puede pulsar nada y quien se fue a casa tampoco.
+  Future<void> finishPicking(
+    String ticketPath, {
+    required String participantId,
   });
 
   /// Registra la ruta de Storage de la foto del ticket.
   Future<void> setTicketImage(String ticketPath, String storagePath);
+
+  /// Corrige la cabecera del ticket (A11c): comercio, fecha y total. Firma
+  /// la corrección con actor y fecha del servidor — sin eso, un gasto podría
+  /// cambiar de importe sin que nadie pudiera explicar después quién lo hizo.
+  Future<void> correctTicketHeader(
+    String ticketPath, {
+    required String merchantName,
+    String? date,
+    required Money grandTotal,
+  });
+
+  /// Corrige el contenido de un producto y ajusta el total del ticket con la
+  /// diferencia, para que el gasto siga cuadrando.
+  ///
+  /// [removedUnitIds] son las unidades que dejan de existir: se borran una a
+  /// una, por su ruta. Las que sobreviven no se reescriben —así nadie puede
+  /// acabar en una unidad que no eligió— y las Rules comprueban justo eso.
+  Future<void> correctLine(
+    String linePath, {
+    required String name,
+    required int quantityMilli,
+    required Money totalPrice,
+    List<String> removedUnitIds = const [],
+    List<String>? unitIds,
+  });
+
+  /// Retira un producto del ticket y descuenta su importe del total. Sus
+  /// asignaciones se van con él: el documento entero desaparece.
+  Future<void> removeLine(String linePath);
+
+  /// Elimina el gasto entero (A2): un solo commit con el borrado del ticket y
+  /// la evidencia inmutable de quién lo borró. Lo derivado —líneas, foto,
+  /// enlaces, derechos históricos, cuenta vacía y agregados— lo purga
+  /// `cleanup` después; los PAGOS y la actividad no se tocan nunca.
+  Future<void> deleteTicket(String ticketPath);
 
   Future<void> updateSettlementState(
     String sessionId,

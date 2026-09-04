@@ -217,8 +217,50 @@ abstract class AppLocalizations {
   /// No description provided for @reviewBalanced.
   ///
   /// In es, this message translates to:
-  /// **'El ticket cuadra'**
+  /// **'El total cuadra'**
   String get reviewBalanced;
+
+  /// No description provided for @reviewBalancedHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Que cuadre solo dice que las cuentas salen. Revisa el establecimiento, los nombres y las cantidades.'**
+  String get reviewBalancedHint;
+
+  /// No description provided for @reviewAiWithoutPhoto.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin la foto original: la IA revisará los datos ya extraídos, no el ticket.'**
+  String get reviewAiWithoutPhoto;
+
+  /// No description provided for @reviewAiOverwriteTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Revisar de nuevo con IA?'**
+  String get reviewAiOverwriteTitle;
+
+  /// No description provided for @reviewAiOverwriteBody.
+  ///
+  /// In es, this message translates to:
+  /// **'La IA volverá a interpretar el ticket entero y sustituirá los cambios que has hecho a mano.'**
+  String get reviewAiOverwriteBody;
+
+  /// No description provided for @reviewAiOverwriteConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Revisar igualmente'**
+  String get reviewAiOverwriteConfirm;
+
+  /// No description provided for @reviewEditTotalTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Total del ticket'**
+  String get reviewEditTotalTitle;
+
+  /// No description provided for @reviewEditTotalHint.
+  ///
+  /// In es, this message translates to:
+  /// **'El dinero realmente pagado. Cambiarlo no toca los productos.'**
+  String get reviewEditTotalHint;
 
   /// No description provided for @reviewMismatch.
   ///
@@ -598,6 +640,12 @@ abstract class AppLocalizations {
   /// **'Email o contraseña incorrectos'**
   String get authErrorInvalidCredential;
 
+  /// No description provided for @authErrorGoogleInvalidCredential.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo validar el acceso con Google. Vuelve a intentarlo.'**
+  String get authErrorGoogleInvalidCredential;
+
   /// No description provided for @authErrorEmailInUse.
   ///
   /// In es, this message translates to:
@@ -613,7 +661,7 @@ abstract class AppLocalizations {
   /// No description provided for @authErrorNetwork.
   ///
   /// In es, this message translates to:
-  /// **'Sin conexión. Inténtalo de nuevo.'**
+  /// **'No se pudo conectar con el servicio. Inténtalo de nuevo.'**
   String get authErrorNetwork;
 
   /// No description provided for @authErrorTooManyRequests.
@@ -639,6 +687,30 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Ese acceso ya pertenece a otra cuenta. Cierra esta sesión y entra con la cuenta existente; no hemos movido tus datos.'**
   String get authErrorCredentialAlreadyInUse;
+
+  /// No description provided for @authErrorAccountMismatch.
+  ///
+  /// In es, this message translates to:
+  /// **'La cuenta de Google seleccionada no coincide. Prueba con la cuenta correcta.'**
+  String get authErrorAccountMismatch;
+
+  /// No description provided for @authErrorConfiguration.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo iniciar sesión. La aplicación necesita una revisión de configuración.'**
+  String get authErrorConfiguration;
+
+  /// No description provided for @authErrorGoogleUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'El acceso con Google no está disponible ahora. Inténtalo de nuevo.'**
+  String get authErrorGoogleUnavailable;
+
+  /// No description provided for @authErrorTemporary.
+  ///
+  /// In es, this message translates to:
+  /// **'El servicio no está disponible ahora. Inténtalo de nuevo.'**
+  String get authErrorTemporary;
 
   /// No description provided for @authErrorCancelled.
   ///
@@ -973,7 +1045,7 @@ abstract class AppLocalizations {
   /// No description provided for @activityEmpty.
   ///
   /// In es, this message translates to:
-  /// **'Sin actividad todavía'**
+  /// **'Aquí aparecerá lo que vaya pasando: tickets, pagos, espacios y miembros.'**
   String get activityEmpty;
 
   /// No description provided for @accountsEmpty.
@@ -1378,6 +1450,126 @@ abstract class AppLocalizations {
   /// **'Marca cada unidad que consumiste. Una unidad marcada por varias personas se comparte; lo no reclamado corre a cargo de quien pagó.'**
   String get ticketPickHint;
 
+  /// No description provided for @ticketPickError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo guardar tu selección. Puede que la cuenta ya esté cerrada.'**
+  String get ticketPickError;
+
+  /// No description provided for @ticketSplitEqualHint.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{Este gasto se reparte a partes iguales. Los productos son el detalle de la compra, no el reparto.} other{Este gasto se reparte a partes iguales entre {count} personas. Los productos son el detalle de la compra, no el reparto.}}'**
+  String ticketSplitEqualHint(int count);
+
+  /// No description provided for @ticketCorrectAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Corregir gasto'**
+  String get ticketCorrectAction;
+
+  /// No description provided for @ticketCorrectDone.
+  ///
+  /// In es, this message translates to:
+  /// **'Terminar corrección'**
+  String get ticketCorrectDone;
+
+  /// No description provided for @ticketCorrectBanner.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás corrigiendo el gasto. Los cambios recalculan los balances y quedan firmados con tu nombre.'**
+  String get ticketCorrectBanner;
+
+  /// No description provided for @ticketCorrectHeaderTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Corregir el ticket'**
+  String get ticketCorrectHeaderTitle;
+
+  /// No description provided for @ticketCorrectImpactTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Se perderán asignaciones'**
+  String get ticketCorrectImpactTitle;
+
+  /// No description provided for @ticketCorrectImpactBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{names} dejará de tener consumo asignado aquí. No se traslada a nadie más y los balances se recalculan. Los pagos ya registrados se mantienen.'**
+  String ticketCorrectImpactBody(String names);
+
+  /// No description provided for @ticketCorrectError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo guardar la corrección. Puede que la cuenta esté cerrada o que no tengas permiso.'**
+  String get ticketCorrectError;
+
+  /// No description provided for @ticketDeleteAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar gasto'**
+  String get ticketDeleteAction;
+
+  /// No description provided for @ticketDeleteTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Eliminar este gasto?'**
+  String get ticketDeleteTitle;
+
+  /// No description provided for @ticketDeleteBody.
+  ///
+  /// In es, this message translates to:
+  /// **'El gasto desaparecerá con su foto y su reparto, y los balances se recalcularán. No se puede deshacer.'**
+  String get ticketDeleteBody;
+
+  /// No description provided for @ticketDeletePaymentsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto tiene pagos registrados'**
+  String get ticketDeletePaymentsTitle;
+
+  /// No description provided for @ticketDeletePaymentsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{Hay 1 pago confirmado de {amount}. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.} other{Hay {count} pagos confirmados por {amount} en total. Los pagos no se eliminan: al borrar el gasto los saldos pueden cambiar o incluso invertirse.}}'**
+  String ticketDeletePaymentsBody(int count, String amount);
+
+  /// No description provided for @ticketDeleteDeclarationsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Y pagos declarados sin confirmar'**
+  String get ticketDeleteDeclarationsTitle;
+
+  /// No description provided for @ticketDeleteDeclarationsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{Hay 1 pago declarado de {amount} pendiente de confirmación. Tampoco se elimina, y si se confirma más tarde contará como dinero recibido.} other{Hay {count} pagos declarados por {amount} pendientes de confirmación. Tampoco se eliminan, y si se confirman más tarde contarán como dinero recibido.}}'**
+  String ticketDeleteDeclarationsBody(int count, String amount);
+
+  /// No description provided for @ticketDeleteError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo eliminar el gasto. Puede que la cuenta esté cerrada o que no tengas permiso.'**
+  String get ticketDeleteError;
+
+  /// No description provided for @ticketDeleted.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto eliminado'**
+  String get ticketDeleted;
+
+  /// No description provided for @ticketCorrectedBy.
+  ///
+  /// In es, this message translates to:
+  /// **'Corregido por {name} · {date}'**
+  String ticketCorrectedBy(String name, DateTime date);
+
+  /// No description provided for @ticketSplitYourShare.
+  ///
+  /// In es, this message translates to:
+  /// **'Te corresponden {amount}.'**
+  String ticketSplitYourShare(String amount);
+
   /// No description provided for @lineForAll.
   ///
   /// In es, this message translates to:
@@ -1420,6 +1612,84 @@ abstract class AppLocalizations {
   /// **'sin reclamar (para {payer})'**
   String unitResidual(String payer);
 
+  /// No description provided for @unitAssignTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Quién consume la unidad {number}?'**
+  String unitAssignTitle(int number);
+
+  /// No description provided for @unitAssignResidual.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin nadie marcado, esta unidad corre a cargo de {payer}.'**
+  String unitAssignResidual(String payer);
+
+  /// No description provided for @unitAssignShareHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Marca a varias personas para repartir esta unidad entre ellas.'**
+  String get unitAssignShareHint;
+
+  /// No description provided for @pickingOpenTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Aún estáis eligiendo'**
+  String get pickingOpenTitle;
+
+  /// No description provided for @pickingOpenBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto no entra en las cuentas hasta que todo el mundo termine.'**
+  String get pickingOpenBody;
+
+  /// No description provided for @pickingWaitingFor.
+  ///
+  /// In es, this message translates to:
+  /// **'Falta {names}'**
+  String pickingWaitingFor(String names);
+
+  /// No description provided for @pickingClosedTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Reparto cerrado'**
+  String get pickingClosedTitle;
+
+  /// No description provided for @pickingClosedBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Las cuentas de este gasto ya son firmes.'**
+  String get pickingClosedBody;
+
+  /// No description provided for @pickingFinishAction.
+  ///
+  /// In es, this message translates to:
+  /// **'He terminado'**
+  String get pickingFinishAction;
+
+  /// No description provided for @pickingFinishForOther.
+  ///
+  /// In es, this message translates to:
+  /// **'Terminar por {name}'**
+  String pickingFinishForOther(String name);
+
+  /// No description provided for @pickingReopenTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Volver a abrir el reparto?'**
+  String get pickingReopenTitle;
+
+  /// No description provided for @pickingReopenBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto ya estaba cerrado y hay {count} pago(s) confirmado(s) por {amount}. Las cuentas se quedan como están mientras lo revisáis; al volver a cerrarlo se ajustará la diferencia.'**
+  String pickingReopenBody(int count, String amount);
+
+  /// No description provided for @pickingReopenAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Cambiar de todas formas'**
+  String get pickingReopenAction;
+
   /// No description provided for @unitCompactSummary.
   ///
   /// In es, this message translates to:
@@ -1449,6 +1719,300 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Confirmará {name} al recibir el dinero'**
   String settlementAwaitsReceiver(String name);
+
+  /// No description provided for @activityTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Actividad'**
+  String get activityTitle;
+
+  /// No description provided for @activitySeeAll.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver toda'**
+  String get activitySeeAll;
+
+  /// No description provided for @activityLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo cargar la actividad. Comprueba la conexión.'**
+  String get activityLoadError;
+
+  /// No description provided for @activityRetry.
+  ///
+  /// In es, this message translates to:
+  /// **'Reintentar'**
+  String get activityRetry;
+
+  /// No description provided for @activityLoadMore.
+  ///
+  /// In es, this message translates to:
+  /// **'Cargar más'**
+  String get activityLoadMore;
+
+  /// No description provided for @activityGone.
+  ///
+  /// In es, this message translates to:
+  /// **'Ese elemento ya no está disponible.'**
+  String get activityGone;
+
+  /// No description provided for @activityActorFallback.
+  ///
+  /// In es, this message translates to:
+  /// **'Alguien'**
+  String get activityActorFallback;
+
+  /// No description provided for @activityUnknown.
+  ///
+  /// In es, this message translates to:
+  /// **'Actividad'**
+  String get activityUnknown;
+
+  /// No description provided for @activityNow.
+  ///
+  /// In es, this message translates to:
+  /// **'ahora'**
+  String get activityNow;
+
+  /// No description provided for @activityMinutesAgo.
+  ///
+  /// In es, this message translates to:
+  /// **'hace {n} min'**
+  String activityMinutesAgo(int n);
+
+  /// No description provided for @activityHoursAgo.
+  ///
+  /// In es, this message translates to:
+  /// **'hace {n} h'**
+  String activityHoursAgo(int n);
+
+  /// No description provided for @activityDaysAgo.
+  ///
+  /// In es, this message translates to:
+  /// **'hace {n} d'**
+  String activityDaysAgo(int n);
+
+  /// No description provided for @activitySpaceCreated.
+  ///
+  /// In es, this message translates to:
+  /// **'Creó el espacio \"{space}\"'**
+  String activitySpaceCreated(String space);
+
+  /// No description provided for @activitySpaceRenamed.
+  ///
+  /// In es, this message translates to:
+  /// **'Editó el espacio \"{space}\"'**
+  String activitySpaceRenamed(String space);
+
+  /// No description provided for @activitySpaceArchived.
+  ///
+  /// In es, this message translates to:
+  /// **'Archivó el espacio \"{space}\"'**
+  String activitySpaceArchived(String space);
+
+  /// No description provided for @activitySpaceReactivated.
+  ///
+  /// In es, this message translates to:
+  /// **'Reactivó el espacio \"{space}\"'**
+  String activitySpaceReactivated(String space);
+
+  /// No description provided for @activitySpaceTransferred.
+  ///
+  /// In es, this message translates to:
+  /// **'Transfirió el espacio \"{space}\"'**
+  String activitySpaceTransferred(String space);
+
+  /// No description provided for @activityInviteSent.
+  ///
+  /// In es, this message translates to:
+  /// **'Envió una invitación a \"{space}\"'**
+  String activityInviteSent(String space);
+
+  /// No description provided for @activityMemberJoined.
+  ///
+  /// In es, this message translates to:
+  /// **'Se unió a \"{space}\"'**
+  String activityMemberJoined(String space);
+
+  /// No description provided for @activityMemberLeft.
+  ///
+  /// In es, this message translates to:
+  /// **'Salió de \"{space}\"'**
+  String activityMemberLeft(String space);
+
+  /// No description provided for @activityMemberRemoved.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminó a un miembro de \"{space}\"'**
+  String activityMemberRemoved(String space);
+
+  /// No description provided for @activityTicketCreated.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadió el ticket {ticket}'**
+  String activityTicketCreated(String ticket);
+
+  /// No description provided for @activityTicketUpdated.
+  ///
+  /// In es, this message translates to:
+  /// **'Modificó el ticket {ticket}'**
+  String activityTicketUpdated(String ticket);
+
+  /// No description provided for @activityTicketLinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculó {ticket} al espacio \"{space}\"'**
+  String activityTicketLinked(String ticket, String space);
+
+  /// No description provided for @activityTicketUnlinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Desvinculó el ticket {ticket}'**
+  String activityTicketUnlinked(String ticket);
+
+  /// No description provided for @activityTicketDeleted.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminó el ticket {ticket}'**
+  String activityTicketDeleted(String ticket);
+
+  /// No description provided for @activityPaymentMarked.
+  ///
+  /// In es, this message translates to:
+  /// **'Marcó un pago como enviado'**
+  String get activityPaymentMarked;
+
+  /// No description provided for @activityPaymentConfirmed.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmó que recibió un pago'**
+  String get activityPaymentConfirmed;
+
+  /// No description provided for @activityPaymentCancelled.
+  ///
+  /// In es, this message translates to:
+  /// **'Canceló un pago'**
+  String get activityPaymentCancelled;
+
+  /// No description provided for @guestNameTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu nombre'**
+  String get guestNameTitle;
+
+  /// No description provided for @guestNameBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás usando Salda como invitado: no hace falta cuenta. Elige el nombre con el que te verán en los grupos y relaciones.'**
+  String get guestNameBody;
+
+  /// No description provided for @guestNameLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre visible'**
+  String get guestNameLabel;
+
+  /// No description provided for @guestNameRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe un nombre para continuar'**
+  String get guestNameRequired;
+
+  /// No description provided for @guestNameSaved.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre guardado'**
+  String get guestNameSaved;
+
+  /// No description provided for @guestNameError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo guardar el nombre. Inténtalo de nuevo.'**
+  String get guestNameError;
+
+  /// No description provided for @guestNameBannerTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Elige tu nombre para participar'**
+  String get guestNameBannerTitle;
+
+  /// No description provided for @guestNameBannerAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Elegir nombre'**
+  String get guestNameBannerAction;
+
+  /// No description provided for @guestLimitsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Como invitado participas en gastos y balances. Crear grupos o relaciones, invitar personas y tener perfil público requieren una cuenta. Podrás crear gastos si el anfitrión lo permite.'**
+  String get guestLimitsBody;
+
+  /// No description provided for @guestBadge.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitado'**
+  String get guestBadge;
+
+  /// No description provided for @guestPolicyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Permitir gastos a los invitados'**
+  String get guestPolicyTitle;
+
+  /// No description provided for @guestPolicyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Si lo activas, los invitados de este contexto podrán crear gastos.'**
+  String get guestPolicyBody;
+
+  /// No description provided for @manualParticipantsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Personas sin cuenta'**
+  String get manualParticipantsTitle;
+
+  /// No description provided for @manualParticipantsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Añade a quien no use Salda: solo necesitas su nombre y participará en los gastos igual que los demás.'**
+  String get manualParticipantsEmpty;
+
+  /// No description provided for @manualParticipantAdd.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir'**
+  String get manualParticipantAdd;
+
+  /// No description provided for @manualParticipantName.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre'**
+  String get manualParticipantName;
+
+  /// No description provided for @manualParticipantHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin cuenta · participa en los gastos'**
+  String get manualParticipantHint;
+
+  /// No description provided for @manualParticipantRename.
+  ///
+  /// In es, this message translates to:
+  /// **'Cambiar el nombre'**
+  String get manualParticipantRename;
+
+  /// No description provided for @manualParticipantRemove.
+  ///
+  /// In es, this message translates to:
+  /// **'Quitar del contexto'**
+  String get manualParticipantRemove;
+
+  /// No description provided for @manualParticipantRemoveBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} dejará de aparecer en los gastos nuevos. Su historial, sus deudas y sus pagos no se tocan.'**
+  String manualParticipantRemoveBody(String name);
 
   /// No description provided for @spacesTitle.
   ///
@@ -1509,6 +2073,12 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Propietario'**
   String get spaceOwnerBadge;
+
+  /// Relleno cuando una identidad existe pero no tiene nombre legible. Nunca se muestra un UID ni un identificador tecnico.
+  ///
+  /// In es, this message translates to:
+  /// **'Persona sin nombre'**
+  String get personUnnamed;
 
   /// No description provided for @spaceGone.
   ///
@@ -1606,6 +2176,12 @@ abstract class AppLocalizations {
   /// **'{name} te invita al espacio \"{space}\"'**
   String spaceInviteText(String name, String space);
 
+  /// Invitacion a una RELACION. No nombra el espacio: una relacion no tiene nombre propio, la otra persona es el contexto.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} quiere compartir gastos contigo'**
+  String relationshipInviteText(String name);
+
   /// No description provided for @spaceInviteAccept.
   ///
   /// In es, this message translates to:
@@ -1633,14 +2209,32 @@ abstract class AppLocalizations {
   /// No description provided for @spaceRemoveMemberTitle.
   ///
   /// In es, this message translates to:
-  /// **'Eliminar del espacio'**
+  /// **'Expulsar del grupo'**
   String get spaceRemoveMemberTitle;
 
   /// No description provided for @spaceRemoveMemberBody.
   ///
   /// In es, this message translates to:
-  /// **'{name} dejará de ver este espacio. Sus tickets, pagos e historial no se tocan.'**
+  /// **'{name} saldrá del grupo y dejará de ver el contenido nuevo. Sus deudas y pagos anteriores no desaparecen, y podrá seguir consultando los gastos en los que participó. Para que vuelva tendrás que invitarle otra vez.'**
   String spaceRemoveMemberBody(String name);
+
+  /// No description provided for @spaceAccessRevokedTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya no tienes acceso a este grupo'**
+  String get spaceAccessRevokedTitle;
+
+  /// No description provided for @spaceAccessRevokedBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Alguien que administra el grupo te ha sacado, o has salido desde otro dispositivo. Tus deudas y pagos no han cambiado: siguen en Economía, junto a los gastos en los que participaste.'**
+  String get spaceAccessRevokedBody;
+
+  /// No description provided for @spaceAccessRevokedAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver a mis contextos'**
+  String get spaceAccessRevokedAction;
 
   /// No description provided for @spaceTicketsTitle.
   ///
@@ -1666,11 +2260,47 @@ abstract class AppLocalizations {
   /// **'Añadir ticket'**
   String get spaceAddTicket;
 
+  /// No description provided for @ticketGoneTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto ya no está disponible'**
+  String get ticketGoneTitle;
+
+  /// No description provided for @ticketGoneBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Puede que se haya borrado o que hayas perdido el acceso a su contexto.'**
+  String get ticketGoneBody;
+
   /// No description provided for @spaceActionError.
   ///
   /// In es, this message translates to:
   /// **'No se pudo completar la acción. Inténtalo de nuevo.'**
   String get spaceActionError;
+
+  /// No description provided for @socialEmailNotVerified.
+  ///
+  /// In es, this message translates to:
+  /// **'Verifica tu correo antes de compartir gastos.'**
+  String get socialEmailNotVerified;
+
+  /// No description provided for @socialProfileNotReady.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesitamos terminar de preparar tu perfil. Inténtalo de nuevo.'**
+  String get socialProfileNotReady;
+
+  /// No description provided for @profileRequiredForSocial.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesario para compartir gastos'**
+  String get profileRequiredForSocial;
+
+  /// No description provided for @spaceSessionNotReady.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu sesión aún no está lista para compartir gastos. Comprueba que has verificado el correo y completado tu perfil, y vuelve a entrar.'**
+  String get spaceSessionNotReady;
 
   /// No description provided for @spaceLinkTooltip.
   ///
@@ -1701,6 +2331,120 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Ticket desvinculado'**
   String get spaceUnlinked;
+
+  /// No description provided for @chatTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Chat'**
+  String get chatTitle;
+
+  /// No description provided for @chatDescription.
+  ///
+  /// In es, this message translates to:
+  /// **'Coordina los gastos dentro de esta relación o grupo.'**
+  String get chatDescription;
+
+  /// No description provided for @chatReadOnly.
+  ///
+  /// In es, this message translates to:
+  /// **'El contexto está archivado. El chat es de solo lectura.'**
+  String get chatReadOnly;
+
+  /// No description provided for @chatEmptyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no hay mensajes'**
+  String get chatEmptyTitle;
+
+  /// No description provided for @chatEmptyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe el primero para coordinaros dentro de este contexto.'**
+  String get chatEmptyBody;
+
+  /// No description provided for @chatMessageHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe un mensaje'**
+  String get chatMessageHint;
+
+  /// No description provided for @chatSend.
+  ///
+  /// In es, this message translates to:
+  /// **'Enviar mensaje'**
+  String get chatSend;
+
+  /// No description provided for @chatSending.
+  ///
+  /// In es, this message translates to:
+  /// **'Enviando…'**
+  String get chatSending;
+
+  /// No description provided for @chatSendError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo enviar el mensaje. Revisa la conexión e inténtalo de nuevo.'**
+  String get chatSendError;
+
+  /// No description provided for @chatLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo cargar el chat. Revisa la conexión y vuelve a intentarlo.'**
+  String get chatLoadError;
+
+  /// No description provided for @chatLoadOlder.
+  ///
+  /// In es, this message translates to:
+  /// **'Cargar mensajes anteriores'**
+  String get chatLoadOlder;
+
+  /// No description provided for @chatUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya no tienes acceso a este chat.'**
+  String get chatUnavailable;
+
+  /// No description provided for @chatYou.
+  ///
+  /// In es, this message translates to:
+  /// **'Tú'**
+  String get chatYou;
+
+  /// No description provided for @chatAuthorFallback.
+  ///
+  /// In es, this message translates to:
+  /// **'Miembro'**
+  String get chatAuthorFallback;
+
+  /// No description provided for @chatMessageActions.
+  ///
+  /// In es, this message translates to:
+  /// **'Acciones del mensaje'**
+  String get chatMessageActions;
+
+  /// No description provided for @chatDelete.
+  ///
+  /// In es, this message translates to:
+  /// **'Eliminar mensaje'**
+  String get chatDelete;
+
+  /// No description provided for @chatDeleteTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Eliminar este mensaje?'**
+  String get chatDeleteTitle;
+
+  /// No description provided for @chatDeleteBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Se eliminará del chat para todos los miembros.'**
+  String get chatDeleteBody;
+
+  /// No description provided for @chatDeleteError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo eliminar el mensaje.'**
+  String get chatDeleteError;
 
   /// No description provided for @profileTitle.
   ///
@@ -1749,6 +2493,12 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'No se pudo guardar. Comprueba la conexión o prueba otro nombre de usuario.'**
   String get profileSaveError;
+
+  /// No description provided for @profileLoadError.
+  ///
+  /// In es, this message translates to:
+  /// **'No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.'**
+  String get profileLoadError;
 
   /// No description provided for @profileBannerTitle.
   ///
@@ -2137,8 +2887,110 @@ abstract class AppLocalizations {
   /// No description provided for @economyMarkPaid.
   ///
   /// In es, this message translates to:
-  /// **'Marcar como pagado'**
+  /// **'Ya he pagado'**
   String get economyMarkPaid;
+
+  /// No description provided for @economyObligationsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Deudas pendientes'**
+  String get economyObligationsTitle;
+
+  /// No description provided for @economyOwesTo.
+  ///
+  /// In es, this message translates to:
+  /// **'{debtor} debe a {creditor}'**
+  String economyOwesTo(String debtor, String creditor);
+
+  /// No description provided for @economySettleTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Cobrar a {name}'**
+  String economySettleTitle(String name);
+
+  /// No description provided for @economySettleSelected.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmar recepción ({count})'**
+  String economySettleSelected(int count);
+
+  /// No description provided for @economySettleHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Marca lo que ya has recibido. Cada deuda se confirma por separado y conserva su ticket.'**
+  String get economySettleHint;
+
+  /// No description provided for @economyNoOpenObligations.
+  ///
+  /// In es, this message translates to:
+  /// **'No queda nada por cobrar.'**
+  String get economyNoOpenObligations;
+
+  /// No description provided for @economyDeclaredByPayer.
+  ///
+  /// In es, this message translates to:
+  /// **'Dice que ya te ha pagado'**
+  String get economyDeclaredByPayer;
+
+  /// No description provided for @economyPartialPayment.
+  ///
+  /// In es, this message translates to:
+  /// **'Registrar pago parcial'**
+  String get economyPartialPayment;
+
+  /// No description provided for @economyPartialAmount.
+  ///
+  /// In es, this message translates to:
+  /// **'Importe recibido'**
+  String get economyPartialAmount;
+
+  /// No description provided for @economySettleSuccess.
+  ///
+  /// In es, this message translates to:
+  /// **'Cobro confirmado.'**
+  String get economySettleSuccess;
+
+  /// No description provided for @economyRepresentingNotice.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} no tiene cuenta en Salda: confirmas en su nombre.'**
+  String economyRepresentingNotice(String name);
+
+  /// No description provided for @economyOnBehalfOf.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmado en nombre de {name}'**
+  String economyOnBehalfOf(String name);
+
+  /// No description provided for @spaceMemberRoleAdmin.
+  ///
+  /// In es, this message translates to:
+  /// **'Administrador'**
+  String get spaceMemberRoleAdmin;
+
+  /// No description provided for @spaceMemberRoleMember.
+  ///
+  /// In es, this message translates to:
+  /// **'Miembro'**
+  String get spaceMemberRoleMember;
+
+  /// No description provided for @spaceMakeAdmin.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombrar administrador'**
+  String get spaceMakeAdmin;
+
+  /// No description provided for @spaceRemoveAdmin.
+  ///
+  /// In es, this message translates to:
+  /// **'Retirar administrador'**
+  String get spaceRemoveAdmin;
+
+  /// No description provided for @spaceAdminExplanation.
+  ///
+  /// In es, this message translates to:
+  /// **'Un administrador gestiona el contexto y puede confirmar cobros de las personas sin cuenta. Nunca puede tocar el saldo de quien sí la tiene.'**
+  String get spaceAdminExplanation;
 
   /// No description provided for @economyPaymentAmount.
   ///
@@ -2230,6 +3082,30 @@ abstract class AppLocalizations {
   /// **'Tu balance en este espacio'**
   String get spaceEconomicTitle;
 
+  /// No description provided for @spaceEconomicEmptyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin movimientos todavía'**
+  String get spaceEconomicEmptyTitle;
+
+  /// No description provided for @spaceEconomicSettled.
+  ///
+  /// In es, this message translates to:
+  /// **'Estáis en paz: nadie debe nada en este espacio.'**
+  String get spaceEconomicSettled;
+
+  /// No description provided for @spaceEconomicSpent.
+  ///
+  /// In es, this message translates to:
+  /// **'Gastado aquí'**
+  String get spaceEconomicSpent;
+
+  /// No description provided for @spaceTicketsCount.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{1 gasto} other{{count} gastos}}'**
+  String spaceTicketsCount(int count);
+
   /// No description provided for @spaceEconomicEmpty.
   ///
   /// In es, this message translates to:
@@ -2241,6 +3117,1272 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Reintentar'**
   String get commonRetry;
+
+  /// No description provided for @balanceHeroTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu saldo'**
+  String get balanceHeroTitle;
+
+  /// No description provided for @balanceSettled.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás en paz'**
+  String get balanceSettled;
+
+  /// No description provided for @balanceSettledBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Nadie te debe y no debes nada.'**
+  String get balanceSettledBody;
+
+  /// No description provided for @balanceTheyOweYou.
+  ///
+  /// In es, this message translates to:
+  /// **'Te deben'**
+  String get balanceTheyOweYou;
+
+  /// No description provided for @balanceYouOwe.
+  ///
+  /// In es, this message translates to:
+  /// **'Debes'**
+  String get balanceYouOwe;
+
+  /// No description provided for @balanceNetPositive.
+  ///
+  /// In es, this message translates to:
+  /// **'A tu favor'**
+  String get balanceNetPositive;
+
+  /// No description provided for @balanceNetNegative.
+  ///
+  /// In es, this message translates to:
+  /// **'En tu contra'**
+  String get balanceNetNegative;
+
+  /// No description provided for @homeQuickScan.
+  ///
+  /// In es, this message translates to:
+  /// **'Escanear ticket'**
+  String get homeQuickScan;
+
+  /// No description provided for @homeQuickMore.
+  ///
+  /// In es, this message translates to:
+  /// **'Más'**
+  String get homeQuickMore;
+
+  /// No description provided for @homeSpacesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tus contextos'**
+  String get homeSpacesTitle;
+
+  /// No description provided for @homeNoSpacesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no compartes gastos con nadie'**
+  String get homeNoSpacesTitle;
+
+  /// No description provided for @homeNoSpacesBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea una relación para las cuentas de dos, o un grupo para un piso, un viaje o una cena.'**
+  String get homeNoSpacesBody;
+
+  /// No description provided for @homeActivityRecent.
+  ///
+  /// In es, this message translates to:
+  /// **'Reciente'**
+  String get homeActivityRecent;
+
+  /// No description provided for @homeMenuTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Menú'**
+  String get homeMenuTitle;
+
+  /// No description provided for @contextPendingShort.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente'**
+  String get contextPendingShort;
+
+  /// No description provided for @contextAccountRequiredTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesitas una cuenta'**
+  String get contextAccountRequiredTitle;
+
+  /// No description provided for @economySettledBadge.
+  ///
+  /// In es, this message translates to:
+  /// **'Saldado'**
+  String get economySettledBadge;
+
+  /// No description provided for @economyNoPaymentsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuando marques o confirmes un pago, quedará aquí con su fecha.'**
+  String get economyNoPaymentsBody;
+
+  /// No description provided for @friendProfileRequiredBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu perfil público es lo que permite que otras personas te encuentren y te agreguen.'**
+  String get friendProfileRequiredBody;
+
+  /// No description provided for @aiProvidersSection.
+  ///
+  /// In es, this message translates to:
+  /// **'Proveedores'**
+  String get aiProvidersSection;
+
+  /// No description provided for @peopleSectionTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Quién participa'**
+  String get peopleSectionTitle;
+
+  /// No description provided for @splitSectionTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Cómo se reparte'**
+  String get splitSectionTitle;
+
+  /// No description provided for @splitEqualHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'El importe se divide a partes iguales entre todas las personas.'**
+  String get splitEqualHelp;
+
+  /// No description provided for @splitByItemHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Cada persona elige lo que consumió; lo no reclamado recae en quien pagó.'**
+  String get splitByItemHelp;
+
+  /// No description provided for @createDisabledHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesitas al menos dos personas para repartir un gasto.'**
+  String get createDisabledHelp;
+
+  /// No description provided for @ticketPhotoTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Foto del ticket'**
+  String get ticketPhotoTitle;
+
+  /// No description provided for @ticketFallbackName.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto'**
+  String get ticketFallbackName;
+
+  /// No description provided for @ticketNoLinesBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Este gasto se reparte por su importe total, sin detalle de productos.'**
+  String get ticketNoLinesBody;
+
+  /// No description provided for @reviewTicketData.
+  ///
+  /// In es, this message translates to:
+  /// **'Datos del ticket'**
+  String get reviewTicketData;
+
+  /// No description provided for @reviewTotalsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Desglose'**
+  String get reviewTotalsTitle;
+
+  /// No description provided for @reviewNoLinesTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'El ticket no tiene lineas'**
+  String get reviewNoLinesTitle;
+
+  /// No description provided for @reviewNoLinesBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Anade al menos un producto para poder repartir el gasto entre varias personas.'**
+  String get reviewNoLinesBody;
+
+  /// No description provided for @relationshipNeedsAcceptanceBody.
+  ///
+  /// In es, this message translates to:
+  /// **'En cuanto acepte podreis registrar gastos y ver el saldo entre los dos.'**
+  String get relationshipNeedsAcceptanceBody;
+
+  /// No description provided for @groupNeedsMembersBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Invita a alguien con cuenta, comparte el enlace del grupo o anade a una persona sin cuenta.'**
+  String get groupNeedsMembersBody;
+
+  /// No description provided for @activityLoadingSubject.
+  ///
+  /// In es, this message translates to:
+  /// **'…'**
+  String get activityLoadingSubject;
+
+  /// No description provided for @peopleCount.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =0{Sin personas} =1{1 persona} other{{count} personas}}'**
+  String peopleCount(int count);
+
+  /// No description provided for @spaceKindRelationship.
+  ///
+  /// In es, this message translates to:
+  /// **'Relación'**
+  String get spaceKindRelationship;
+
+  /// No description provided for @spaceKindGroup.
+  ///
+  /// In es, this message translates to:
+  /// **'Grupo'**
+  String get spaceKindGroup;
+
+  /// No description provided for @personKindManual.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin cuenta'**
+  String get personKindManual;
+
+  /// No description provided for @personKindGuest.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitado'**
+  String get personKindGuest;
+
+  /// No description provided for @personKindOwner.
+  ///
+  /// In es, this message translates to:
+  /// **'Propietario'**
+  String get personKindOwner;
+
+  /// No description provided for @emptyTicketsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin gastos todavía'**
+  String get emptyTicketsTitle;
+
+  /// No description provided for @emptyTicketsBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Escanea un ticket o apunta un gasto a mano y aparecerá aquí.'**
+  String get emptyTicketsBody;
+
+  /// No description provided for @emptyActivityTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin movimientos'**
+  String get emptyActivityTitle;
+
+  /// No description provided for @emptyActivityBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Aquí se irá anotando lo que ocurra en tus contextos.'**
+  String get emptyActivityBody;
+
+  /// No description provided for @emptyChatTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin mensajes'**
+  String get emptyChatTitle;
+
+  /// No description provided for @emptyChatBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Escribe el primero: la conversación es privada de este contexto.'**
+  String get emptyChatBody;
+
+  /// No description provided for @historyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Histórico sin organizar'**
+  String get historyTitle;
+
+  /// No description provided for @contextCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear'**
+  String get contextCreate;
+
+  /// No description provided for @contextAccountRequired.
+  ///
+  /// In es, this message translates to:
+  /// **'Convierte tu cuenta de invitado para crear relaciones y grupos permanentes.'**
+  String get contextAccountRequired;
+
+  /// No description provided for @contextInvitations.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitaciones'**
+  String get contextInvitations;
+
+  /// No description provided for @contextInvitationPending.
+  ///
+  /// In es, this message translates to:
+  /// **'Quiere compartir gastos contigo'**
+  String get contextInvitationPending;
+
+  /// No description provided for @relationshipsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Relaciones'**
+  String get relationshipsTitle;
+
+  /// No description provided for @relationshipsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea una relación para compartir gastos con otra persona'**
+  String get relationshipsEmpty;
+
+  /// No description provided for @groupsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Grupos'**
+  String get groupsTitle;
+
+  /// No description provided for @groupsEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea un grupo para tres o más personas'**
+  String get groupsEmpty;
+
+  /// No description provided for @relationshipCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Nueva relación'**
+  String get relationshipCreate;
+
+  /// No description provided for @relationshipCreateHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Gastos entre dos personas'**
+  String get relationshipCreateHelp;
+
+  /// No description provided for @relationshipAlreadyInvited.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya le habías invitado. Sigue pendiente de que acepte.'**
+  String get relationshipAlreadyInvited;
+
+  /// No description provided for @relationshipReinvited.
+  ///
+  /// In es, this message translates to:
+  /// **'Le hemos vuelto a enviar la invitación.'**
+  String get relationshipReinvited;
+
+  /// No description provided for @relationshipAlreadyActive.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya tenéis una relación activa.'**
+  String get relationshipAlreadyActive;
+
+  /// No description provided for @relationshipInvitedByOther.
+  ///
+  /// In es, this message translates to:
+  /// **'Esa persona ya te invitó. Acepta su invitación desde Inicio.'**
+  String get relationshipInvitedByOther;
+
+  /// No description provided for @relationshipIncompatible.
+  ///
+  /// In es, this message translates to:
+  /// **'Esta relación tiene datos antiguos que no podemos completar. Avísanos antes de reintentar.'**
+  String get relationshipIncompatible;
+
+  /// No description provided for @relationshipNotAllowed.
+  ///
+  /// In es, this message translates to:
+  /// **'No puedes crear una relación contigo mismo.'**
+  String get relationshipNotAllowed;
+
+  /// No description provided for @relationshipManualTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir a alguien sin cuenta'**
+  String get relationshipManualTitle;
+
+  /// No description provided for @relationshipManualBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Participa en gastos, saldos y pagos igual que tú. Si se registra más adelante, podréis vincularlo sin perder el historial.'**
+  String get relationshipManualBody;
+
+  /// No description provided for @relationshipManualName.
+  ///
+  /// In es, this message translates to:
+  /// **'Su nombre'**
+  String get relationshipManualName;
+
+  /// No description provided for @relationshipNoAccountTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¿No tiene cuenta en Salda?'**
+  String get relationshipNoAccountTitle;
+
+  /// No description provided for @relationshipNoAccountBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Una relación son dos cuentas. Para compartir gastos con alguien sin cuenta, crea un grupo: admite personas añadidas a mano y enlaces de invitación.'**
+  String get relationshipNoAccountBody;
+
+  /// No description provided for @relationshipSearchHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Busca a la persona con la que quieres compartir gastos.'**
+  String get relationshipSearchHelp;
+
+  /// No description provided for @groupCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Nuevo grupo'**
+  String get groupCreate;
+
+  /// No description provided for @groupCreateHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Gastos entre tres o más personas'**
+  String get groupCreateHelp;
+
+  /// No description provided for @ticketContextMissing.
+  ///
+  /// In es, this message translates to:
+  /// **'Abre una relación o un grupo antes de crear el ticket.'**
+  String get ticketContextMissing;
+
+  /// No description provided for @relationshipNeedsAcceptance.
+  ///
+  /// In es, this message translates to:
+  /// **'La otra persona debe aceptar la invitación antes de crear tickets.'**
+  String get relationshipNeedsAcceptance;
+
+  /// BUG-6: hacen falta DOS personas para repartir, no tres cuentas. Se nombra la salida real para quien no tiene app.
+  ///
+  /// In es, this message translates to:
+  /// **'Añade a alguien más al grupo antes de crear tickets. Si no tiene la app, añádelo como persona sin cuenta.'**
+  String get groupNeedsMembers;
+
+  /// No description provided for @contextChoose.
+  ///
+  /// In es, this message translates to:
+  /// **'Elige una relación o grupo'**
+  String get contextChoose;
+
+  /// No description provided for @ticketContextLocked.
+  ///
+  /// In es, this message translates to:
+  /// **'Este ticket pertenece a su contexto y no se puede desvincular'**
+  String get ticketContextLocked;
+
+  /// No description provided for @commonConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Confirmar'**
+  String get commonConfirm;
+
+  /// No description provided for @spaceLinkTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Enlace del grupo'**
+  String get spaceLinkTitle;
+
+  /// No description provided for @spaceLinkAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartir enlace'**
+  String get spaceLinkAction;
+
+  /// No description provided for @spaceLinkEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea un enlace para que otras personas se unan a este grupo sin que tengas que buscarlas.'**
+  String get spaceLinkEmpty;
+
+  /// No description provided for @spaceLinkCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear enlace'**
+  String get spaceLinkCreate;
+
+  /// No description provided for @spaceLinkHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Cualquiera con este enlace puede unirse al grupo. Revócalo cuando ya no lo necesites.'**
+  String get spaceLinkHint;
+
+  /// No description provided for @spaceLinkRotate.
+  ///
+  /// In es, this message translates to:
+  /// **'Generar un enlace nuevo'**
+  String get spaceLinkRotate;
+
+  /// No description provided for @spaceLinkRotateConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'El enlace actual dejará de funcionar y tendrás que repartir el nuevo. ¿Continuar?'**
+  String get spaceLinkRotateConfirm;
+
+  /// No description provided for @spaceLinkRevoke.
+  ///
+  /// In es, this message translates to:
+  /// **'Revocar el enlace'**
+  String get spaceLinkRevoke;
+
+  /// No description provided for @spaceLinkRevokeConfirm.
+  ///
+  /// In es, this message translates to:
+  /// **'Nadie más podrá unirse con este enlace. Los miembros actuales se quedan. ¿Continuar?'**
+  String get spaceLinkRevokeConfirm;
+
+  /// No description provided for @spaceLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido cargar el enlace'**
+  String get spaceLinkError;
+
+  /// No description provided for @joinTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirse a un grupo'**
+  String get joinTitle;
+
+  /// No description provided for @joinEntry.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirme con un enlace'**
+  String get joinEntry;
+
+  /// No description provided for @joinPasteHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Pega aquí el enlace que te han enviado.'**
+  String get joinPasteHint;
+
+  /// No description provided for @joinPasteLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Enlace del grupo'**
+  String get joinPasteLabel;
+
+  /// No description provided for @joinLookup.
+  ///
+  /// In es, this message translates to:
+  /// **'Continuar'**
+  String get joinLookup;
+
+  /// No description provided for @joinInvitedTo.
+  ///
+  /// In es, this message translates to:
+  /// **'Te invitan a'**
+  String get joinInvitedTo;
+
+  /// No description provided for @joinIdentifyHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Identifícate para unirte. No hace falta crear una cuenta.'**
+  String get joinIdentifyHint;
+
+  /// No description provided for @joinWithAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'Entrar con mi cuenta'**
+  String get joinWithAccount;
+
+  /// No description provided for @joinAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirme al grupo'**
+  String get joinAction;
+
+  /// No description provided for @joinLinkInvalid.
+  ///
+  /// In es, this message translates to:
+  /// **'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.'**
+  String get joinLinkInvalid;
+
+  /// No description provided for @joinLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido unirte al grupo. Inténtalo otra vez.'**
+  String get joinLinkError;
+
+  /// No description provided for @joinCreateAccount.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear una cuenta'**
+  String get joinCreateAccount;
+
+  /// No description provided for @joinVerifyEmail.
+  ///
+  /// In es, this message translates to:
+  /// **'Verifica tu correo para entrar en el grupo. Guardamos el enlace: al volver entrarás directamente.'**
+  String get joinVerifyEmail;
+
+  /// No description provided for @joinVerifyEmailAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Verificar mi correo'**
+  String get joinVerifyEmailAction;
+
+  /// No description provided for @joinGuestNameHint.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Cómo quieres que te vean en el grupo?'**
+  String get joinGuestNameHint;
+
+  /// No description provided for @ticketLinkTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Ticket compartido'**
+  String get ticketLinkTitle;
+
+  /// No description provided for @ticketLinkAction.
+  ///
+  /// In es, this message translates to:
+  /// **'Compartir este ticket'**
+  String get ticketLinkAction;
+
+  /// No description provided for @ticketLinkSharedWithYou.
+  ///
+  /// In es, this message translates to:
+  /// **'Te han compartido el ticket de'**
+  String get ticketLinkSharedWithYou;
+
+  /// No description provided for @ticketLinkAreYou.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Eres {name}?'**
+  String ticketLinkAreYou(String name);
+
+  /// No description provided for @ticketLinkAreYouHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Este enlace se creó para esa persona. Si no eres tú, pide el tuyo a quien te lo envió.'**
+  String get ticketLinkAreYouHelp;
+
+  /// No description provided for @ticketLinkIAm.
+  ///
+  /// In es, this message translates to:
+  /// **'Sí, soy {name}'**
+  String ticketLinkIAm(String name);
+
+  /// No description provided for @ticketLinkNotMe.
+  ///
+  /// In es, this message translates to:
+  /// **'No soy esa persona'**
+  String get ticketLinkNotMe;
+
+  /// No description provided for @ticketLinkNoManuals.
+  ///
+  /// In es, this message translates to:
+  /// **'Este enlace ya no identifica a nadie de este ticket.'**
+  String get ticketLinkNoManuals;
+
+  /// No description provided for @ticketLinkManualTaken.
+  ///
+  /// In es, this message translates to:
+  /// **'Otra persona ya usó este enlace. Pide uno nuevo a quien te lo envió.'**
+  String get ticketLinkManualTaken;
+
+  /// No description provided for @ticketLinkFor.
+  ///
+  /// In es, this message translates to:
+  /// **'Enlace para {name}'**
+  String ticketLinkFor(String name);
+
+  /// No description provided for @ticketLinkChooseTarget.
+  ///
+  /// In es, this message translates to:
+  /// **'¿Para quién es el enlace?'**
+  String get ticketLinkChooseTarget;
+
+  /// No description provided for @ticketLinkChooseTargetHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Cada persona recibe su propio enlace: solo podrá identificarse como ella misma.'**
+  String get ticketLinkChooseTargetHelp;
+
+  /// No description provided for @ticketLinkNoTargets.
+  ///
+  /// In es, this message translates to:
+  /// **'Este ticket no tiene participantes sin cuenta a los que enviar un enlace.'**
+  String get ticketLinkNoTargets;
+
+  /// No description provided for @ticketLinkInvalid.
+  ///
+  /// In es, this message translates to:
+  /// **'Este enlace ya no sirve. Pide uno nuevo a quien te lo envió.'**
+  String get ticketLinkInvalid;
+
+  /// No description provided for @ticketLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido abrir el ticket. Inténtalo otra vez.'**
+  String get ticketLinkError;
+
+  /// No description provided for @ticketLinkGone.
+  ///
+  /// In es, this message translates to:
+  /// **'Este ticket ya no está disponible.'**
+  String get ticketLinkGone;
+
+  /// No description provided for @ticketLinkLines.
+  ///
+  /// In es, this message translates to:
+  /// **'Productos'**
+  String get ticketLinkLines;
+
+  /// No description provided for @ticketLinkTotal.
+  ///
+  /// In es, this message translates to:
+  /// **'Total'**
+  String get ticketLinkTotal;
+
+  /// No description provided for @ticketLinkRelease.
+  ///
+  /// In es, this message translates to:
+  /// **'No soy yo'**
+  String get ticketLinkRelease;
+
+  /// No description provided for @ticketLinkTemporary.
+  ///
+  /// In es, this message translates to:
+  /// **'Identificación temporal, solo en este dispositivo'**
+  String get ticketLinkTemporary;
+
+  /// No description provided for @ticketLinkViewingAs.
+  ///
+  /// In es, this message translates to:
+  /// **'Estás viendo el ticket como {name}'**
+  String ticketLinkViewingAs(String name);
+
+  /// No description provided for @ticketLinkEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea un enlace para que quien no tenga cuenta pueda ver este ticket.'**
+  String get ticketLinkEmpty;
+
+  /// No description provided for @ticketLinkCreate.
+  ///
+  /// In es, this message translates to:
+  /// **'Crear enlace del ticket'**
+  String get ticketLinkCreate;
+
+  /// No description provided for @ticketLinkHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Quien reciba este enlace verá solo este ticket, nunca el resto del grupo.'**
+  String get ticketLinkHint;
+
+  /// No description provided for @ticketLinkRevoke.
+  ///
+  /// In es, this message translates to:
+  /// **'Revocar el enlace'**
+  String get ticketLinkRevoke;
+
+  /// No description provided for @manualLinkRequestsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitudes de identidad'**
+  String get manualLinkRequestsTitle;
+
+  /// No description provided for @manualLinkRequestBody.
+  ///
+  /// In es, this message translates to:
+  /// **'{name} dice ser {manual}'**
+  String manualLinkRequestBody(String name, String manual);
+
+  /// No description provided for @manualLinkRequestHelp.
+  ///
+  /// In es, this message translates to:
+  /// **'Si lo aceptas, esa persona pasará a ver sus gastos y su saldo. No cambia nada de lo ya registrado.'**
+  String get manualLinkRequestHelp;
+
+  /// No description provided for @manualLinkAccept.
+  ///
+  /// In es, this message translates to:
+  /// **'Aceptar'**
+  String get manualLinkAccept;
+
+  /// No description provided for @manualLinkReject.
+  ///
+  /// In es, this message translates to:
+  /// **'Rechazar'**
+  String get manualLinkReject;
+
+  /// No description provided for @manualLinkAccepted.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitud aceptada; vinculando…'**
+  String get manualLinkAccepted;
+
+  /// No description provided for @manualLinkRejected.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitud rechazada'**
+  String get manualLinkRejected;
+
+  /// No description provided for @manualLinkError.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido completar la operación'**
+  String get manualLinkError;
+
+  /// No description provided for @manualLinkAsk.
+  ///
+  /// In es, this message translates to:
+  /// **'Soy yo'**
+  String get manualLinkAsk;
+
+  /// No description provided for @manualLinkAskSent.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitud enviada. El anfitrión debe aceptarla.'**
+  String get manualLinkAskSent;
+
+  /// No description provided for @manualLinkPending.
+  ///
+  /// In es, this message translates to:
+  /// **'Pendiente de que el anfitrión lo acepte'**
+  String get manualLinkPending;
+
+  /// No description provided for @manualLinkLinked.
+  ///
+  /// In es, this message translates to:
+  /// **'Identidad vinculada'**
+  String get manualLinkLinked;
+
+  /// No description provided for @manualLinkPendingInSpace.
+  ///
+  /// In es, this message translates to:
+  /// **'{count, plural, =1{1 solicitud} other{{count} solicitudes}}'**
+  String manualLinkPendingInSpace(int count);
+
+  /// No description provided for @manualLinkProcessing.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculando… tendrás acceso en unos segundos'**
+  String get manualLinkProcessing;
+
+  /// No description provided for @manualLinkFailed.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido completar la vinculación. Avisa al anfitrión.'**
+  String get manualLinkFailed;
+
+  /// No description provided for @manualLinkFailedLegacy.
+  ///
+  /// In es, this message translates to:
+  /// **'Hay gastos antiguos sin contexto que impiden completar la vinculación. Avisa al anfitrión.'**
+  String get manualLinkFailedLegacy;
+
+  /// No description provided for @manualLinkRetryStarted.
+  ///
+  /// In es, this message translates to:
+  /// **'Reintento iniciado. La vinculación se actualizará en breve.'**
+  String get manualLinkRetryStarted;
+
+  /// No description provided for @manualLinkRetrySuccess.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculación completada.'**
+  String get manualLinkRetrySuccess;
+
+  /// No description provided for @manualLinkRetryInProgress.
+  ///
+  /// In es, this message translates to:
+  /// **'La vinculación ya está en curso.'**
+  String get manualLinkRetryInProgress;
+
+  /// No description provided for @manualLinkRetryCooldown.
+  ///
+  /// In es, this message translates to:
+  /// **'Ya se ha solicitado un reintento. Comprueba el estado en unos segundos.'**
+  String get manualLinkRetryCooldown;
+
+  /// No description provided for @manualLinkRetryCheck.
+  ///
+  /// In es, this message translates to:
+  /// **'La vinculación está en un estado antiguo. Comprueba el estado más tarde.'**
+  String get manualLinkRetryCheck;
+
+  /// No description provided for @ticketLinkPreparing.
+  ///
+  /// In es, this message translates to:
+  /// **'Preparando el enlace…'**
+  String get ticketLinkPreparing;
+
+  /// No description provided for @ticketLinkNotReady.
+  ///
+  /// In es, this message translates to:
+  /// **'El ticket todavía se está procesando. Inténtalo de nuevo en unos segundos.'**
+  String get ticketLinkNotReady;
+
+  /// No description provided for @spaceLinkExpiryLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Caducidad'**
+  String get spaceLinkExpiryLabel;
+
+  /// No description provided for @spaceLinkExpiryNever.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin caducidad'**
+  String get spaceLinkExpiryNever;
+
+  /// No description provided for @spaceLinkExpiry1d.
+  ///
+  /// In es, this message translates to:
+  /// **'1 día'**
+  String get spaceLinkExpiry1d;
+
+  /// No description provided for @spaceLinkExpiry7d.
+  ///
+  /// In es, this message translates to:
+  /// **'7 días'**
+  String get spaceLinkExpiry7d;
+
+  /// No description provided for @spaceLinkExpiry30d.
+  ///
+  /// In es, this message translates to:
+  /// **'30 días'**
+  String get spaceLinkExpiry30d;
+
+  /// No description provided for @spaceLinkExpiresOn.
+  ///
+  /// In es, this message translates to:
+  /// **'Caduca el {date}'**
+  String spaceLinkExpiresOn(DateTime date);
+
+  /// No description provided for @accountHubTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuenta'**
+  String get accountHubTitle;
+
+  /// No description provided for @accountHubProfile.
+  ///
+  /// In es, this message translates to:
+  /// **'Perfil'**
+  String get accountHubProfile;
+
+  /// No description provided for @accountHubPayments.
+  ///
+  /// In es, this message translates to:
+  /// **'Cobros'**
+  String get accountHubPayments;
+
+  /// No description provided for @accountHubPreferences.
+  ///
+  /// In es, this message translates to:
+  /// **'Preferencias'**
+  String get accountHubPreferences;
+
+  /// No description provided for @accountHubData.
+  ///
+  /// In es, this message translates to:
+  /// **'Datos'**
+  String get accountHubData;
+
+  /// No description provided for @accountHubAdvanced.
+  ///
+  /// In es, this message translates to:
+  /// **'Avanzado'**
+  String get accountHubAdvanced;
+
+  /// No description provided for @accountHubOpenSettings.
+  ///
+  /// In es, this message translates to:
+  /// **'Abrir ajustes'**
+  String get accountHubOpenSettings;
+
+  /// No description provided for @personasTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Personas'**
+  String get personasTitle;
+
+  /// No description provided for @personasRequests.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitudes recibidas'**
+  String get personasRequests;
+
+  /// No description provided for @personasContacts.
+  ///
+  /// In es, this message translates to:
+  /// **'Tus contactos'**
+  String get personasContacts;
+
+  /// No description provided for @personasSearch.
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar personas'**
+  String get personasSearch;
+
+  /// No description provided for @homeBalances.
+  ///
+  /// In es, this message translates to:
+  /// **'Balances'**
+  String get homeBalances;
+
+  /// No description provided for @balanceMultipleCurrencies.
+  ///
+  /// In es, this message translates to:
+  /// **'Varias monedas'**
+  String get balanceMultipleCurrencies;
+
+  /// No description provided for @homeSeeBalances.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver mis {count} balances'**
+  String homeSeeBalances(int count);
+
+  /// No description provided for @homeRecent.
+  ///
+  /// In es, this message translates to:
+  /// **'Recientes'**
+  String get homeRecent;
+
+  /// No description provided for @homeSeeAllSpaces.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver todos los espacios'**
+  String get homeSeeAllSpaces;
+
+  /// No description provided for @homeAttention.
+  ///
+  /// In es, this message translates to:
+  /// **'Necesita tu atención'**
+  String get homeAttention;
+
+  /// No description provided for @homeSeePending.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver las {count} pendientes'**
+  String homeSeePending(int count);
+
+  /// No description provided for @homeSpacesLoading.
+  ///
+  /// In es, this message translates to:
+  /// **'Estamos cargando tus espacios. Inténtalo de nuevo en un momento.'**
+  String get homeSpacesLoading;
+
+  /// No description provided for @homeSpacesUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'No hemos podido cargar tus espacios. Inténtalo de nuevo.'**
+  String get homeSpacesUnavailable;
+
+  /// No description provided for @homeNoActiveSpaces.
+  ///
+  /// In es, this message translates to:
+  /// **'Crea o abre un espacio antes de añadir un gasto.'**
+  String get homeNoActiveSpaces;
+
+  /// No description provided for @homeAdd.
+  ///
+  /// In es, this message translates to:
+  /// **'Añadir'**
+  String get homeAdd;
+
+  /// No description provided for @homeAddExpense.
+  ///
+  /// In es, this message translates to:
+  /// **'Gasto o ticket'**
+  String get homeAddExpense;
+
+  /// No description provided for @homeAddRelationship.
+  ///
+  /// In es, this message translates to:
+  /// **'Relación'**
+  String get homeAddRelationship;
+
+  /// No description provided for @homeAddGroup.
+  ///
+  /// In es, this message translates to:
+  /// **'Grupo'**
+  String get homeAddGroup;
+
+  /// No description provided for @homeAddJoin.
+  ///
+  /// In es, this message translates to:
+  /// **'Unirme con un enlace'**
+  String get homeAddJoin;
+
+  /// No description provided for @homeGuestEconomyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Tu participación'**
+  String get homeGuestEconomyTitle;
+
+  /// No description provided for @homeGuestEconomyBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Consulta tus balances dentro de cada espacio.'**
+  String get homeGuestEconomyBody;
+
+  /// No description provided for @homeSearchSpaces.
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar espacios'**
+  String get homeSearchSpaces;
+
+  /// No description provided for @homeNoSearchResults.
+  ///
+  /// In es, this message translates to:
+  /// **'No hay espacios que coincidan con la búsqueda.'**
+  String get homeNoSearchResults;
+
+  /// No description provided for @routeNotFoundTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'No encontramos esta pantalla'**
+  String get routeNotFoundTitle;
+
+  /// No description provided for @routeNotFoundBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Puede que el enlace haya caducado o ya no esté disponible.'**
+  String get routeNotFoundBody;
+
+  /// No description provided for @routeGoHome.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver a Inicio'**
+  String get routeGoHome;
+
+  /// No description provided for @routeBack.
+  ///
+  /// In es, this message translates to:
+  /// **'Volver'**
+  String get routeBack;
+
+  /// No description provided for @spaceManageTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Gestionar'**
+  String get spaceManageTitle;
+
+  /// No description provided for @spaceManageGroupTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Gestionar grupo'**
+  String get spaceManageGroupTitle;
+
+  /// No description provided for @spaceManagePeople.
+  ///
+  /// In es, this message translates to:
+  /// **'Personas'**
+  String get spaceManagePeople;
+
+  /// No description provided for @spaceManagePermissions.
+  ///
+  /// In es, this message translates to:
+  /// **'Permisos'**
+  String get spaceManagePermissions;
+
+  /// No description provided for @spaceManageInformationHistory.
+  ///
+  /// In es, this message translates to:
+  /// **'Información e historial'**
+  String get spaceManageInformationHistory;
+
+  /// No description provided for @spaceManageIdentity.
+  ///
+  /// In es, this message translates to:
+  /// **'Identidad'**
+  String get spaceManageIdentity;
+
+  /// No description provided for @spaceManageInvitationLink.
+  ///
+  /// In es, this message translates to:
+  /// **'Invitación y vinculación'**
+  String get spaceManageInvitationLink;
+
+  /// No description provided for @spaceManageOptions.
+  ///
+  /// In es, this message translates to:
+  /// **'Opciones'**
+  String get spaceManageOptions;
+
+  /// No description provided for @spaceManageRequests.
+  ///
+  /// In es, this message translates to:
+  /// **'Solicitudes'**
+  String get spaceManageRequests;
+
+  /// No description provided for @spaceManageActions.
+  ///
+  /// In es, this message translates to:
+  /// **'Acciones'**
+  String get spaceManageActions;
+
+  /// No description provided for @spaceManageLinking.
+  ///
+  /// In es, this message translates to:
+  /// **'Vinculación'**
+  String get spaceManageLinking;
+
+  /// No description provided for @spaceManageActivity.
+  ///
+  /// In es, this message translates to:
+  /// **'Actividad'**
+  String get spaceManageActivity;
+
+  /// No description provided for @spaceManageChat.
+  ///
+  /// In es, this message translates to:
+  /// **'Chat'**
+  String get spaceManageChat;
+
+  /// No description provided for @spaceCoverGroupBalance.
+  ///
+  /// In es, this message translates to:
+  /// **'En este grupo'**
+  String get spaceCoverGroupBalance;
+
+  /// No description provided for @spaceCoverRelationshipBalance.
+  ///
+  /// In es, this message translates to:
+  /// **'Entre vosotros'**
+  String get spaceCoverRelationshipBalance;
+
+  /// No description provided for @spaceCoverViewBalance.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver balance'**
+  String get spaceCoverViewBalance;
+
+  /// No description provided for @spaceCoverViewBalances.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver balances'**
+  String get spaceCoverViewBalances;
+
+  /// No description provided for @spaceCoverViewAll.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver todos'**
+  String get spaceCoverViewAll;
+
+  /// No description provided for @spaceTicketsAllTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todos los tickets'**
+  String get spaceTicketsAllTitle;
+
+  /// No description provided for @spaceBalancesAllTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Balances del espacio'**
+  String get spaceBalancesAllTitle;
 }
 
 class _AppLocalizationsDelegate

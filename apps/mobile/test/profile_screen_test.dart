@@ -73,8 +73,10 @@ void main() {
 
     final field = tester.widget<TextFormField>(
       find.byWidgetPredicate(
-        (w) => w is TextFormField && w.controller?.text.isNotEmpty == true
-            && w.controller!.text != 'Edgar Cantera',
+        (w) =>
+            w is TextFormField &&
+            w.controller?.text.isNotEmpty == true &&
+            w.controller!.text != 'Edgar Cantera',
       ),
     );
     expect(field.controller!.text, isNot('edgar'));
@@ -106,10 +108,7 @@ void main() {
     final firestore = FakeFirebaseFirestore();
     await _pump(tester, firestore: firestore);
 
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'edgar'),
-      'ed',
-    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'edgar'), 'ed');
     await tester.pumpAndSettle();
 
     expect(find.text('Mínimo 3 caracteres'), findsOneWidget);

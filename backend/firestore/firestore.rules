@@ -14,6 +14,8 @@ rules_version = '2';
 //  - lines: SOLO su propia entrada en assignment.participants (modo byItem,
 //    sesión abierta). El cliente declara assignment.lastEditorPid y la regla
 //    verifica que (a) solo cambió esa clave y (b) ese pid está reclamado por él.
+//    Desde A11b esa MISMA puerta la usa el miembro del grupo dentro del que
+//    nació la sesión: elegir lo que uno consumió no es editar el ticket.
 //  - settlements: SOLO pending→marked en liquidaciones donde él es `from`.
 //
 // Agregados (totals/balances/computeVersion) son SOLO-LECTURA para todos los
@@ -50,8 +52,183 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
     }
 
+    // GUEST (ADR-034): usa la app con identidad persistente del dispositivo
+    // (Auth anónimo) y nombre visible propio, pero SIN cuenta ni perfil
+    // público. Participa en contextos y balances; nunca crea contextos,
+    // invita, administra miembros ni tiene identidad buscable.
+    function isGuest() {
+      return isAnonymous()
+        && exists(/databases/$(database)/documents/guestIdentities/$(request.auth.uid));
+    }
+
+    // Quien puede PARTICIPAR en un contexto: cuenta completa o invitado.
+    // Ojo: participar ≠ administrar. Todo lo que crea o gobierna el
+    // contexto sigue exigiendo canUseSocial().
+    function canParticipate() {
+      return canUseSocial() || isGuest();
+    }
+
+    function validGuestIdentity(data, uid) {
+      return data.keys().hasOnly([
+          'uid', 'displayName', 'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'uid', 'displayName', 'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.uid == uid
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    // ── Enlaces de TICKET (Sprint 5, ADR-036) ──────────────────────────
+    // Colección PROPIA, no `spaceLinks`: el alcance y las amenazas son
+    // distintos. Un enlace de grupo incorpora a alguien de forma permanente
+    // a un contexto; uno de ticket concede lectura de UN ticket y permite
+    // identificarse TEMPORALMENTE como uno de sus participantes MANUAL.
+    // Mezclarlos habría convertido cualquier fuga en acceso al grupo entero.
+    function ticketLinkData(token) {
+      return get(/databases/$(database)/documents/ticketLinks/$(token)).data;
+    }
+
+    // Vivo = existe, sin revocar y sin caducar. Se comprueba en CADA uso,
+    // no solo al canjearlo (misma política que ADR-035).
+    function ticketLinkUsable(token) {
+      return token is string
+        && exists(/databases/$(database)/documents/ticketLinks/$(token))
+        && ticketLinkData(token).status == 'active'
+        && (ticketLinkData(token).get('expiresAt', null) == null
+          || ticketLinkData(token).expiresAt > request.time);
+    }
+
+    // Enlace DIRIGIDO (ADR-036 rev. 2, schemaVersion 2). El destinatario es
+    // parte del enlace; ya no viaja la lista `manuals` de todo el ticket.
+    // Publicarla permitía que quien recibía un enlace hecho para Pedro
+    // eligiera a Ana: la interfaz lo ofrecía y las Rules lo consentían,
+    // porque solo comprobaban «este pid participa en el ticket».
+    function validTicketLink(data) {
+      return data.keys().hasOnly([
+          'sessionId', 'accountId', 'ticketId', 'merchantName', 'spaceId',
+          'targetPid', 'targetManualId', 'targetName',
+          'createdByUid', 'status', 'createdAt', 'updatedAt',
+          'expiresAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'sessionId', 'accountId', 'ticketId', 'merchantName',
+          'targetPid', 'targetManualId',
+          'createdByUid', 'status', 'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.sessionId is string
+        && data.accountId is string
+        && data.ticketId is string
+        // Lo ÚNICO que se ve antes de identificarse, junto al nombre del
+        // destinatario. Ni importe, ni líneas, ni el resto de participantes:
+        // un enlace filtrado no revela cuánto se gastó ni cuántos son.
+        && data.merchantName is string
+        && data.merchantName.size() <= 60
+        && data.targetPid is string
+        && data.targetPid.size() > 0
+        && data.targetManualId is string
+        && data.targetManualId.size() > 0
+        && data.get('targetName', '') is string
+        && data.get('targetName', '').size() <= 60
+        && data.status in ['active', 'revoked']
+        && (data.get('expiresAt', null) == null || data.expiresAt is timestamp)
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 2;
+    }
+
+    // Un MANUAL ya vinculado de forma definitiva (Sprint 6) deja de ser
+    // elegible: a partir de ahí quien participa es la cuenta. Hoy
+    // `linkedUid` es siempre null, así que esto nunca excluye a nadie; se
+    // deja escrito para que el sprint de vinculación no tenga que volver a
+    // tocar esta regla. Sin espacio (histórico sin organizar) no hay
+    // identidad manual que consultar.
+    // El enlace va dirigido a UNA persona: identificarse solo vale para ESA.
+    // Es la barrera de verdad del alcance del token — ocultar el selector en
+    // la app no impediría que un cliente modificado escribiera otro manual.
+    // Un enlace del esquema 1 no tiene destinatario, así que `''` no coincide
+    // con ningún `manualId` no vacío y deja de autorizar identificaciones.
+    function isTicketLinkTarget(data) {
+      return ticketLinkData(data.token).get('targetManualId', '')
+          == data.get('manualId', '')
+        && ticketLinkData(data.token).get('targetPid', '') == data.pid;
+    }
+
+    function manualIsLinked(data) {
+      return ticketLinkData(data.token).get('spaceId', '') != ''
+        && exists(/databases/$(database)/documents/spaces/$(ticketLinkData(data.token).spaceId)/manualParticipants/$(data.manualId))
+        && get(/databases/$(database)/documents/spaces/$(ticketLinkData(data.token).spaceId)/manualParticipants/$(data.manualId))
+            .data.get('linkedUid', null) != null;
+    }
+
+    // Identificación TEMPORAL del dispositivo (Sprint 5). NO es vinculación:
+    // no toca `linkedUid`, no cambia el actor económico `manual:{id}` y
+    // recompute jamás la lee. Un doc por sesión y dispositivo.
+    // La prueba cuelga de (ticketId, UID), no del UID solo: abrir un segundo
+    // ticket ya NO invalida el acceso al primero. Y se liga al UID —que es
+    // una identidad, no un dispositivo— porque para una cuenta el mismo UID
+    // vale en varios dispositivos y eso es lo correcto.
+    function ticketAccessData(sid, tid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)/ticketAccess/$(tid + '_' + request.auth.uid)).data;
+    }
+
+    // Acceso a UN ticket concreto. Revalidar el enlace en cada lectura es lo
+    // que hace que revocar o dejar caducar cierre la puerta al instante,
+    // aunque la prueba siga escrita.
+    function hasTicketAccessTo(sid, tid) {
+      return canParticipate()
+        && exists(/databases/$(database)/documents/sessions/$(sid)/ticketAccess/$(tid + '_' + request.auth.uid))
+        && ticketAccessData(sid, tid).ticketId == tid
+        && ticketLinkUsable(ticketAccessData(sid, tid).token)
+        && ticketLinkData(ticketAccessData(sid, tid).token).sessionId == sid
+        && ticketLinkData(ticketAccessData(sid, tid).token).ticketId == tid;
+    }
+
+    // Proyección AUTORITATIVA escrita por recompute (Admin): demuestra que un
+    // participante pertenece de verdad a un ticket. Sustituye a confiar en el
+    // array `manuals` del enlace, que lo escribe el cliente.
+    function participatesInTicket(sid, tid, pid) {
+      return exists(/databases/$(database)/documents/sessions/$(sid)/ticketParticipants/$(tid + '_' + pid));
+    }
+
+    // ── Derecho histórico por ticket (A11d) ────────────────────────────
+    // Proyección MONOTÓNICA que escribe recompute (Admin): demuestra que un
+    // UID tuvo participación económica en ESE ticket alguna vez. A
+    // diferencia de `ticketParticipants` —que es la foto del reparto VIVO y
+    // se borra en cuanto alguien deja de consumir— esta jamás se retira: es
+    // la única prueba que sobrevive a una corrección A11c posterior, y sin
+    // ella expulsar a alguien le arrancaría el ticket que explica su propia
+    // deuda. Concede lectura de UN ticket: ni la sesión (shareCode), ni el
+    // resto de tickets, ni ninguna capacidad de escritura.
+    function hasTicketHistory(sid, tid) {
+      return canParticipate()
+        && exists(/databases/$(database)/documents/sessions/$(sid)/ticketEntitlements/$(tid + '_' + request.auth.uid));
+    }
+
+    // Señal AUTORITATIVA de que la proyección del ticket está completa. La
+    // escribe recompute en el MISMO batch que las entradas, así que nunca
+    // marca como lista una proyección a medias. Distingue «el ticket todavía
+    // se está procesando» de «esta persona no participa», que es lo que
+    // evita tener que inventar un fallback inseguro.
+    function ticketProjectionReady(sid, tid) {
+      return exists(/databases/$(database)/documents/sessions/$(sid)/ticketParticipantProjections/$(tid))
+        && get(/databases/$(database)/documents/sessions/$(sid)/ticketParticipantProjections/$(tid))
+            .data.ready == true;
+    }
+
+    function participantData(sid, pid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)/participants/$(pid)).data;
+    }
+
     function sessionData(sid) {
       return get(/databases/$(database)/documents/sessions/$(sid)).data;
+    }
+
+    function futureSessionData(sid) {
+      return getAfter(/databases/$(database)/documents/sessions/$(sid)).data;
     }
 
     function ownsSession(sid) {
@@ -73,6 +250,89 @@ service cloud.firestore {
 
     function canRead(sid) {
       return ownsSession(sid) || hasGuestAccess(sid);
+    }
+
+    // ── Auditoría del gasto por el grupo (A11b) ─────────────────────────
+    // Una sesión que NACE dentro de un contexto (`contextModelVersion: 1`,
+    // ADR-030) es del GRUPO, no de quien la escribió: la foto, las líneas y
+    // el reparto son la EVIDENCIA con la que cualquier miembro comprueba de
+    // dónde sale su deuda —que el OCR no se equivocó, que el precio es el
+    // del ticket, que el consumo es el que fue—. Sin esto, verificar
+    // dependía de la buena fe de quien subió la foto.
+    //
+    // Es lectura y SOLO lectura: ninguna escritura se apoya en esta
+    // función. Y deliberadamente NO abre `sessions/{sid}`: ese documento
+    // guarda el `shareCode`, que es la credencial de invitado —leerlo
+    // permitiría fabricarse un `guestAccess` y con él editar líneas y
+    // marcar pagos—. Ampliar la lectura no puede ampliar la escritura por
+    // la puerta de atrás.
+    //
+    // Solo GRUPOS: una relación es una pareja simétrica y su modelo no se
+    // toca aquí. Un ticket LEGACY vinculado a mano (sesión sin contexto)
+    // tampoco entra: la política del archivo en Storage solo puede resolver
+    // el espacio de la SESIÓN, y media auditoría no es auditoría.
+    // ── Corrección administrativa del gasto (A11c) ──────────────────────
+    // Quien administra el GRUPO corrige el ticket de otro: el precio mal
+    // leído, el nombre del producto, la cantidad. Es autoridad propia, NO
+    // una extensión de `auditableByGroup` —eso es lectura (A11b)— y NO da
+    // nada sobre el dinero: confirmar un cobro sigue siendo del receptor
+    // (ADR-038/P2.1) y esta función no aparece en ninguna regla de pagos.
+    //
+    // Se apoya en `isSpaceAdminOf` (propietario o `role: admin`) con una
+    // condición añadida: solo GRUPOS. Sin ella una relación habría heredado
+    // la figura por la puerta de atrás, porque también tiene `ownerUid`.
+    function managesGroupOf(spaceId) {
+      return spaceId != ''
+        && exists(/databases/$(database)/documents/spaces/$(spaceId))
+        && spaceData(spaceId).get('kind', 'group') == 'group'
+        && isSpaceAdminOf(spaceId);
+    }
+
+    // ── Expulsión administrativa (A11d, ADR-039) ───────────────────────
+    // El CICLO de membresía se identifica por (uid, instante de alta). Ese
+    // instante viaja en el `before` INMUTABLE del evento de borrado, así que
+    // P6 puede reconstruir esta misma ruta cuando le llegue el evento —tarde,
+    // reintentado o después de otro ciclo— sin consultar ningún documento
+    // que haya podido cambiar de significado entretanto.
+    function membershipCycleId(uid, joinedAt) {
+      return uid + '_' + string(joinedAt.toMillis());
+    }
+
+    // El espacio manda desde el TICKET, no desde la sesión: es el documento
+    // que declara a qué grupo pertenece ese gasto.
+    function managesTicket(sid, aid, tid) {
+      return managesGroupOf(
+        get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid))
+          .data.get('spaceId', ''));
+    }
+
+    function auditableByGroup(sid) {
+      return canParticipate()
+        && sessionData(sid).get('contextModelVersion', 0) == 1
+        && sessionData(sid).get('spaceId', '') != ''
+        && exists(/databases/$(database)/documents/spaces/$(sessionData(sid).spaceId))
+        && spaceData(sessionData(sid).spaceId).get('kind', 'group') == 'group'
+        && isSpaceMember(sessionData(sid).spaceId);
+    }
+
+    // ── Auditar el gasto desde SU contexto (A10) ────────────────────────
+    // Igual que `auditableByGroup` pero sin exigir que el contexto sea un
+    // GRUPO. Nació porque una RELACIÓN quedaba fuera de todo: la otra mitad
+    // de la pareja no podía leer el ticket que comparte con quien lo subió
+    // ni elegir lo que consumió, y tenía que entrar por un enlace de
+    // invitado a hacer algo que es suyo. Una relación son DOS personas que
+    // reparten ese gasto: ver la línea que les cobra no es un permiso nuevo,
+    // es el mínimo para participar.
+    //
+    // Sigue siendo LECTURA. La autoridad administrativa (corregir el
+    // contenido, A11c) sigue exigiendo `managesGroupOf`, que excluye
+    // relaciones: una pareja no adquiere jerarquía por esta vía.
+    function auditableByContext(sid) {
+      return canParticipate()
+        && sessionData(sid).get('contextModelVersion', 0) == 1
+        && sessionData(sid).get('spaceId', '') != ''
+        && exists(/databases/$(database)/documents/spaces/$(sessionData(sid).spaceId))
+        && isSpaceMember(sessionData(sid).spaceId);
     }
 
     function claimedBy(sid, pid) {
@@ -229,8 +489,27 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/profiles/$(data.receiverUid));
     }
 
+    // El cliente crea solicitudes dentro de una transacción que primero lee
+    // el documento (para converger solicitudes cruzadas y ser idempotente).
+    // Ese get llega ANTES de que el doc exista: con resource == null solo se
+    // permite si el ID incorpora el token serializado del propio UID, así un
+    // tercero no puede sondear la existencia de relaciones ajenas.
+    function friendshipIdInvolvesSelf(friendshipId) {
+      return friendshipId.matches(
+        '.*'
+        + (string(request.auth.uid.size()) + ':' + request.auth.uid)
+            .toUtf8().toHexString().lower()
+        + '.*'
+      );
+    }
+
     match /friendships/{friendshipId} {
-      allow read: if canUseSocial()
+      allow get: if canUseSocial()
+        && (resource == null
+          ? friendshipIdInvolvesSelf(friendshipId)
+          : request.auth.uid in resource.data.memberUids);
+
+      allow list: if canUseSocial()
         && request.auth.uid in resource.data.memberUids;
 
       allow create: if canUseSocial()
@@ -264,15 +543,55 @@ service cloud.firestore {
     // Ambos recursos los escribe exclusivamente Admin SDK (recompute o
     // callables). El cliente solo consulta los pares en los que participa.
     match /economicEntries/{entryId} {
-      allow read: if canUseSocial()
-        && request.auth.uid in resource.data.memberUids;
+      allow read: if canParticipate()
+        && (
+          request.auth.uid in resource.data.memberUids
+          // Representación de identidades SIN cuenta (ADR-038): una deuda de
+          // la que forma parte un `manual:{id}` la ve también quien
+          // administra el espacio que lo custodia, porque si no nadie podría
+          // cerrarla nunca. Cuenta ↔ cuenta queda fuera por construcción.
+          || (resource.data.get('hasManualParty', false) == true
+            && representableEconomicDoc(resource.data))
+        );
       allow create, update, delete: if false;
     }
 
     match /economicPayments/{paymentId} {
-      allow read: if canUseSocial()
+      allow read: if canParticipate()
+        && (
+          request.auth.uid in resource.data.memberUids
+          || (resource.data.get('hasManualParty', false) == true
+            && representableEconomicDoc(resource.data))
+        );
+      allow create, update, delete: if false;
+    }
+
+    // ── Actividad (P6, ADR-031): proyección de auditoría ───────────────
+    // La generan SOLO los triggers Admin; ningún cliente escribe ni puede
+    // fabricar eventos a nombre de otro. La audiencia va congelada en
+    // memberUids: expulsados conservan sus hechos, los miembros nuevos no
+    // heredan actividad anterior. Las queries siempre incluyen
+    // array-contains sobre el propio uid (así la regla es demostrable).
+    match /activityEvents/{eventId} {
+      allow read: if canParticipate()
         && request.auth.uid in resource.data.memberUids;
       allow create, update, delete: if false;
+    }
+
+    // ── Identidad de invitado (ADR-034) ────────────────────────────────
+    // NO es un perfil público: no tiene username, no es buscable y solo la
+    // lee quien ya conoce el UID (el anfitrión al invitarlo, o los miembros
+    // del contexto para pintar su nombre). El propio invitado la crea y
+    // mantiene; nadie más puede escribirla ni suplantarla.
+    match /guestIdentities/{uid} {
+      allow get: if signedIn();
+      allow list: if false; // jamás buscable: no es identidad pública
+      allow create, update: if isAnonymous()
+        && request.auth.uid == uid
+        && validGuestIdentity(request.resource.data, uid)
+        && (request.method == 'update'
+          || request.resource.data.createdAt is timestamp);
+      allow delete: if isAnonymous() && request.auth.uid == uid;
     }
 
     // ── Espacios compartidos (P4, ADR-028) ─────────────────────────────
@@ -284,26 +603,317 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/spaces/$(spaceId)).data;
     }
 
+    function futureSpaceData(spaceId) {
+      return getAfter(/databases/$(database)/documents/spaces/$(spaceId)).data;
+    }
+
     function isSpaceMember(spaceId) {
       return exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
+    }
+
+    // El ID canónico de una relación reserva la pareja: `relationship_a~b`
+    // con los UID ordenados. Reconocerse en él NO revela nada de terceros,
+    // así que autoriza a sondear ese documento mientras aún no existe.
+    function relationshipIdInvolvesSelf(spaceId) {
+      return spaceId.matches('^relationship_' + request.auth.uid + '~.*$')
+        || spaceId.matches('^relationship_.*~' + request.auth.uid + '$');
+    }
+
+    // Participante manual (ADR-033/037): identidad opaca y estable, nombre
+    // editable y alias `linkedUid` aprobado por el anfitrión.
+    function validManualParticipant(data, manualId) {
+      return data.keys().hasOnly([
+        'manualId', 'displayName', 'linkedUid', 'createdByUid',
+          'createdAt', 'updatedAt', 'schemaVersion', 'linkStatus', 'linkError',
+          'linkBlockedSessions', 'linkPropagatedSessions', 'linkPropagatedAt',
+          'linkProcessingAt', 'linkClaimId', 'linkRetryCount',
+          'linkRetryRequestedAt', 'linkRetryRequestedBy'
+        ])
+        && data.keys().hasAll([
+          'manualId', 'displayName', 'createdByUid', 'createdAt',
+          'updatedAt', 'schemaVersion'
+        ])
+        && data.manualId == manualId
+        // El ':' partiría el actor `manual:{id}`; el id nunca es el nombre.
+        && !manualId.matches('.*:.*')
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40
+        // VINCULACIÓN (ADR-037): `linkedUid` pasa de estar forzado a null a
+        // ser un UID, pero SOLO por la vía de una solicitud aprobada por el
+        // anfitrión (ver la regla de update). Aquí solo se valida la forma.
+        && (data.get('linkedUid', null) == null
+          || (data.linkedUid is string && data.linkedUid.size() > 0))
+        // Estos metadatos los publica Admin al propagar. Se aceptan en la
+        // forma documental para que un propietario pueda renombrar un manual
+        // ya procesado, pero las mutaciones de cliente de abajo no permiten
+        // alterar ninguno.
+        && (!('linkStatus' in data)
+          || data.linkStatus in ['processing', 'active', 'failed'])
+        && (!('linkError' in data)
+          || data.linkError in [
+            'legacy-sessions-without-context', 'propagation-error'])
+        && (!('linkBlockedSessions' in data)
+          || (data.linkBlockedSessions is int && data.linkBlockedSessions >= 0))
+        && (!('linkPropagatedSessions' in data)
+          || (data.linkPropagatedSessions is int
+            && data.linkPropagatedSessions >= 0))
+        && (!('linkPropagatedAt' in data)
+          || data.linkPropagatedAt is timestamp)
+        && (!('linkProcessingAt' in data)
+          || data.linkProcessingAt is timestamp)
+        && (!('linkClaimId' in data)
+          || (data.linkClaimId is string && data.linkClaimId.size() > 0
+            && data.linkClaimId.size() <= 128))
+        && (!('linkRetryCount' in data)
+          || (data.linkRetryCount is int && data.linkRetryCount >= 0))
+        && (!('linkRetryRequestedAt' in data)
+          || data.linkRetryRequestedAt is timestamp)
+        && (!('linkRetryRequestedBy' in data)
+          || (data.linkRetryRequestedBy is string
+            && data.linkRetryRequestedBy.size() > 0
+            && data.linkRetryRequestedBy.size() <= 128))
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    // Solicitud de vinculación (ADR-037). La pide la persona; la aprueba el
+    // ANFITRIÓN. Ese doble paso es lo que impide que alguien se apropie del
+    // historial económico de otro simplemente diciendo que es él.
+    function validManualLinkRequest(data, manualId, uid, spaceId) {
+      return data.keys().hasOnly([
+          'manualId', 'uid', 'displayName', 'status', 'spaceOwnerUid',
+          'attempt', 'viaSessionId', 'viaTicketId', 'viaPid',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        // CICLO DE VIDA: `attempt` versiona el intento. Un rechazo no puede
+        // dejar a alguien sin salida para siempre —el anfitrión puede
+        // haberse equivocado— pero tampoco se reescribe un documento
+        // terminal en silencio: cada nuevo intento incrementa el contador,
+        // que queda como rastro de cuántas veces se pidió.
+        && data.attempt is int
+        && data.attempt >= 1
+        // M4: propietario denormalizado para la bandeja GLOBAL. Lo aporta el
+        // cliente pero NO lo controla: Rules lo valida contra el propietario
+        // real del espacio y lo hace inmutable. Sin él, un collection group
+        // exigiría un get() por documento y sería inviable.
+        && data.spaceOwnerUid == spaceData(spaceId).ownerUid
+        && data.keys().hasAll([
+          'manualId', 'uid', 'status', 'createdAt', 'updatedAt',
+          'schemaVersion'
+        ])
+        && data.manualId == manualId
+        && data.uid == uid
+        // A2: el nombre declarado por quien solicita es TEXTO DE UN TERCERO y
+        // se le enseña al anfitrión justo en el momento de decidir. Sin
+        // acotarlo, un atacante escribe ahí lo que quiera ("Marta
+        // (verificado)") o un texto enorme que rompe la tarjeta. Mismo límite
+        // que el resto de nombres del proyecto.
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40
+        && data.status in ['pending', 'accepted', 'rejected']
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    // A1: relación legítima con el MANUAL. Conocer el `manualId` NO basta: el
+    // enlace de ticket (ADR-036) lo publica a cualquiera que reciba el enlace,
+    // así que un reenvío por WhatsApp entregaba a desconocidos la capacidad de
+    // inyectar solicitudes en la bandeja del anfitrión.
+    //
+    // Se exige una de dos pruebas AUTORITATIVAS, ninguna aportada por el
+    // cliente: ser miembro del espacio, o tener un `ticketAccess` vigente
+    // sobre un ticket donde ESE manual participa según `ticketParticipants`.
+    function mayClaimManual(spaceId, manualId, sessionId, ticketId, pid) {
+      return isSpaceMember(spaceId)
+        || (
+          sessionId != ''
+          && ticketId != ''
+          && pid != ''
+          // El acceso al ticket se revalida entero (enlace vivo incluido).
+          && hasTicketAccessTo(sessionId, ticketId)
+          // Y ese acceso debe ser justamente el de ESTE manual.
+          && ticketAccessData(sessionId, ticketId).get('manualId', '')
+            == manualId
+          && participatesInTicket(sessionId, ticketId, pid)
+        );
+    }
+
+    // Owner comprobado sin asumir que el espacio exista (get() sobre un
+    // documento ausente aborta la evaluación con "Null value error").
+    function isExistingSpaceOwner(spaceId) {
+      return canUseSocial()
+        && exists(/databases/$(database)/documents/spaces/$(spaceId))
+        && spaceData(spaceId).ownerUid == request.auth.uid;
+    }
+
+    // El ID de invitación es `{spaceId}_{toUid}`: el destinatario es el
+    // último segmento y el espacio, todo lo anterior (los UID de Firebase
+    // son alfanuméricos, nunca contienen '_').
+    function inviteTargetUid(inviteId) {
+      return inviteId.split('_')[inviteId.split('_').size() - 1];
+    }
+
+    function inviteSpaceIdOf(inviteId) {
+      return inviteId.split('_')[0:inviteId.split('_').size() - 1].join('_');
+    }
+
+    function spaceMemberJoinedAt(spaceId) {
+      return get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+          .data.joinedAt;
+    }
+
+    function validChatMessage(data) {
+      return data.keys().hasOnly([
+          'authorUid', 'text', 'createdAt', 'schemaVersion'
+        ])
+        && data.authorUid is string
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 2000
+        && data.createdAt is timestamp
+        && data.schemaVersion == 1;
     }
 
     function isSpaceOwner(spaceId) {
       return canUseSocial() && spaceData(spaceId).ownerUid == request.auth.uid;
     }
 
+    // ── Administradores del espacio (ADR-038) ──────────────────────────
+    // El propietario sigue siendo único y vive en `ownerUid`; `role` en la
+    // membresía es la ÚNICA delegación, y solo el propietario la concede.
+    // Un administrador NO hereda capacidad sobre el saldo de una cuenta: su
+    // única potestad económica es representar a quien no tiene cuenta y por
+    // tanto no puede confirmar nada por sí mismo.
+    function isSpaceAdminOf(spaceId) {
+      return canUseSocial()
+        && exists(/databases/$(database)/documents/spaces/$(spaceId))
+        && (
+          spaceData(spaceId).ownerUid == request.auth.uid
+          || (isSpaceMember(spaceId)
+            && get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+                .data.get('role', 'member') == 'admin')
+        );
+    }
+
+    // Una obligación con una parte SIN cuenta necesita quien la represente;
+    // entre dos cuentas jamás se abre a terceros (el administrador no puede
+    // ni leerla). `hasManualParty` lo escribe recompute como propiedad
+    // derivada, y la consulta del administrador filtra por él para que la
+    // regla sea demostrable documento a documento.
+    function representableEconomicDoc(data) {
+      return data.get('spaceId', '') != ''
+        && isSpaceAdminOf(data.spaceId);
+    }
+
+    // Política del anfitrión sobre los invitados (ADR-034). Ausente = el
+    // valor conservador: los invitados NO crean gastos.
+    function guestsMayCreateExpenses(spaceId) {
+      return spaceData(spaceId).get('guestsCanCreateExpenses', false) == true;
+    }
+
+    // ── Enlaces de grupo (Sprint 4, ADR-035) ───────────────────────────
+    // El IDENTIFICADOR del documento ES el secreto (128 bits base64url):
+    // conocerlo es la autorización, igual que el shareCode de una sesión
+    // (ADR-012). De ahí las dos mitades de la política: `get` abierto a
+    // quien acierte el token (imposible por fuerza bruta) y `list` reservado
+    // al propietario, para que el enlace NUNCA sea enumerable.
+    function spaceLinkData(token) {
+      return get(/databases/$(database)/documents/spaceLinks/$(token)).data;
+    }
+
+    // Un enlace vivo de ESTE grupo. Se comprueba en cada uso (no solo al
+    // canjearlo), así que revocar o dejar caducar cierra la puerta de
+    // inmediato, aunque alguien hubiera guardado el token.
+    function spaceLinkOpensGroup(token, spaceId) {
+      return token is string
+        && exists(/databases/$(database)/documents/spaceLinks/$(token))
+        && spaceLinkData(token).spaceId == spaceId
+        && spaceLinkData(token).status == 'active'
+        && spaceLinkNotExpired(spaceLinkData(token));
+    }
+
+    // Caducidad OPCIONAL: un enlace es un secreto portador, así que poder
+    // acotarle la vida limita el daño de una filtración. Ausente = sin
+    // caducidad (el propietario siempre puede revocar), que es el
+    // comportamiento con el que nacieron los enlaces.
+    function spaceLinkNotExpired(data) {
+      return data.get('expiresAt', null) == null
+        || data.expiresAt > request.time;
+    }
+
+    function validSpaceLink(data) {
+      return data.keys().hasOnly([
+          'spaceId', 'spaceName', 'createdByUid', 'status',
+          'createdAt', 'updatedAt', 'expiresAt', 'schemaVersion'
+        ])
+        && data.keys().hasAll([
+          'spaceId', 'spaceName', 'createdByUid', 'status',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ])
+        && data.spaceId is string
+        && data.spaceName is string
+        && data.spaceName.size() >= 2
+        && data.spaceName.size() <= 40
+        && data.status in ['active', 'revoked']
+        && (data.get('expiresAt', null) == null
+          || data.expiresAt is timestamp)
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
     function validSpaceShape(data) {
       return data.keys().hasOnly([
           'name', 'avatarEmoji', 'ownerUid', 'status',
-          'createdAt', 'updatedAt', 'schemaVersion'
+          'createdAt', 'updatedAt', 'schemaVersion', 'kind',
+          'relationshipUids', 'relationshipManualId',
+          'guestsCanCreateExpenses'
         ])
+        && (!('guestsCanCreateExpenses' in data)
+          || data.guestsCanCreateExpenses is bool)
         && data.name is string
         && data.name.size() >= 2
         && data.name.size() <= 40
         && (!('avatarEmoji' in data)
           || (data.avatarEmoji is string && data.avatarEmoji.size() <= 8))
         && data.status in ['active', 'archived']
-        && data.schemaVersion == 1
+        && (
+          (data.schemaVersion == 1
+            && !('kind' in data)
+            && !('relationshipUids' in data))
+          || (data.schemaVersion == 2
+            && data.kind in ['relationship', 'group']
+            && !('relationshipManualId' in data)
+            && (
+              (data.kind == 'group'
+                && data.get('relationshipUids', []).size() == 0)
+              || (data.kind == 'relationship'
+                && data.relationshipUids is list
+                && data.relationshipUids.size() == 2
+                && data.relationshipUids[0] is string
+                && data.relationshipUids[1] is string
+                && data.relationshipUids[0] < data.relationshipUids[1]
+                && data.ownerUid in data.relationshipUids)
+            ))
+          // v3: RELACION CON UN PARTICIPANTE MANUAL (BUG-2). Sigue siendo un
+          // contexto de exactamente DOS identidades economicas, pero la
+          // segunda no tiene UID, asi que no puede formar parte del id
+          // canonico. De ahi que estas usen un id generado: exigir que el id
+          // derive de dos UID impedia el caso real de compartir gastos con
+          // alguien que no usa la app.
+          //
+          // Las de dos cuentas siguen en v2 con su id canonico, que es lo que
+          // garantiza que A->B y B->A sean el mismo contexto. Sin cambios.
+          || (data.schemaVersion == 3
+            && data.kind == 'relationship'
+            && data.relationshipUids is list
+            && data.relationshipUids.size() == 1
+            && data.relationshipUids[0] == data.ownerUid
+            && data.relationshipManualId is string
+            && data.relationshipManualId.size() > 0
+            && !data.relationshipManualId.matches('.*:.*'))
+        )
         && data.updatedAt is timestamp;
     }
 
@@ -313,13 +923,36 @@ service cloud.firestore {
     // definición — y las reglas nunca necesitan get() sobre docs del mismo
     // batch (que fallaría).
     match /spaces/{spaceId} {
-      allow read: if canUseSocial() && isSpaceMember(spaceId);
+      // Crear una relación empieza leyendo su documento canónico DENTRO de
+      // la transacción (idempotencia: A→B y B→A son el mismo contexto), y
+      // ese documento todavía no existe. `isSpaceMember` sería false y la
+      // transacción moriría antes de escribir. Mismo patrón que P3 para
+      // amistades: con el documento ausente se autoriza por el ID, que solo
+      // permite sondear relaciones en las que uno participa.
+      // Un INVITADO lee el contexto del que ya es miembro (ADR-034), pero
+      // nunca sondea relaciones por ID: no crea ni reserva contextos.
+      allow get: if resource == null
+        ? (canUseSocial() && relationshipIdInvolvesSelf(spaceId))
+        : (canParticipate() && isSpaceMember(spaceId));
 
-      // Alta atómica: espacio + SU membresía en el mismo batch.
+      allow list: if canParticipate() && isSpaceMember(spaceId);
+
+      // Alta atómica: espacio + SU membresía en el mismo batch. Crear un
+      // contexto exige cuenta: un invitado jamás es propietario.
       allow create: if canUseSocial()
         && validSpaceShape(request.resource.data)
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.status == 'active'
+        && (request.resource.data.get('kind', 'group') != 'relationship'
+          || request.resource.data.schemaVersion == 3
+          || spaceId == 'relationship_'
+            + request.resource.data.relationshipUids[0] + '~'
+            + request.resource.data.relationshipUids[1])
+        // La segunda plaza MANUAL se crea en el MISMO batch: sin ella el
+        // espacio quedaria con una sola identidad, que no es una relacion.
+        && (request.resource.data.get('schemaVersion', 2) != 3
+          || getAfter(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.relationshipManualId))
+              .data.manualId == request.resource.data.relationshipManualId)
         && request.resource.data.createdAt is timestamp
         && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
             .data.uid == request.auth.uid;
@@ -329,6 +962,16 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid
         && validSpaceShape(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.get('kind', 'group')
+          == resource.data.get('kind', 'group')
+        && request.resource.data.get('relationshipUids', [])
+          == resource.data.get('relationshipUids', [])
+        // BUG-4: la segunda identidad de una relación v3 es INMUTABLE.
+        // Reapuntarla a otro manual sustituiría a la persona con la que se
+        // comparten los gastos dejando intacto todo el histórico, que
+        // seguiría escrito con el actor del manual anterior.
+        && request.resource.data.get('relationshipManualId', '')
+          == resource.data.get('relationshipManualId', '')
         && (
           // Editar nombre/avatar o archivar/reactivar: el owner no cambia.
           (request.resource.data.ownerUid == resource.data.ownerUid)
@@ -346,47 +989,588 @@ service cloud.firestore {
       // para espacios con actividad).
       allow delete: if false;
 
-      match /members/{memberUid} {
-        // Cualquier miembro ve la lista de miembros.
-        allow read: if canUseSocial() && isSpaceMember(spaceId);
+      // Participantes MANUALES (ADR-033): personas sin cuenta que el
+      // anfitrión escribe a mano. No tienen UID ni dispositivo: nunca leen
+      // ni confirman nada, su identidad la custodia el espacio y su actor
+      // económico es `manual:{manualId}`. `linkedUid` solo lo publica la
+      // aprobación del anfitrión; la propagación posterior añade metadatos
+      // terminales que Admin mantiene fuera de las mutaciones del cliente.
+      match /manualParticipants/{manualId} {
+        // Los ve cualquier miembro: son participantes del contexto común.
+        // Un INVITADO también, porque comparte reparto con ellos; crearlos
+        // y editarlos sigue siendo exclusivo del propietario.
+        // Los miembros conservan el acceso social completo. Quien acaba de
+        // vincularse y aún no es miembro solo puede leer SU manual por get;
+        // nunca puede enumerar los manuales del espacio.
+        allow get: if canParticipate()
+          && (isSpaceMember(spaceId)
+            || resource.data.get('linkedUid', null) == request.auth.uid);
+        allow list: if canParticipate() && isSpaceMember(spaceId);
 
+        // En un GRUPO, cualquier numero de manuales. En una RELACION, solo
+        // el que ocupa su segunda plaza: uno mas seria un tercer actor
+        // economico en un contexto de dos personas.
         allow create: if canUseSocial()
-          && request.resource.data.keys().hasOnly(['uid', 'joinedAt'])
+          && (
+            (futureSpaceData(spaceId).get('kind', 'group') == 'group'
+              && isSpaceOwner(spaceId))
+            || (futureSpaceData(spaceId).kind == 'relationship'
+              && futureSpaceData(spaceId).get('schemaVersion', 2) == 3
+              && futureSpaceData(spaceId).relationshipManualId == manualId
+              && futureSpaceData(spaceId).ownerUid == request.auth.uid)
+          )
+          && futureSpaceData(spaceId).status == 'active'
+          && validManualParticipant(request.resource.data, manualId)
+          && request.resource.data.keys().hasOnly([
+            'manualId', 'displayName', 'linkedUid', 'createdByUid',
+            'createdAt', 'updatedAt', 'schemaVersion'])
+          // Nadie NACE vinculado: la vinculación solo llega por una
+          // solicitud que el anfitrión aprueba (ADR-037).
+          && request.resource.data.get('linkedUid', null) == null
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.createdByUid == request.auth.uid;
+
+        // Dos mutaciones, y ninguna toca la identidad económica:
+        //  (a) renombrar — el actor `manual:{id}` no depende del nombre;
+        //  (b) VINCULAR (ADR-037): escribir `linkedUid` una sola vez, y solo
+        //      si en el MISMO batch hay una solicitud que el anfitrión está
+        //      aceptando. Sin ese emparejamiento no hay forma de vincular.
+        allow update: if isSpaceOwner(spaceId)
+          && validManualParticipant(request.resource.data, manualId)
+          && (
+            (request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['displayName', 'updatedAt'])
+              && request.resource.data.get('linkedUid', null)
+                == resource.data.get('linkedUid', null))
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['linkedUid', 'updatedAt'])
+              // Se vincula UNA vez: revincular reescribiría a quién
+              // pertenece un historial ya escrito.
+              && resource.data.get('linkedUid', null) == null
+              && request.resource.data.linkedUid is string
+              && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/manualLinkRequests/$(manualId + '_' + request.resource.data.linkedUid))
+                  .data.status == 'accepted'
+              // A3: y la reserva del UID, en el mismo batch. Los tres
+              // documentos se escriben juntos o no se escribe ninguno, así
+              // que no hay estados a medias (aceptada sin vínculo, vínculo
+              // sin reserva, reserva sin vínculo).
+              && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(request.resource.data.linkedUid))
+                  .data.manualId == manualId
+            )
+          );
+
+        // C3: un MANUAL VINCULADO no se borra. Borrarlo eliminaba el alias
+        // y equivalía a desvincular —justo lo que la regla de update
+        // prohíbe—, dejaba la solicitud aceptada apuntando a un documento
+        // inexistente y hacía perder el acceso al historial en silencio.
+        // Retirarlo de uso es otra cosa: no existe todavía, y hasta que
+        // exista un vinculado se queda.
+        allow delete: if isSpaceOwner(spaceId)
+          && resource.data.get('linkedUid', null) == null
+          // El MANUAL que ocupa la segunda plaza de una relacion no se
+          // retira: dejaria un contexto de una sola identidad.
+          && spaceData(spaceId).get('relationshipManualId', '') != manualId;
+      }
+
+      match /members/{memberUid} {
+        // Cualquier miembro ve la lista de miembros, invitados incluidos.
+        allow read: if canParticipate() && isSpaceMember(spaceId);
+
+        // Un invitado se une exactamente igual (aceptando su invitación),
+        // pero guarda `displayName` porque no tiene perfil público del que
+        // leerlo: es un snapshot del contexto, no identidad buscable.
+        allow create: if canParticipate()
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'joinedAt', 'kind', 'displayName', 'role'])
           && request.resource.data.uid == memberUid
           && request.resource.data.joinedAt is timestamp
+          // Nadie NACE administrador: la delegación es un acto posterior y
+          // explícito del propietario (ADR-038).
+          && request.resource.data.get('role', 'member') == 'member'
+          && (request.resource.data.get('kind', 'account') == 'guest'
+            ? (isGuest()
+              && request.resource.data.displayName is string
+              && request.resource.data.displayName.size() >= 1
+              && request.resource.data.displayName.size() <= 40)
+            : (canUseSocial()
+              && !('displayName' in request.resource.data)))
           && memberUid == request.auth.uid
+          && (futureSpaceData(spaceId).get('kind', 'group') != 'relationship'
+            || memberUid in futureSpaceData(spaceId).relationshipUids)
           && (
             // (a) Fundador: su membresía al crear el espacio (mismo batch).
             getAfter(/databases/$(database)/documents/spaces/$(spaceId))
                 .data.ownerUid == request.auth.uid
             // (b) Aceptar invitación: el receptor se une y el MISMO batch
-            // resuelve la invitación a accepted.
-            || (spaceData(spaceId).status == 'active'
+            // resuelve la invitación a accepted. El existsAfter() previo es
+            // obligatorio desde que hay una tercera vía: sin él, entrar por
+            // enlace moría con "Null value error" al leer una invitación
+            // que no existe (mismo fallo que corrigió `ce61bdd` al leer).
+            // A11d: si hay una expulsión VIGENTE, solo readmite una decisión
+            // POSTERIOR a ella, y el bloqueo se levanta en este mismo commit
+            // (así no existe «readmitido pero todavía bloqueado»).
+            || (existsAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
+              && spaceData(spaceId).status == 'active'
               && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
-                  .data.status == 'accepted')
+                  .data.status == 'accepted'
+              && (!exists(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid))
+                || (getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + request.auth.uid))
+                      .data.createdAt
+                    > get(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid))
+                      .data.blockedAt
+                  && !existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid)))))
+            // (c) Enlace de grupo (ADR-035): la prueba de conocimiento del
+            // token viaja en el MISMO batch, y aquí se revalida que el
+            // enlace siga vivo y siga siendo de este grupo. Una relación
+            // nunca se abre por enlace: su pareja de UID es inmutable.
+            // A11d: el enlace es una credencial de DIFUSIÓN. Una expulsión
+            // vigente lo cierra para esa persona: volver exige una decisión
+            // explícita del propietario, no acertar otra vez con el enlace.
+            || (existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/joinGrants/$(request.auth.uid))
+              && spaceData(spaceId).status == 'active'
+              && spaceData(spaceId).get('kind', 'group') == 'group'
+              && !exists(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(request.auth.uid))
+              && spaceLinkOpensGroup(
+                getAfter(/databases/$(database)/documents/spaces/$(spaceId)/joinGrants/$(request.auth.uid)).data.token,
+                spaceId))
           );
 
-        // La membresía no tiene campos mutables.
+        // Una sola mutación: `role`, nombrar o retirar administradores
+        // (ADR-038). Un INVITADO nunca administra —no tiene cuenta ni
+        // identidad pública (ADR-034)—, y el propietario no se administra a
+        // sí mismo porque ya lo es por `ownerUid`. Los roles existen SOLO en
+        // grupos: una relación es una pareja simétrica de dos identidades y
+        // no adquiere jerarquía interna.
+        //
+        // A11d retiró el marcador `removedBy`: la expulsión ya no se
+        // anunciaba escribiendo en el documento que se va a borrar. Ver
+        // `removals` más abajo.
+        allow update: if isSpaceOwner(spaceId)
+          && memberUid != request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['role'])
+          && request.resource.data.role in ['member', 'admin']
+          && resource.data.get('kind', 'account') == 'account'
+          && spaceData(spaceId).get('kind', 'group') == 'group';
+
+        // Dos bajas con naturalezas distintas (A11d):
+        //
+        //  (a) SALIR: acto propio, sin rastro administrativo. Su alcance no
+        //      se toca aquí (A3 se ocupará del ciclo de vida completo).
+        //
+        //  (b) EXPULSAR: acto de quien administra el GRUPO. Exige, en el
+        //      MISMO commit, la evidencia inmutable de ESTE ciclo y el
+        //      bloqueo de reentrada. Sin las dos, el borrado se deniega: no
+        //      existe una expulsión a medias, ni un borrado administrativo
+        //      que P6 no pueda clasificar después.
+        //
+        //      `managesGroupOf` la reserva a los GRUPOS, así que una
+        //      relación deja de tener expulsión administrativa: su
+        //      propietario ya no puede retirar a la otra mitad y dejar un
+        //      contexto de una sola identidad.
+        allow delete: if
+          (canUseSocial()
+            && resource.data.uid != spaceData(spaceId).ownerUid
+            && memberUid == request.auth.uid)
+          || (managesGroupOf(spaceId)
+            && memberUid != request.auth.uid
+            && resource.data.uid != spaceData(spaceId).ownerUid
+            // Un administrador no toca a otro administrador; el propietario
+            // sí, porque la delegación es suya.
+            && (isSpaceOwner(spaceId)
+              || resource.data.get('role', 'member') != 'admin')
+            && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/removals/$(membershipCycleId(memberUid, resource.data.joinedAt)))
+            && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/entryBlocks/$(memberUid)));
+      }
+
+      // ── Evidencia HISTÓRICA de expulsión, una por CICLO (A11d) ────────
+      // Append-only y con identidad `{uid}_{joinedAtMillis}`: la expulsión
+      // del ciclo A jamás puede convertirse en la del ciclo B. Es lo que
+      // permite que P6 clasifique un evento retrasado o reintentado sin
+      // consultar nada mutable (ADR-039). No concede ninguna autoridad ni
+      // ninguna lectura del grupo: solo constata un hecho.
+      match /removals/{removalId} {
+        // Lo ven los miembros actuales y la propia persona expulsada.
+        allow read: if canParticipate()
+          && (isSpaceMember(spaceId) || resource.data.uid == request.auth.uid);
+
+        allow create: if managesGroupOf(spaceId)
+          && request.resource.data.keys().hasOnly([
+            'uid', 'membershipJoinedAt', 'removedBy', 'removedAt',
+            'schemaVersion'])
+          && request.resource.data.keys().hasAll([
+            'uid', 'membershipJoinedAt', 'removedBy', 'removedAt',
+            'schemaVersion'])
+          && request.resource.data.uid != request.auth.uid
+          // El id no puede mentir sobre el ciclo que documenta.
+          && removalId == membershipCycleId(
+            request.resource.data.uid, request.resource.data.membershipJoinedAt)
+          // Estaba dentro ANTES, con ESE ciclo, y fuera DESPUÉS: ni evidencia
+          // sin expulsión, ni veto preventivo a quien nunca fue miembro.
+          && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.uid))
+          && get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.uid))
+              .data.joinedAt == request.resource.data.membershipJoinedAt
+          && !existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.uid))
+          // Actor y hora del hecho, anclados: un registro de auditoría no
+          // puede aceptar un actor ni una fecha que aporte el cliente.
+          && request.resource.data.removedBy == request.auth.uid
+          && request.resource.data.removedAt == request.time
+          && request.resource.data.schemaVersion == 1;
+
+        // Inmutable para siempre: es la única fuente que P6 puede consultar
+        // con la certeza de que sigue describiendo el hecho que clasifica.
+        allow update, delete: if false;
+      }
+
+      // ── Bloqueo VIGENTE de reentrada por enlace (A11d) ────────────────
+      // Pregunta distinta de la anterior y con otra vida: «¿esta persona
+      // está bloqueada AHORA?». Nace con la expulsión y muere con la
+      // readmisión explícita. NO es credencial, no concede lectura y no es
+      // historial: fusionarlo con `removals` reintroduciría la carrera que
+      // documenta ADR-039.
+      match /entryBlocks/{blockedUid} {
+        allow read: if canParticipate()
+          && (isSpaceMember(spaceId) || blockedUid == request.auth.uid);
+
+        allow create: if managesGroupOf(spaceId)
+          && blockedUid != request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'uid', 'membershipJoinedAt', 'blockedAt', 'schemaVersion'])
+          && request.resource.data.keys().hasAll([
+            'uid', 'membershipJoinedAt', 'blockedAt', 'schemaVersion'])
+          && request.resource.data.uid == blockedUid
+          && request.resource.data.blockedAt == request.time
+          && request.resource.data.schemaVersion == 1
+          && !existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(blockedUid))
+          // Solo nace junto a una expulsión con evidencia de ESE ciclo.
+          && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/removals/$(membershipCycleId(blockedUid, request.resource.data.membershipJoinedAt)));
+
+        // Se crea o se retira; nunca se retoca.
         allow update: if false;
 
-        // Salir (nunca el owner: antes transfiere o archiva) o expulsión
-        // por el owner. Solo borra el acceso social futuro.
-        allow delete: if canUseSocial()
-          && resource.data.uid != spaceData(spaceId).ownerUid
-          && (memberUid == request.auth.uid || isSpaceOwner(spaceId));
+        // Se levanta SOLO readmitiendo de verdad: en el mismo commit hay
+        // membresía nueva y una invitación POSTERIOR al bloqueo.
+        allow delete: if blockedUid == request.auth.uid
+          && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(blockedUid))
+          && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + blockedUid))
+              .data.status == 'accepted'
+          && getAfter(/databases/$(database)/documents/spaceInvites/$(spaceId + '_' + blockedUid))
+              .data.createdAt > resource.data.blockedAt;
       }
+
+      // A3: reserva determinista `uid → manualId` dentro del espacio. Su ID
+      // hace imposible que un mismo UID quede vinculado a dos manuales, que
+      // producía obligaciones de una persona consigo misma.
+      //
+      // Alcance POR ESPACIO, no global: el actor económico es local al
+      // contexto y una misma persona puede legítimamente haber sido anotada a
+      // mano en grupos distintos. Global habría bloqueado ese caso real.
+      match /linkedIdentities/{identityUid} {
+        allow read: if canUseSocial() && isSpaceMember(spaceId);
+
+        // Solo nace junto a la aceptación: el propietario la escribe en el
+        // mismo batch, y la solicitud correspondiente debe quedar aceptada.
+        allow create: if isSpaceOwner(spaceId)
+          && identityUid == request.resource.data.uid
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'manualId', 'createdAt', 'schemaVersion'])
+          && request.resource.data.keys().hasAll(
+            ['uid', 'manualId', 'createdAt', 'schemaVersion'])
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.schemaVersion == 1
+          && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/manualLinkRequests/$(request.resource.data.manualId + '_' + identityUid))
+              .data.status == 'accepted';
+
+        // Inmutable: reapuntarla movería a quién pertenece un historial.
+        allow update, delete: if false;
+      }
+
+      // Solicitudes de vinculación (ADR-037). ID determinista
+      // `{manualId}_{uid}`: no puede haber dos activas de la misma persona
+      // sobre el mismo manual, y reintentar reutiliza el documento.
+      match /manualLinkRequests/{requestId} {
+        // La ve quien la pide y el anfitrión, que es quien decide.
+        allow get: if canParticipate()
+          && (resource == null
+            ? requestId.split('_').size() >= 2
+            : (resource.data.uid == request.auth.uid
+              || isSpaceOwner(spaceId)));
+        // El anfitrión lista las pendientes de SU espacio; nadie más.
+        allow list: if isSpaceOwner(spaceId);
+
+        // La pide la PROPIA persona, para sí misma. Cuenta o invitado: el
+        // manual puede convertirse en cualquiera de los dos.
+        // M1: EXIGE CUENTA, no basta con participar. Un invitado vive en una
+        // sesión anónima ligada al dispositivo: vincular un historial
+        // económico a ese UID lo condena a desaparecer con el móvil, y como
+        // vincular es irreversible no habría rescate posible. Debe convertir
+        // su acceso en cuenta primero — la conversión CONSERVA el UID
+        // (ADR-023), así que no pierde nada por el camino.
+        allow create: if canUseSocial()
+          && requestId == request.resource.data.manualId + '_' + request.auth.uid
+          && validManualLinkRequest(
+            request.resource.data, request.resource.data.manualId,
+            request.auth.uid, spaceId)
+          && request.resource.data.status == 'pending'
+          && request.resource.data.attempt == 1
+          && request.resource.data.createdAt is timestamp
+          // El manual debe existir y NO estar ya vinculado.
+          && exists(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.manualId))
+          && get(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(request.resource.data.manualId))
+              .data.get('linkedUid', null) == null
+          // A3: ese UID no puede estar ya vinculado a OTRO manual del mismo
+          // espacio. La reserva es la fuente; aquí se corta antes de molestar
+          // al anfitrión con una solicitud que nunca podrá aceptarse.
+          && !exists(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(request.auth.uid))
+          // A1: prueba de relación legítima con el manual.
+          && mayClaimManual(
+            spaceId,
+            request.resource.data.manualId,
+            request.resource.data.get('viaSessionId', ''),
+            request.resource.data.get('viaTicketId', ''),
+            request.resource.data.get('viaPid', ''));
+
+        allow update: if
+          // El ANFITRIÓN acepta o rechaza una pendiente. Aceptar va en el
+          // mismo batch que el `linkedUid`, validado por la otra regla.
+          (isSpaceOwner(spaceId)
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['accepted', 'rejected']
+            // Solo el estado: el nombre declarado queda congelado como
+            // prueba de QUÉ se le enseñó al anfitrión al decidir.
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt'])
+            && request.resource.data.updatedAt is timestamp
+            // M4: el propietario denormalizado es inmutable.
+            && request.resource.data.spaceOwnerUid == resource.data.spaceOwnerUid
+            // A3: ACEPTAR exige que la reserva del UID se escriba en el
+            // MISMO batch. Rechazar no reserva nada, obviamente.
+            && (request.resource.data.status != 'accepted'
+              || getAfter(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(resource.data.uid))
+                  .data.manualId == resource.data.manualId))
+          // Quien la pidió puede retirarla mientras siga pendiente.
+          || (canUseSocial()
+            && resource.data.uid == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'rejected'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt']))
+          // NUEVO INTENTO tras un rechazo: solo el solicitante, solo desde
+          // `rejected` (nunca desde `accepted`, que es terminal de verdad) y
+          // subiendo el contador. El manual no puede estar ya vinculado.
+          || (canUseSocial()
+            && resource.data.uid == request.auth.uid
+            && resource.data.status == 'rejected'
+            && request.resource.data.status == 'pending'
+            && request.resource.data.attempt == resource.data.attempt + 1
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'attempt', 'updatedAt'])
+            && get(/databases/$(database)/documents/spaces/$(spaceId)/manualParticipants/$(resource.data.manualId))
+                .data.get('linkedUid', null) == null
+            && !exists(/databases/$(database)/documents/spaces/$(spaceId)/linkedIdentities/$(request.auth.uid)));
+
+        // Nada de borrar: la solicitud es el rastro de POR QUÉ existe un
+        // vínculo. Sin ella no se podría demostrar que hubo aprobación.
+        allow delete: if false;
+      }
+
+      // Prueba de conocimiento del enlace de grupo (ADR-035), calcada del
+      // mecanismo de invitados de sesión (ADR-012): el cliente presenta el
+      // token y la regla lo compara contra el enlace real.
+      //
+      // Es un documento de SOLO ESCRITURA — nadie lo lee, ni siquiera el
+      // propietario — precisamente para que el token no se filtre a los
+      // demás miembros a través de él. Si el token viviera en la membresía,
+      // cualquier miembro podría reenviar el enlace y se saltaría la
+      // política de que solo el propietario incorpora gente.
+      match /joinGrants/{grantUid} {
+        allow read: if false;
+
+        // Reescribir la prueba (reintento, o volver a entrar tras salir)
+        // vuelve a exigir un enlace VIVO: create y update comparten
+        // condición a propósito.
+        allow create, update: if canParticipate()
+          && grantUid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['uid', 'token', 'createdAt'])
+          && request.resource.data.keys().hasAll(['uid', 'token', 'createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.createdAt is timestamp
+          && spaceLinkOpensGroup(request.resource.data.token, spaceId);
+
+        allow delete: if false;
+      }
+
+      // P7: conversación contextual. La fecha de alta es una frontera de
+      // privacidad demostrable: nuevos miembros no heredan el historial y
+      // quien deja de ser miembro pierde el acceso.
+      match /messages/{messageId} {
+        allow read: if canUseSocial()
+          && isSpaceMember(spaceId)
+          && resource.data.createdAt >= spaceMemberJoinedAt(spaceId);
+
+        allow create: if canUseSocial()
+          && isSpaceMember(spaceId)
+          && spaceData(spaceId).status == 'active'
+          && validChatMessage(request.resource.data)
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.createdAt >= spaceMemberJoinedAt(spaceId);
+
+        // Mensajes inmutables; el autor puede retirar el suyo mientras el
+        // contexto siga activo. El owner no modera contenido ajeno.
+        allow update: if false;
+        allow delete: if canUseSocial()
+          && isSpaceMember(spaceId)
+          && spaceData(spaceId).status == 'active'
+          && resource.data.authorUid == request.auth.uid
+          && resource.data.createdAt >= spaceMemberJoinedAt(spaceId);
+      }
+    }
+
+    // ── Enlaces de grupo (Sprint 4, ADR-035) ───────────────────────────
+    // El token es el id del documento. Nada de identidades aquí dentro: un
+    // enlace solo dice a qué grupo abre y cómo se llama, así que compartirlo
+    // no revela quién está dentro ni convierte a nadie en buscable.
+    match /spaceLinks/{token} {
+      // Conocer el token (128 bits) ES la prueba de conocimiento: quien
+      // recibe el enlace puede leer el nombre del grupo para decidir si
+      // entra, antes de ser miembro y sin poder leer el espacio.
+      allow get: if signedIn();
+
+      // Jamás enumerable: solo el propietario ACTUAL del grupo lista los
+      // enlaces de su grupo (para volver a compartirlo o revocarlo). Sin
+      // esto, un `list` abierto convertiría cada enlace en descubrible.
+      allow list: if isSpaceOwner(resource.data.spaceId);
+
+      allow create: if canUseSocial()
+        && validSpaceLink(request.resource.data)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt is timestamp
+        // Nacer caducado no tendría sentido y enmascararía un reloj mal
+        // puesto en el cliente.
+        && spaceLinkNotExpired(request.resource.data)
+        && isSpaceOwner(request.resource.data.spaceId)
+        && spaceData(request.resource.data.spaceId).status == 'active'
+        // Solo GRUPOS: una relación reserva una pareja canónica de UID y no
+        // admite un tercero, así que un enlace no tendría a quién admitir.
+        && spaceData(request.resource.data.spaceId).get('kind', 'group') == 'group';
+
+      // Revocar/reactivar y refrescar el rótulo tras renombrar el grupo. El
+      // enlace no cambia nunca de grupo ni de autor; rotar = revocar + crear.
+      allow update: if isSpaceOwner(resource.data.spaceId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'spaceName', 'updatedAt'])
+        && validSpaceLink(request.resource.data)
+        && request.resource.data.spaceId == resource.data.spaceId
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        // La caducidad es inmutable: alargarla a posteriori resucitaría un
+        // enlace ya repartido. Para cambiarla se rota.
+        && request.resource.data.get('expiresAt', null)
+          == resource.data.get('expiresAt', null);
+
+      // Nada destructivo mientras el enlace siga vivo: primero se revoca.
+      allow delete: if isSpaceOwner(resource.data.spaceId)
+        && resource.data.status == 'revoked';
+    }
+
+    // ── Enlaces de TICKET (Sprint 5, ADR-036) ──────────────────────────
+    // Mismo patrón que ADR-035 —el ID del documento ES el secreto— pero
+    // colección aparte: este enlace abre UN ticket, no incorpora a nadie a
+    // ningún grupo. Poseerlo no da acceso al espacio ni a los demás tickets.
+    match /ticketLinks/{token} {
+      // Conocer el token permite ver a qué ticket lleva (solo el comercio),
+      // para poder decidir antes de identificarse.
+      allow get: if signedIn();
+      // Jamás enumerable: solo el dueño de la sesión lista los suyos.
+      allow list: if isOwner(resource.data.sessionId);
+
+      allow create: if canUseSocial()
+        && validTicketLink(request.resource.data)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt is timestamp
+        // No puede nacer caducado (misma política que los de grupo).
+        && (request.resource.data.get('expiresAt', null) == null
+          || request.resource.data.expiresAt > request.time)
+        // Solo el dueño de la sesión del ticket, y con la sesión abierta.
+        && isOwner(request.resource.data.sessionId)
+        && isOpen(request.resource.data.sessionId)
+        // El ticket tiene que existir DONDE dice el enlace: así un enlace no
+        // puede apuntar a un ticket de otra sesión ni a uno inventado.
+        && exists(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId)/accounts/$(request.resource.data.accountId)/tickets/$(request.resource.data.ticketId))
+        // La carrera de consistencia se resuelve AQUÍ, no con un fallback:
+        // un enlace no puede nacer mientras la proyección del ticket no esté
+        // completa, así que jamás existe un enlace que vaya a fallar por
+        // consistencia eventual.
+        && ticketProjectionReady(
+          request.resource.data.sessionId, request.resource.data.ticketId)
+        // El destinatario tiene que participar DE VERDAD en el ticket y ser
+        // ese manual: si no, el enlace nacería sin poder canjearse nunca.
+        && participatesInTicket(
+          request.resource.data.sessionId,
+          request.resource.data.ticketId,
+          request.resource.data.targetPid)
+        && get(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId)/participants/$(request.resource.data.targetPid))
+            .data.get('manualId', '') == request.resource.data.targetManualId;
+
+      // Revocar/reactivar y refrescar el rótulo. El destino es inmutable:
+      // reapuntar un enlace a otro ticket —o a otra persona— sería un
+      // secuestro.
+      allow update: if isOwner(resource.data.sessionId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'merchantName', 'updatedAt'])
+        && request.resource.data.status in ['active', 'revoked']
+        // Los enlaces del esquema 1 ya no pasan `validTicketLink`, pero el
+        // dueño tiene que poder REVOCARLOS: si no, quedarían vivos para
+        // siempre. Solo se les admite eso, nunca reactivarlos.
+        && (validTicketLink(request.resource.data)
+          || (resource.data.get('schemaVersion', 1) == 1
+            && request.resource.data.status == 'revoked'))
+        && request.resource.data.sessionId == resource.data.sessionId
+        && request.resource.data.accountId == resource.data.accountId
+        && request.resource.data.ticketId == resource.data.ticketId
+        && request.resource.data.get('targetPid', '')
+          == resource.data.get('targetPid', '')
+        && request.resource.data.get('targetManualId', '')
+          == resource.data.get('targetManualId', '')
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.get('expiresAt', null)
+          == resource.data.get('expiresAt', null);
+
+      allow delete: if isOwner(resource.data.sessionId)
+        && resource.data.status == 'revoked';
     }
 
     match /spaceInvites/{inviteId} {
       // Ve la invitación su receptor o el owner del espacio.
-      allow read: if canUseSocial()
+      //
+      // Invitar empieza leyendo el documento determinista dentro de la
+      // transacción para ser idempotente (reenviar tras rechazo reutiliza
+      // el doc), y la PRIMERA vez ese documento no existe: sin la rama de
+      // `resource == null` la lectura fallaba con "Null value error" y la
+      // transacción moría antes de escribir. Con el documento ausente se
+      // autoriza por el ID: solo el destinatario y el owner de ESE espacio
+      // pueden sondearlo, así que no hay oráculo de existencia ajeno.
+      allow get: if canParticipate()
+        && (resource == null
+          ? (inviteTargetUid(inviteId) == request.auth.uid
+            || isExistingSpaceOwner(inviteSpaceIdOf(inviteId)))
+          : (resource.data.toUid == request.auth.uid
+            || resource.data.fromUid == request.auth.uid));
+
+      allow list: if canParticipate()
         && (resource.data.toUid == request.auth.uid
           || resource.data.fromUid == request.auth.uid);
 
       // Invita el owner de un espacio ACTIVO a una cuenta con perfil que
       // aún no es miembro. El ID determinista impide duplicados activos.
-      allow create: if isSpaceOwner(request.resource.data.spaceId)
-        && spaceData(request.resource.data.spaceId).status == 'active'
+      allow create: if canUseSocial()
+        && futureSpaceData(request.resource.data.spaceId).ownerUid == request.auth.uid
+        && futureSpaceData(request.resource.data.spaceId).status == 'active'
         && inviteId
           == request.resource.data.spaceId + '_' + request.resource.data.toUid
         && request.resource.data.keys().hasOnly([
@@ -395,31 +1579,51 @@ service cloud.firestore {
         ])
         && request.resource.data.fromUid == request.auth.uid
         && request.resource.data.toUid != request.auth.uid
+        && (futureSpaceData(request.resource.data.spaceId).get('kind', 'group') != 'relationship'
+          || request.resource.data.toUid
+            in futureSpaceData(request.resource.data.spaceId).relationshipUids)
         && request.resource.data.spaceName is string
         && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt is timestamp
+        // A11d: anclada al servidor. `createdAt` dejó de ser un adorno: es
+        // lo que demuestra que una readmisión responde a una decisión
+        // POSTERIOR a la expulsión, así que no puede aportarlo el cliente.
+        && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt is timestamp
-        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.toUid))
+        // El destino debe existir como identidad: cuenta con perfil público
+        // o INVITADO (ADR-034). El invitado no es buscable, así que el
+        // anfitrión llega a él por su identificador, nunca por búsqueda.
+        && (exists(/databases/$(database)/documents/profiles/$(request.resource.data.toUid))
+          || exists(/databases/$(database)/documents/guestIdentities/$(request.resource.data.toUid)))
         && !exists(/databases/$(database)/documents/spaces/$(request.resource.data.spaceId)/members/$(request.resource.data.toUid));
 
-      allow update: if canUseSocial()
+      allow update: if canParticipate()
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'updatedAt'])
+            .hasOnly(['status', 'updatedAt', 'createdAt'])
         && request.resource.data.updatedAt is timestamp
         && (
           // El RECEPTOR acepta (junto al alta de miembro en el batch,
           // validada arriba) o rechaza. Cancelada ya no se puede aceptar.
+          // Nunca toca `createdAt`: aceptar no es una decisión nueva del
+          // anfitrión, y esa fecha es la que fecha SU decisión.
           (resource.data.toUid == request.auth.uid
             && resource.data.status == 'pending'
-            && request.resource.data.status in ['accepted', 'rejected'])
-          // El owner cancela una pendiente o reenvía tras rechazo o
-          // cancelación (reutiliza el doc: sigue sin haber duplicados).
+            && request.resource.data.status in ['accepted', 'rejected']
+            && request.resource.data.createdAt == resource.data.createdAt)
           || (isSpaceOwner(resource.data.spaceId)
             && (
+              // Cancelar una pendiente.
               (resource.data.status == 'pending'
-                && request.resource.data.status == 'cancelled')
-              || (resource.data.status in ['rejected', 'cancelled']
+                && request.resource.data.status == 'cancelled'
+                && request.resource.data.createdAt == resource.data.createdAt)
+              // REENVIAR a quien no es miembro (reutiliza el doc: sigue sin
+              // haber duplicados). A11d añade `accepted` al origen —así se
+              // vuelve a invitar a alguien expulsado, que es como se
+              // readmite— y renueva `createdAt`, porque reenviar es una
+              // decisión NUEVA y tiene que poder demostrarse posterior al
+              // bloqueo vigente.
+              || (resource.data.status in ['rejected', 'cancelled', 'accepted']
                 && request.resource.data.status == 'pending'
+                && request.resource.data.createdAt == request.time
                 && spaceData(resource.data.spaceId).status == 'active'
                 && !exists(/databases/$(database)/documents/spaces/$(resource.data.spaceId)/members/$(resource.data.toUid)))
             ))
@@ -430,9 +1634,20 @@ service cloud.firestore {
         && resource.data.status != 'pending';
     }
 
-    // "Mis espacios": collection group SOLO sobre la propia membresía.
-    match /{path=**}/members/{memberUid} {
+    // M4: bandeja GLOBAL del anfitrión. Collection group acotado al
+    // propietario denormalizado y validado, así que nadie enumera
+    // solicitudes ajenas y la consulta no necesita un get() por documento.
+    match /{path=**}/manualLinkRequests/{requestId} {
       allow read: if canUseSocial()
+        && resource.data.spaceOwnerUid == request.auth.uid;
+    }
+
+    // "Mis contextos": collection group SOLO sobre la propia membresía.
+    // Un INVITADO también lo necesita: sin esta query no tendría forma de
+    // llegar a los grupos de los que YA es miembro (ADR-034 le reconoce la
+    // participación, pero hasta ahora la consulta exigía cuenta).
+    match /{path=**}/members/{memberUid} {
+      allow read: if canParticipate()
         && resource.data.uid == request.auth.uid;
     }
 
@@ -456,6 +1671,16 @@ service cloud.firestore {
         && request.resource.data.splitModeDefault in ['equal', 'byItem']
         && request.resource.data.shareCode is string
         && request.resource.data.shareCode.size() >= 16
+        && (request.resource.data.get('contextModelVersion', 0) == 0
+          || (request.resource.data.contextModelVersion == 1
+            && request.resource.data.spaceId is string
+            && request.resource.data.spaceId != ''
+            && isSpaceMember(request.resource.data.spaceId)
+            // GUEST (ADR-034): origina gasto SOLO si el anfitrión lo permite
+            // en ese contexto. Sin la bandera participa y ve sus balances,
+            // pero no puede crear el gasto.
+            && (!isGuest()
+              || guestsMayCreateExpenses(request.resource.data.spaceId))))
         // Agregados: o ausentes o a cero; a partir de aquí, solo la function.
         && request.resource.data.get('computeVersion', 0) == 0
         && request.resource.data.get('pendingSettlements', 0) == 0
@@ -475,6 +1700,15 @@ service cloud.firestore {
       allow update: if isOwner(sid)
         && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['ownerUid', 'totals', 'balances', 'computeVersion'])
+        && (request.resource.data.get('contextModelVersion', 0) == 0
+          || (request.resource.data.contextModelVersion == 1
+            && request.resource.data.spaceId is string
+            && request.resource.data.spaceId != ''
+            && isSpaceMember(request.resource.data.spaceId)))
+        && (resource.data.get('contextModelVersion', 0) == 0
+          || (request.resource.data.contextModelVersion
+                == resource.data.contextModelVersion
+            && request.resource.data.spaceId == resource.data.spaceId))
         && (
           // Abierta: cualquier edición de contenido.
           resource.data.status == 'open'
@@ -498,8 +1732,199 @@ service cloud.firestore {
       }
 
       // ── Participantes ──────────────────────────────────────────────────
-      match /participants/{pid} {
+      // ── Identificación TEMPORAL por enlace de ticket (ADR-036) ───────
+      // Dice «este dispositivo actúa, para ESTE ticket, como el participante
+      // MANUAL pid». NO es vinculación: no escribe `linkedUid`, no cambia el
+      // actor económico (`manual:{id}` sigue intacto) y recompute nunca la
+      // lee. Borrarla no altera un solo balance.
+      //
+      // OJO al diseño: reclamar por `claimedByDevice` habría sido más corto
+      // y catastrófico — recompute da PRECEDENCIA a esa vía sobre `manualId`
+      // (recompute.ts), así que habría migrado el actor a un UID por la
+      // puerta de atrás, que es justo lo que el sprint de vinculación tiene
+      // que decidir con un ADR propio.
+      match /ticketAccess/{accessId} {
+        // Solo su titular la lee. Nadie audita quién dice ser quién — ni
+        // siquiera el dueño de la sesión, que sí puede BORRARLA.
+        allow get: if canParticipate()
+          && accessId == resource.data.ticketId + '_' + request.auth.uid;
+        allow list: if false;
+
+        // Poseer el enlace NO basta para leer: hay que representar a alguien
+        // del ticket. O bien se es un participante ya reclamado por este UID
+        // (cuenta o invitado conocido), o bien se elige un MANUAL válido y se
+        // toma su cerrojo. No hay lectura anónima previa.
+        allow create, update: if canParticipate()
+          && accessId == request.resource.data.ticketId + '_' + request.auth.uid
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'token', 'ticketId', 'pid', 'manualId', 'createdAt',
+             'schemaVersion'])
+          && request.resource.data.keys().hasAll(
+            ['uid', 'token', 'ticketId', 'pid', 'createdAt', 'schemaVersion'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.schemaVersion == 1
+          // El enlace manda: vivo y de ESTE ticket.
+          && ticketLinkUsable(request.resource.data.token)
+          && ticketLinkData(request.resource.data.token).sessionId == sid
+          && ticketLinkData(request.resource.data.token).ticketId
+            == request.resource.data.ticketId
+          // AUTORITATIVO: el pid participa de verdad en el ticket, según la
+          // proyección que escribe recompute. No se confía en el enlace.
+          && participatesInTicket(
+            sid, request.resource.data.ticketId, request.resource.data.pid)
+          && (
+            // (a) Ya es suyo: cuenta o invitado que reclamó ese participante.
+            (participantData(sid, request.resource.data.pid)
+                .get('claimedByDevice', '') == request.auth.uid
+              && request.resource.data.get('manualId', '') == '')
+            // (b) Se identifica como el MANUAL DESTINATARIO del enlace.
+            || (
+              request.resource.data.get('manualId', '') != ''
+              // El token manda: `manualId` y `pid` han de ser los suyos. Sin
+              // esto, cualquier manual del ticket era reclamable con
+              // cualquier enlace del ticket.
+              && isTicketLinkTarget(request.resource.data)
+              && participantData(sid, request.resource.data.pid)
+                  .get('manualId', '') == request.resource.data.manualId
+              && participantData(sid, request.resource.data.pid)
+                  .get('active', true) == true
+              // Ya vinculado de forma definitiva (Sprint 6) ⇒ no elegible.
+              && !manualIsLinked(request.resource.data)
+              // Cerrojo del MISMO batch y a nombre propio.
+              && getAfter(/databases/$(database)/documents/sessions/$(sid)/ticketClaims/$(request.resource.data.ticketId + '_' + request.resource.data.manualId))
+                  .data.uid == request.auth.uid
+            )
+          );
+
+        // Recuperación: la suelta su titular, o la retira el DUEÑO de la
+        // sesión cuando alguien se ha identificado por error o de mala fe.
+        allow delete: if (canParticipate()
+            && accessId == resource.data.ticketId + '_' + request.auth.uid)
+          || isOwner(sid);
+      }
+
+      // Cerrojo determinista por (ticket, MANUAL): su ID hace imposible que
+      // existan dos. El primero que escribe gana; el segundo recibe
+      // permission-denied y la app lo presenta como «ya no disponible».
+      //
+      // El «primero gana» NO deja al verdadero MANUAL bloqueado: el dueño de
+      // la sesión puede liberar el cerrojo (y la prueba), y revocar o rotar
+      // el enlace invalida todas las identificaciones de golpe, porque se
+      // revalida en cada lectura.
+      match /ticketClaims/{claimId} {
+        allow get: if canParticipate()
+          && (resource == null || resource.data.uid == request.auth.uid);
+        allow list: if isOwner(sid);
+
+        allow create: if canParticipate()
+          && request.resource.data.keys().hasOnly(
+            ['uid', 'ticketId', 'manualId', 'createdAt', 'schemaVersion'])
+          && request.resource.data.uid == request.auth.uid
+          && claimId == request.resource.data.ticketId + '_'
+            + request.resource.data.manualId
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.schemaVersion == 1;
+
+        allow update: if canParticipate()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.ticketId == resource.data.ticketId
+          && request.resource.data.manualId == resource.data.manualId;
+
+        allow delete: if (canParticipate()
+            && resource.data.uid == request.auth.uid)
+          || isOwner(sid);
+      }
+
+      // Proyección autoritativa de participación por ticket (ADR-036). La
+      // escribe SOLO recompute (Admin); ningún cliente la toca. Se lee para
+      // que el dueño pueda preparar el enlace.
+      match /ticketParticipants/{projectionId} {
         allow read: if canRead(sid);
+        allow write: if false;
+      }
+
+      // Señal de proyección preparada. La escribe SOLO recompute (Admin); el
+      // dueño la lee para saber cuándo puede compartir el enlace.
+      match /ticketParticipantProjections/{ticketId} {
+        allow read: if canRead(sid);
+        allow write: if false;
+      }
+
+      // Derecho histórico por ticket (A11d). La escribe SOLO recompute
+      // (Admin) y NUNCA la retira: es la prueba de que un UID participó
+      // económicamente en ese ticket alguna vez. Lleva `accountId` para que
+      // quien ya no es miembro pueda llegar al ticket por GET determinista
+      // —sin listar las cuentas del grupo— y `participantNames` con los
+      // nombres de ESE ticket, porque un reparto sin nombres detrás de cada
+      // `pid` es ilegible y abrir el censo entero de la sesión sería mucho
+      // más de lo que necesita para auditar SU deuda.
+      match /ticketEntitlements/{entitlementId} {
+        allow read: if canRead(sid)
+          || (canParticipate() && resource.data.uid == request.auth.uid);
+        allow write: if false;
+      }
+
+      // ── Evidencia de ELIMINACIÓN de un gasto (A2, ADR-040) ─────────────
+      // «Este ticket fue eliminado por esta persona en este momento», y nada
+      // más. NO es papelera, NO restaura y NO concede lectura de lo
+      // borrado: el ticket deja de existir de verdad.
+      //
+      // Existe por la misma razón que `removals` en A11d: el trigger de
+      // borrado recibe el cambio NETO del commit (`after` vacío), así que
+      // firmar el ticket y borrarlo en el mismo batch no dejaría ver la
+      // firma y P6 atribuiría el borrado al dueño de la sesión — falsamente
+      // en cuanto quien borra es un administrador del grupo. El actor tiene
+      // que viajar en un documento propio que sobreviva al borrado.
+      match /ticketRemovals/{removedTid} {
+        // Lo ven quienes ya podían ver el gasto: dueño, su invitado y el
+        // GRUPO que lo auditaba. No abre nada nuevo.
+        allow read: if canRead(sid) || auditableByGroup(sid);
+
+        allow create: if isOpen(sid)
+          && request.resource.data.keys().hasOnly([
+            'ticketId', 'accountId', 'merchantName', 'grandTotal',
+            'removedBy', 'removedAt', 'schemaVersion'])
+          && request.resource.data.keys().hasAll([
+            'ticketId', 'accountId', 'merchantName', 'grandTotal',
+            'removedBy', 'removedAt', 'schemaVersion'])
+          && request.resource.data.ticketId == removedTid
+          // Actor y hora los pone el servidor: una auditoría no acepta
+          // ninguno de los dos de manos del cliente.
+          && request.resource.data.removedBy == request.auth.uid
+          && request.resource.data.removedAt == request.time
+          && request.resource.data.schemaVersion == 1
+          // El ticket existía ANTES y ya no existe DESPUÉS: ni evidencia sin
+          // borrado, ni borrado sin evidencia (la otra mitad la exige la
+          // regla de `delete` del ticket).
+          && exists(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+          && !existsAfter(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+          // El resumen no se declara: se copia del ticket y se comprueba.
+          // Sin esto, la actividad podría contar un importe inventado.
+          && request.resource.data.grandTotal
+            == get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+                .data.grandTotal
+          && request.resource.data.merchantName
+            == get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+                .data.get('merchant', {}).get('name', '')
+          // Misma autoridad que el borrado, comprobada sobre el ticket real.
+          && (isOwner(sid)
+            || managesGroupOf(
+              get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(request.resource.data.accountId)/tickets/$(removedTid))
+                .data.get('spaceId', '')));
+
+        // Inmutable: es la única fuente con la que P6 puede atribuir el
+        // borrado, y un trigger reintentado debe leer siempre lo mismo.
+        allow update, delete: if false;
+      }
+
+      match /participants/{pid} {
+        // El enlace de ticket NO abre los participantes: los nombres de los
+        // demás no son suyos. Rules sí los consulta internamente con get()
+        // para validar una identificación. El GRUPO sí los ve: sin el
+        // nombre detrás de cada `pid` el reparto es ilegible (A11b).
+        allow read: if canRead(sid) || auditableByContext(sid);
         allow create: if isOwner(sid) && isOpen(sid);
         allow delete: if isOwner(sid) && isOpen(sid);
         allow update: if
@@ -521,7 +1946,10 @@ service cloud.firestore {
 
       // ── Cuentas ────────────────────────────────────────────────────────
       match /accounts/{aid} {
-        allow read: if canRead(sid);
+        // El grupo las lee para LLEGAR al ticket: un ticket vive en
+        // `accounts/{aid}/tickets/{tid}` y las superficies que enlazan a él
+        // solo tienen `sessionId` + `ticketId` (A11b).
+        allow read: if canRead(sid) || auditableByContext(sid);
         allow create: if isOwner(sid) && isOpen(sid)
           && !('totals' in request.resource.data);
         allow update: if isOwner(sid) && isOpen(sid)
@@ -530,24 +1958,135 @@ service cloud.firestore {
         allow delete: if isOwner(sid) && isOpen(sid);
 
         match /tickets/{tid} {
-          allow read: if canRead(sid);
+          // Enlace de ticket: SOLO el ticket del enlace. Ni los demás
+          // tickets de la sesión, ni la sesión, ni el espacio.
+          // A11d: y quien ya no es miembro conserva EXACTAMENTE los tickets
+          // en los que participó económicamente, ni uno más.
+          allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
+            || auditableByContext(sid) || hasTicketHistory(sid, tid);
           // spaceId (P4): un ticket pertenece a UN espacio como máximo y
           // solo puede vincularlo el dueño de la sesión a un espacio del
           // que sea miembro. '' o ausente = sin espacio (compatibilidad).
           allow create, update: if isOwner(sid) && isOpen(sid)
             && request.resource.data.grandTotal is int
             && request.resource.data.paidByParticipantId is string
+            // A19: el picking se escribe por su propia puerta, también para
+            // el dueño. Por esta rama podría vaciar `open` de golpe y dar
+            // por cerrado un reparto que nadie ha terminado, o reescribir la
+            // economía congelada. Al CREAR sí lo escribe: es cuando se
+            // siembra, y ahí no hay nada anterior que falsear.
+            && (resource == null
+              || !request.resource.data.diff(resource.data)
+                   .affectedKeys().hasAny(['picking']))
+            && (futureSessionData(sid).get('contextModelVersion', 0) == 0
+              || (request.resource.data.get('contextModelVersion', 0) == 1
+                && request.resource.data.spaceId
+                  == futureSessionData(sid).spaceId))
             && (request.resource.data.get('spaceId', '') == ''
               || (request.resource.data.spaceId is string
                 && isSpaceMember(request.resource.data.spaceId)));
-          allow delete: if isOwner(sid) && isOpen(sid);
+
+          // A19: terminar de elegir, o volver a quedar abierto. Una entrada
+          // del mapa por escritura: la propia o —con la autoridad de A10— la
+          // de otra persona. Un MANUAL no puede pulsar nada y quien se fue a
+          // casa tampoco, así que sin esto un solo ausente dejaría las
+          // cuentas del grupo bloqueadas para siempre.
+          allow update: if onlyPickingChanged()
+            && isOpen(sid)
+            && validPickingWrite()
+            && (claimedBy(sid, pickingTarget()) == request.auth.uid
+              || isOwner(sid)
+              || managesGroupOf(resource.data.get('spaceId', '')));
+
+          // A11c: quien administra el grupo CORRIGE el ticket ajeno, y solo
+          // eso. Lista blanca estrecha: comercio, fecha, hora, total y la
+          // firma de la corrección. Fuera quedan `spaceId` (mover el gasto
+          // de grupo), `paidByParticipantId` (decidir quién pagó) y
+          // cualquier campo que no sea el contenido que se corrige.
+          //
+          // La firma es obligatoria y no se puede falsear: el actor es
+          // quien escribe y la fecha la pone el servidor. Sin esto, un
+          // gasto podía cambiar de importe sin que nadie pudiera explicar
+          // después quién lo cambió.
+          allow update: if request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['merchant', 'date', 'time', 'grandTotal',
+                  'lastEditedByUid', 'lastEditedAt'])
+            && request.resource.data.lastEditedByUid == request.auth.uid
+            && request.resource.data.lastEditedAt == request.time
+            && request.resource.data.spaceId == resource.data.spaceId
+            && request.resource.data.grandTotal is int
+            && request.resource.data.grandTotal >= 0
+            && isOpen(sid)
+            && managesGroupOf(resource.data.get('spaceId', ''));
+
+          // A2: eliminar el gasto. Lo hace su creador —que en este modelo es
+          // el dueño de la sesión: nadie más puede crear tickets— y quien
+          // administra el GRUPO del que nació el gasto. Una relación no
+          // adquiere autoridad administrativa: `managesGroupOf` la excluye,
+          // así que la contraparte no puede borrar el ticket de la otra.
+          //
+          // Exige la evidencia del actor en el MISMO commit: sin ella el
+          // borrado se deniega, y por tanto P6 nunca recibe un borrado que
+          // no pueda atribuir. Cerrada = solo lectura, igual que A11c.
+          allow delete: if isOpen(sid)
+            && (isOwner(sid) || managesGroupOf(resource.data.get('spaceId', '')))
+            && existsAfter(/databases/$(database)/documents/sessions/$(sid)/ticketRemovals/$(tid))
+            && getAfter(/databases/$(database)/documents/sessions/$(sid)/ticketRemovals/$(tid))
+                .data.accountId == aid;
 
           match /lines/{lid} {
-            allow read: if canRead(sid);
-            allow create, delete: if isOwner(sid) && isOpen(sid);
-            allow update: if (isOwner(sid) && isOpen(sid))
-              || guestCanEditLine(sid, aid, tid)
-              || guestCanEditUnit(sid, aid, tid);
+            // Productos, cantidades, precios y reparto: el cuerpo de la
+            // auditoría. El grupo LEE; escribir sigue siendo del dueño de
+            // la sesión o del invitado sobre SU propia asignación (A11b).
+            allow read: if canRead(sid) || hasTicketAccessTo(sid, tid)
+              || auditableByContext(sid) || hasTicketHistory(sid, tid);
+            allow create: if isOwner(sid) && isOpen(sid);
+
+            // Retirar un producto que no estaba (A11c). Con él se van sus
+            // asignaciones —el documento entero desaparece—, y por eso la
+            // app lo pregunta antes; aquí solo se comprueba la autoridad.
+            allow delete: if (isOwner(sid) && isOpen(sid))
+              || (isOpen(sid) && managesTicket(sid, aid, tid));
+
+            // Dos familias que no se mezclan: repartir el consumo y
+            // corregir el contenido. El discriminante barato elige una sola,
+            // así que ningún camino —permitido o denegado— paga las lecturas
+            // de la otra. Repartir NUNCA puede colar un cambio de nombre,
+            // cantidad, precio o `unitIds`: la rama entera exige que lo
+            // único tocado sea `assignment`.
+            //
+            // El dueño de la sesión ya NO tiene una rama libre bajo el
+            // modelo por unidades: su autoridad es anterior a A10, pero
+            // autoridad amplia no es permiso para escribir un documento sin
+            // forma. Con la rama libre podía dejar «u0 → Jorge» sin decir
+            // quién lo puso: no falsificaba a nadie, borraba la procedencia.
+            // Ahora reparte por la misma puerta que los demás. El reparto
+            // histórico por pesos se queda exactamente como estaba.
+            allow update: if onlyAssignmentChanged()
+              ? (usesUnitModel()
+                // La reapertura se comprueba AL FINAL, no al principio: así
+                // el camino de denegación —que ya recorre las dos familias
+                // de autoridad— no paga además el `getAfter`. Comprobarla
+                // primero agotaba las 1000 expresiones justo en el caso más
+                // caro: un miembro sin autoridad asignando a un tercero.
+                // La FORMA de la escritura se comprueba UNA vez, aquí: antes
+                // la evaluaban las dos funciones de autoridad por separado y
+                // el camino de A10 —que las recorre las dos— pagaba
+                // `validUnitWrite` dos veces. Con eso, añadir la
+                // comprobación de reapertura agotaba las 1000 expresiones.
+                // Izarla no cambia qué se permite: ambas la exigían con el
+                // mismo argumento.
+                ? (validUnitWrite(
+                     request.resource.data.assignment.get('lastEditorPid', ''))
+                  && reopensPicking(sid, aid, tid)
+                  && (canPickOwnUnit(sid, aid, tid)
+                  || canAssignWithProvenance(sid, aid, tid)))
+                : ((isOwner(sid) && isOpen(sid))
+                  || canPickOwnShare(sid, aid, tid)))
+              : ((isOwner(sid) && isOpen(sid)
+                  && (!usesUnitModel() || unitsOnlyPruned()))
+                || canCorrectLine(sid, aid, tid));
           }
         }
       }
@@ -602,10 +2141,114 @@ service cloud.firestore {
       }
     }
 
-    // Autoasignación de línea por invitado (ver cabecera del archivo).
-    // P2.1: el peso son UNIDADES reclamadas (1..unidades de la línea, según
-    // quantityMilli entero); en líneas de una unidad sigue siendo 1.
-    function guestCanEditLine(sid, aid, tid) {
+    // ── Elegir MI propio consumo ────────────────────────────────────────
+    // Autoasignación de línea (ver cabecera del archivo). P2.1: el peso son
+    // UNIDADES reclamadas (1..unidades de la línea, según quantityMilli
+    // entero); en líneas de una unidad sigue siendo 1.
+    //
+    // Quién puede: quien participa en el reparto de ese gasto. Eso es el
+    // invitado del enlace (siempre lo fue) y, desde A11b, el miembro del
+    // grupo dentro del cual nació la sesión: puede abrir el ticket ajeno,
+    // así que debe poder decir qué consumió, igual que diría «esto lo pedí
+    // yo» en la mesa. NO es permiso de edición: el resto de la función lo
+    // acota a una sola cosa —cambiar SU entrada del mapa, y solo del campo
+    // `assignment`— y la identidad se comprueba contra el mismo criterio de
+    // siempre: `claimedBy(pid) == mi uid`. Un participante MANUAL, que no
+    // reclama nada, sigue sin poder ser elegido por nadie.
+    function participatesInSplit(sid) {
+      return hasGuestAccess(sid) || auditableByContext(sid);
+    }
+
+    // ¿La escritura toca SOLO el reparto? Discriminante barato que decide
+    // qué familia de reglas se evalúa. Sin él, una corrección de contenido
+    // recorría además las tres funciones de reparto —con sus get()— y una
+    // denegación agotaba el presupuesto de 1000 expresiones de Rules: el
+    // rechazo llegaba como «Unable to evaluate the expression», que no es
+    // una denegación, es quedarse sin gasolina a mitad.
+    function onlyAssignmentChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['assignment']);
+    }
+
+    // ── A19: cerrar y reabrir la elección de consumo ─────────────────────
+    // Un ticket bajo el protocolo nuevo solo acepta un cambio de reparto si,
+    // TRAS el commit, el pid afectado sigue abierto. Así es imposible que un
+    // «he terminado» sobreviva a un cambio de la selección que declaraba, y
+    // por tanto imposible que una economía firme se apoye en un reparto que
+    // ya no es el que se cerró.
+    //
+    // UN SOLO acceso de documento, y es deliberado: con `get` + `getAfter`
+    // el camino de A10 agota el presupuesto de 1000 expresiones (medido). El
+    // «after» sirve para las dos preguntas porque `pickingModelVersion` no
+    // cambia en una escritura de reparto.
+    function reopensPicking(sid, aid, tid) {
+      let after = getAfter(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      return after.get('pickingModelVersion', 0) != 1
+        || after.get('picking', {}).get('open', {})
+             .get(request.resource.data.assignment.get('lastEditorPid', ''), false) == true;
+    }
+
+    function onlyPickingChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['picking']);
+    }
+
+    function pickingTarget() {
+      return request.resource.data.picking.get('lastTarget', '');
+    }
+
+    // Forma de UNA escritura de picking: una sola persona, y nada más.
+    //
+    // La huella y la economía congelada son del SERVIDOR. Si un cliente
+    // pudiera tocar la huella, fingiría que la topología no cambió y dejaría
+    // firme un reparto que acaba de perder unidades; si pudiera tocar
+    // `firmContribution`, reescribiría a mano cuánto debe cada cual en un
+    // ticket reabierto, que es justo la deuda que sostiene los pagos ya
+    // cobrados.
+    function validPickingWrite() {
+      let now = request.resource.data.picking;
+      let old = resource.data.get('picking', {});
+      let target = pickingTarget();
+      return request.resource.data.get('pickingModelVersion', 0) == 1
+        && target != ''
+        && now.keys().hasOnly(
+             ['open', 'lastTarget', 'fingerprint', 'firmContribution'])
+        && now.get('fingerprint', '') == old.get('fingerprint', '')
+        && now.get('firmContribution', {}) == old.get('firmContribution', {})
+        && now.get('open', {}).diff(old.get('open', {}))
+             .affectedKeys().hasOnly([target]);
+    }
+
+    // El modelo por UNIDADES (P2.2) y el histórico por pesos se excluyen
+    // mutuamente según lo que ya hay guardado, así que preguntarlo primero
+    // hace que solo se evalúe la familia que puede aplicar.
+    function usesUnitModel() {
+      return resource.data.get('assignment', {}).get('schemaVersion', 0) == 2;
+    }
+
+    // Corregir el CONTENIDO puede podar las unidades que dejan de existir, y
+    // nada más: el reparto solo pierde lo que se lleva la poda. Con esto,
+    // colar una asignación en la misma escritura que un nombre o un precio
+    // deja de ser una vía —también para el dueño de la sesión, que es quien
+    // tenía la rama sin validar—. Vale para el modelo por unidades y para el
+    // histórico por pesos, que aquí solo puede quedarse igual.
+    function unitsOnlyPruned() {
+      let pruned = resource.data.get('unitIds', [])
+        .removeAll(request.resource.data.get('unitIds', []));
+      let old = resource.data.get('assignment', {});
+      let now = request.resource.data.get('assignment', {});
+      return now.get('type', '') == old.get('type', '')
+        && now.get('schemaVersion', 0) == old.get('schemaVersion', 0)
+        && now.get('units', {}).diff(old.get('units', {}))
+            .affectedKeys().hasOnly(pruned)
+        // La procedencia sigue a su asignación (A10): ni firma huérfana, ni
+        // ocasión de reescribir la de una unidad que sobrevive.
+        && now.get('by', {}).diff(old.get('by', {}))
+            .affectedKeys().hasOnly(pruned)
+        && now.get('participants', {}) == old.get('participants', {});
+    }
+
+    function canPickOwnShare(sid, aid, tid) {
       let session = sessionData(sid);
       let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
       let mode = ticket.get('splitModeOverride', session.splitModeDefault);
@@ -614,11 +2257,9 @@ service cloud.firestore {
       let newParts = request.resource.data.assignment.get('participants', {});
       let weight = newParts.get(editor, 1);
       let quantityMilli = request.resource.data.get('quantityMilli', 1000);
-      return hasGuestAccess(sid)
+      return participatesInSplit(sid)
         && session.status == 'open'
         && mode == 'byItem'
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['assignment'])
         // Solo cambió SU entrada del mapa de participantes…
         && editor != ''
         && newParts.diff(oldParts).affectedKeys().hasOnly([editor])
@@ -636,36 +2277,149 @@ service cloud.firestore {
     // P2.2: un invitado cambia únicamente SU pertenencia a UNA unidad. El
     // mapa anidado permite que dos dispositivos compartan la misma unidad sin
     // sobrescribirse; unitIds limita los identificadores creados por el owner.
-    function guestCanEditUnit(sid, aid, tid) {
-      let session = sessionData(sid);
-      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
-      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+    // ── Forma de UNA escritura por unidad (P2.2 + A10) ──────────────────
+    // Toda la parte que NO depende de quién escribe: se toca una sola
+    // unidad, una sola persona dentro de ella, la unidad existe, el reparto
+    // no cambia de modelo y la procedencia queda firmada. Compartida por la
+    // autoselección y por la asignación administrativa para no evaluar dos
+    // veces lo mismo (presupuesto de Rules).
+    function validUnitWrite(target) {
       let assignment = request.resource.data.assignment;
-      let editor = assignment.get('lastEditorPid', '');
       let unitKey = assignment.get('lastEditedUnit', '');
       let oldUnits = resource.data.assignment.get('units', {});
       let newUnits = assignment.get('units', {});
       let oldMembers = oldUnits.get(unitKey, {});
       let newMembers = newUnits.get(unitKey, {});
-      let selected = newMembers.get(editor, false);
-      return hasGuestAccess(sid)
-        && session.status == 'open'
-        && mode == 'byItem'
-        && resource.data.assignment.get('schemaVersion', 0) == 2
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['assignment'])
+      let selected = newMembers.get(target, false);
+      let oldBy = resource.data.assignment.get('by', {});
+      let newBy = assignment.get('by', {});
+      let oldByUnit = oldBy.get(unitKey, {});
+      let newByUnit = newBy.get(unitKey, {});
+      return usesUnitModel()
         && assignment.keys().hasOnly([
-          'type', 'schemaVersion', 'units', 'lastEditorPid', 'lastEditedUnit'
+          'type', 'schemaVersion', 'units', 'by',
+          'lastEditorPid', 'lastEditedUnit'
         ])
         && assignment.type == 'units'
         && assignment.schemaVersion == 2
-        && editor != ''
+        && target != ''
         && unitKey != ''
         && resource.data.get('unitIds', ['u0']).hasAny([unitKey])
         && newUnits.diff(oldUnits).affectedKeys().hasOnly([unitKey])
-        && newMembers.diff(oldMembers).affectedKeys().hasOnly([editor])
+        && newMembers.diff(oldMembers).affectedKeys().hasOnly([target])
         && selected is bool
-        && claimedBy(sid, editor) == request.auth.uid;
+        // ── Procedencia (A10) ──────────────────────────────────────────
+        // Quién asignó ESTA unidad a ESTA persona, ligado al par y no a la
+        // línea: una firma global se destruiría en cuanto otra persona
+        // tocara otra unidad. El actor lo pone el servidor —`request.auth`—,
+        // así que un cliente no puede atribuirle a otro lo que hace él. Al
+        // retirar la asignación se retira también la firma: nunca queda un
+        // actor sin asignación detrás.
+        && newBy.diff(oldBy).affectedKeys().hasOnly([unitKey])
+        && newByUnit.diff(oldByUnit).affectedKeys().hasOnly([target])
+        && (selected
+          ? (oldMembers.get(target, false) == true
+            // La asignación ya existía: su procedencia NO se reescribe.
+            // Cambiar la firma de una asignación viva convertiría «me lo
+            // asignó Edgar» en «me lo puse yo», que es exactamente lo que
+            // A10 promete poder distinguir.
+            ? newByUnit.get(target, '') == oldByUnit.get(target, '')
+            // Asignación nueva: la firma es OPCIONAL aquí y OBLIGATORIA al
+            // asignar a otra persona (ver `canAssignWithProvenance`). Así la
+            // web de invitados —que solo se marca a sí misma y no la
+            // escribe— sigue funcionando, y el invariante se mantiene: si no
+            // hay firma, la asignación es una autoselección.
+            : newByUnit.get(target, request.auth.uid) == request.auth.uid)
+          // Se retira: la procedencia se va con su asignación.
+          : !(target in newByUnit));
+    }
+
+    function canPickOwnUnit(sid, aid, tid) {
+      let session = sessionData(sid);
+      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+      let editor = request.resource.data.assignment.get('lastEditorPid', '');
+      return participatesInSplit(sid)
+        && session.status == 'open'
+        && mode == 'byItem'
+        && claimedBy(sid, editor) == request.auth.uid
+        // A4: quien ya no participa en el reparto tampoco se elige a sí
+        // mismo. `recompute` reparte sobre los ACTIVOS y descarta al resto,
+        // así que sin esto la pantalla pintaba un consumidor que el dinero
+        // no reconocía y la unidad acababa recayendo en quien pagó: dos
+        // versiones del mismo gasto. Asignar a un inactivo ya estaba
+        // prohibido (`canAssignWithProvenance`); esto cierra la simetría.
+        && participantData(sid, editor).get('active', true) == true;
+    }
+
+    // ── Asignar el consumo de OTRA persona (A10) ─────────────────────────
+    // Quien administra el GRUPO del que nació el gasto reparte lo que sabe
+    // que consumió cada cual, sin esperar a que cada persona entre a
+    // reclamarlo — y sin que eso le dé nada sobre el CONTENIDO del ticket:
+    // esta rama solo se alcanza cuando la escritura toca únicamente
+    // `assignment`, así que el nombre, la cantidad y el precio siguen
+    // siendo territorio de A11c.
+    //
+    // El creador del gasto pasa por AQUÍ. Podía repartir desde antes de A10
+    // —esa autoridad no se le quita: se asigna a sí mismo, a terceros y a
+    // manuales, comparte, retira y reasigna—, pero tiene que hacerlo con
+    // una escritura válida del protocolo. Su rama antigua no validaba forma
+    // y con ella un cliente modificado suyo podía dejar una asignación sin
+    // firma: sin poder atribuírsela a nadie más, pero sin procedencia.
+    //
+    // Una RELACIÓN no da jerarquía: `managesGroupOf` la excluye a propósito.
+    // Cada cual elige lo suyo y quien subió el gasto reparte como dueño de
+    // la sesión, que es exactamente lo que ya podía hacer.
+    function canAssignWithProvenance(sid, aid, tid) {
+      let session = sessionData(sid);
+      let ticket = get(/databases/$(database)/documents/sessions/$(sid)/accounts/$(aid)/tickets/$(tid)).data;
+      let mode = ticket.get('splitModeOverride', session.splitModeDefault);
+      let assignment = request.resource.data.assignment;
+      let target = assignment.get('lastEditorPid', '');
+      let unitKey = assignment.get('lastEditedUnit', '');
+      let selected = assignment.get('units', {}).get(unitKey, {})
+        .get(target, false);
+      return session.status == 'open'
+        && mode == 'byItem'
+        // Asignar el consumo de otra persona SIEMPRE queda firmado: es la
+        // diferencia entre «Jorge se marcó esto» y «se lo asignó Edgar», y
+        // sin ella el reparto de un grupo no se puede explicar después.
+        && (!selected
+          || assignment.get('by', {}).get(unitKey, {}).get(target, '')
+            == request.auth.uid)
+        // El destinatario tiene que ser alguien del reparto, no un `pid`
+        // inventado, y seguir activo para recibir consumo NUEVO. Lo que ya
+        // estuviera asignado no se toca por dejar de estarlo.
+        && exists(/databases/$(database)/documents/sessions/$(sid)/participants/$(target))
+        && participantData(sid, target).get('active', true) == true
+        && (isOwner(sid) || managesGroupOf(ticket.get('spaceId', '')));
+    }
+
+    // ── Corregir el CONTENIDO de un producto (A11c) ──────────────────────
+    // Quien administra el grupo arregla lo que se leyó mal: el nombre, la
+    // cantidad, el precio. Lo que NO puede es repartir el consumo de los
+    // demás —eso es A10 y tiene su propia puerta, con su firma—, así que por
+    // aquí el reparto solo puede PERDER las unidades que dejan de existir;
+    // las que siguen vivas quedan intactas y nadie entra ni sale del consumo
+    // ajeno por esta vía.
+    function canCorrectLine(sid, aid, tid) {
+      let newUnitIds = request.resource.data.get('unitIds', []);
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'quantityMilli', 'unitPrice', 'totalPrice',
+            'unitIds', 'assignment'])
+        && isOpen(sid)
+        && managesTicket(sid, aid, tid)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.totalPrice is int
+        && request.resource.data.totalPrice >= 0
+        && request.resource.data.get('quantityMilli', 1000) is int
+        && request.resource.data.get('quantityMilli', 1000) > 0
+        // Ni cambia de modelo de reparto, ni inventa unidades, ni reparte:
+        // el reparto solo puede PERDER lo que se lleva la poda.
+        && request.resource.data.assignment.get('units', {})
+            .keys().hasOnly(newUnitIds)
+        && unitsOnlyPruned();
     }
   }
 }

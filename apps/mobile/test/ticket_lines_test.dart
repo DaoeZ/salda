@@ -241,16 +241,23 @@ void main() {
     });
   });
 
-  group('detalle del ticket: el creador selecciona (P2.1)', () {
-    testWidgets('línea de 1 unidad: tap reclama y muestra quién la tiene', (
+  group('detalle del ticket: el creador reparte (P2.1 + A10)', () {
+    // Desde A10, quien tiene autoridad sobre el gasto no se marca a sí mismo
+    // con un toque a ciegas: abre el reparto de esa unidad y decide quién
+    // consume, él incluido. Es la misma escritura por unidad de siempre.
+    testWidgets('línea de 1 unidad: el creador abre el reparto y se suma', (
       tester,
     ) async {
       final fake = await _seed();
       await _pump(tester, fake);
 
-      // La pizza (unidad 1) la tiene Alba; el creador se suma con un toque.
+      // La pizza (unidad 1) la tiene Alba.
       expect(find.text('Unidad 1: Alba'), findsOneWidget);
       await tester.tap(find.text('Pizza'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('¿Quién consume la unidad 1?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Edgar'));
       await tester.pumpAndSettle();
 
       final assignment =
@@ -258,17 +265,24 @@ void main() {
               as Map<String, dynamic>;
       expect(assignment['type'], 'units');
       expect((assignment['units'] as Map)['u0'], {'p2': true, 'p1': true});
-      expect(find.text('Unidad 1: Alba, Edgar'), findsOneWidget);
+      // Pero marcarse a UNO MISMO no deja procedencia (A3): la firma cuenta
+      // quién te asignó algo, y aquí no le asignó nadie nada a nadie. Su
+      // ausencia es el dato: las Rules leen eso como autoselección.
+      expect(((assignment['by'] as Map?)?['u0'] as Map?)?['p1'], isNull);
     });
 
-    testWidgets('línea multi-unidad: el stepper reclama unidades sueltas', (
+    testWidgets('línea multi-unidad: cada unidad se reparte por separado', (
       tester,
     ) async {
       final fake = await _seed();
       await _pump(tester, fake);
 
-      // 2 flautas: el creador marca explícitamente la unidad 1.
+      // 2 flautas: el creador se pone la unidad 1…
       await tester.tap(find.byType(FilterChip).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Edgar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Listo'));
       await tester.pumpAndSettle();
 
       var assignment =
@@ -276,16 +290,17 @@ void main() {
               as Map<String, dynamic>;
       expect((assignment['units'] as Map)['u0'], {'p1': true});
 
-      // Y comparte la unidad 2 de forma independiente.
+      // …y la unidad 2 se la asigna a OTRA persona, que es lo que A10 añade.
       await tester.tap(find.byType(FilterChip).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Alba'));
       await tester.pumpAndSettle();
       assignment =
           (await fake.doc('$_ticketPath/lines/l1').get()).data()!['assignment']
               as Map<String, dynamic>;
       expect((assignment['units'] as Map)['u0'], {'p1': true});
-      expect((assignment['units'] as Map)['u1'], {'p1': true});
-      expect(find.textContaining('Unidad 1: Edgar'), findsOneWidget);
-      expect(find.textContaining('Unidad 2: Edgar'), findsOneWidget);
+      expect((assignment['units'] as Map)['u1'], {'p2': true});
+      expect(((assignment['by'] as Map)['u1'] as Map)['p2'], 'owner');
     });
 
     testWidgets('sesión cerrada: sin selección posible', (tester) async {
@@ -295,6 +310,21 @@ void main() {
 
       expect(find.byType(FilterChip), findsNothing);
       expect(find.byIcon(Icons.circle_outlined), findsNothing);
+    });
+
+    // A4: `recompute` reparte sobre los ACTIVOS. Un consumidor desactivado
+    // deja de contar para el dinero —su unidad recae en quien pagó—, así que
+    // seguir pintándolo era enseñar un reparto que las cuentas no reconocen.
+    testWidgets('un consumidor desactivado deja de pintarse en su unidad', (
+      tester,
+    ) async {
+      final fake = await _seed();
+      // Alba (p2) tiene la Pizza entera en l2.
+      await fake.doc('sessions/s1/participants/p2').update({'active': false});
+      await _pump(tester, fake);
+
+      expect(find.text('Unidad 1: Alba'), findsNothing);
+      expect(find.text('Unidad 1: sin reclamar (para Edgar)'), findsWidgets);
     });
   });
 }

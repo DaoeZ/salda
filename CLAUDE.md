@@ -5,10 +5,69 @@
 > de tocar código. La especificación `docs/ESPECIFICACION.md` v2.0 es **definitiva y
 > congelada** y manda sobre este resumen.
 >
-> **Existe además `docs/BIBLIA_SALDA.md`** — la referencia estratégica y técnica
-> definitiva: visión de producto vigente (centrada en GRUPOS), ADRs, Contrato del
-> Proyecto, lista negra, checklists, métricas, roadmap R1–R4 y postmortems.
-> **Orden de lectura obligatorio: este archivo → ESPECIFICACION.md → BIBLIA_SALDA.md.**
+> **Los tres documentos de referencia, y qué es cada uno:**
+>
+> | Documento | Qué es |
+> |---|---|
+> | **`docs/BACKLOG_SALDA.md`** | **Contrato y estado canónico de A1–A20 + N1–N3.** Fuente ÚNICA. Si un commit, un plan o una conversación dice otra cosa sobre un A#, manda este archivo. |
+> | **`docs/BIBLIA_CODIGO_SALDA.md`** | **Memoria técnica acumulativa de sesiones**: decisiones, errores cometidos, trampas del código, invariantes transversales. Una entrada por sesión de cierre. |
+> | **`docs/BIBLIA_SALDA.md`** | Referencia estratégica y técnica **histórica**: visión de producto, ADRs, Contrato del Proyecto, lista negra, checklists, métricas, roadmap R1–R4 y postmortems. |
+>
+> **Orden de lectura obligatorio al empezar cualquier sesión:**
+> 1. este archivo → 2. `docs/BACKLOG_SALDA.md` → 3. `docs/BIBLIA_CODIGO_SALDA.md`
+> → 4. el código, los tests y Git. `docs/ESPECIFICACION.md` v2.0 sigue siendo
+> definitiva y congelada para requisitos y modelo de datos.
+
+---
+
+## 0. Reglas de trabajo para Claude Code (leer siempre, toda sesión)
+
+- El código existente es la fuente de verdad. Antes de implementar, inspecciona los
+  patrones ya usados en el módulo (o uno análogo) y síguelos.
+- Cambio mínimo correcto: KISS/YAGNI, estilo Ponytail. Sin abstracciones especulativas,
+  sin interfaces de una sola implementación, sin flexibilidad "por si acaso".
+- No introduzcas una segunda arquitectura ni cambies state management (Riverpod),
+  navegación (go_router), persistencia/offline, DI o el sistema de diseño (tokens +
+  Material 3) sin necesidad real del ticket. Si crees que hace falta, consúltalo primero
+  (ver §4: decisiones menores se toman solas, las de arquitectura se consultan).
+- Nada de refactors no relacionados con la tarea. Reutiliza componentes/paquetes
+  existentes en vez de crear los tuyos.
+- Preserva siempre: compatibilidad de datos (`schemaVersion`, migraciones), comportamiento
+  offline, sincronización con Firebase (agregados solo los escribe la function, spec §7),
+  el pipeline OCR, los proveedores de IA y sus fallbacks (M6), autenticación, y la
+  integridad económica de gastos/grupos/relaciones (motores de `domain`, ADR-029).
+- No añadas dependencias runtime nuevas sin necesidad demostrada (ver ladder de Ponytail:
+  ¿ya lo resuelve algo instalado, el stdlib de Dart/Node, o una línea?).
+- Bugs: entiende la causa raíz antes de tocar nada (grep todos los llamantes de la función
+  afectada), añade test de regresión cuando sea razonable, arregla la raíz — no el síntoma
+  en un único caller.
+- No modifiques un test válido solo para que pase; si el test está mal, dilo y corrígelo
+  con criterio, no lo silencies.
+- Features grandes o ambiguas → usa las skills de Superpowers (brainstorming, writing-plans,
+  TDD). Cambios pequeños y acotados → sin planificación de más, ve directo.
+- Subagentes solo cuando aporten valor real (paralelismo genuino, aislamiento de contexto).
+  Worktrees cuando varios agentes vayan a editar en paralelo. Los worktrees parten del HEAD
+  local, pero NO contienen modificaciones sin commit del working tree: antes de delegar a un
+  worktree una tarea que dependa de cambios locales sin commit, comprueba `git status` y no
+  asumas que el subagente podrá verlos.
+- No hagas `git commit` ni `git push` salvo petición explícita del usuario en ese turno.
+- No des una tarea por terminada con `dart analyze --fatal-infos`, tests o goldens
+  relevantes en rojo (ver §12 "Comandos de verificación por fase").
+- **Antes de trabajar un bug o funcionalidad nueva, en este orden:** (1) lee este
+  archivo; (2) lee `docs/BACKLOG_SALDA.md`; (3) lee `docs/BIBLIA_CODIGO_SALDA.md`;
+  (4) inspecciona el código, los tests y Git. No deduzcas el estado de nada por el
+  nombre de un commit ni por documentación suelta.
+- **Una sesión fresca por bug o bloque coherente.** No encadenes un bug nuevo
+  después de cerrar el actual: se cierra, se documenta y se para.
+- **⚠️ Las etiquetas `A#` internas del plan de A19 NO son IDs del backlog.** El plan
+  `docs/superpowers/plans/2026-08-31-a19-cierre-de-consumo.md` y varios commits usan
+  `A1`…`A7` como números de tarea propios. `A19 (A4)` (participante desactivado) no
+  es A4 (eliminar grupo); `A19 (A5/A6)` (errores visibles en la web, tickets en vivo)
+  no es A5 ni A6. **Nunca infieras el significado de un A# por una etiqueta: consulta
+  `docs/BACKLOG_SALDA.md` primero.**
+- **`salda-prod` es una frontera absoluta.** No se despliega, no se toca y no se
+  promociona sin una ventana explícita pedida por el usuario en ese turno. Lo mismo
+  para `main`: el trabajo vive en su rama.
 
 ---
 
@@ -66,8 +125,8 @@ AiAnalysisController (imagen si visión — ScanService ahora conserva imagePath
 lastScanImageProvider —, reintento único en badResponse, sustituye el draft) y botón
 "Analizar con IA" de la revisión activo solo con proveedor configurado (DC-13).
 **TODAS las fases de la hoja de ruta están completas a nivel de código.**
-Entorno: SDK de Android instalado en C:\dev\android-sdk (cmdline-tools, licencias
-aceptadas, ANDROID_HOME de usuario). ·
+Entorno: SDK de Android instalado en `%LOCALAPPDATA%\Android\Sdk` (cmdline-tools,
+licencias aceptadas, ANDROID_HOME de usuario). ·
 Pendiente de usuario: proyectos Firebase reales, Android Studio/dispositivo, App Check.
 
 **M5 realizado:** Ajustes (tema persistido, métodos de pago en users/{uid} +
@@ -83,8 +142,63 @@ imagen-resumen PNG para WhatsApp (Canvas puro, testeable) desde el menú del det
 
 **Punto exacto:** M0–M6, estabilización P0, P1 (autenticación), **P2 (identidad
 pública)**, **P2.1**, **P2.2 (unidades físicas + estabilidad)**, **P3
-(amistades)**, **P4 (espacios compartidos)** y **P5 (relaciones económicas)**
-completos a nivel de código.
+(amistades)**, **P4 (espacios compartidos)**, **P5 (relaciones económicas)**,
+**P6 (actividad)** y **P7 (chat contextual)** completos a nivel de código.
+**Sprints 1–4 sobre Relaciones/Grupos:** invitaciones (lectura previa del doc
+inexistente), participantes MANUAL (ADR-033), modo GUEST (ADR-034) y
+**enlaces de grupo (ADR-035)**. El enlace es un token opaco de 128 bits cuyo
+ID de documento ES el secreto (`spaceLinks/{token}`, `list` solo para el
+propietario), se canjea escribiendo prueba de conocimiento + membresía en UN
+batch (`joinGrants/{uid}`, solo escritura) y se revalida en cada canje, así
+que revocarlo —o dejarlo caducar, `expiresAt` opcional e inmutable— cierra la
+puerta al instante. Solo grupos activos; cuenta e invitado entran igual;
+MANUAL no aplica. **A quien ya tiene identidad no se le pregunta quién es**:
+el enlace entra solo, sin pantalla intermedia (el selector de identidad se
+reserva a los MANUAL de los enlaces de TICKET, Sprint 5); quien no la tiene
+elige entre invitado, entrar o registrarse, y `pendingGroupLinkProvider` +
+router garantizan que identificarse no pierda el enlace. El mismo sprint
+corrige el vacío de ADR-034: un invitado ya VE sus contextos e invitaciones
+en Inicio (antes era miembro en datos pero sin pantalla a la que llegar).
+El manifest declara el intent-filter `autoVerify` de `/g/` y `salda-dev` ya
+sirve `/.well-known/assetlinks.json` (paquete `dev.salda.salda_mobile` + el
+SHA-256 del certificado); queda pendiente la página de aterrizaje para quien
+no tenga la app. Contrato: `docs/ESPACIOS.md`.
+**Sprint 5 — enlaces de TICKET (ADR-036):** colección propia
+`ticketLinks/{token}` (no `spaceLinks`: alcance y amenazas distintos). Publica
+solo el comercio y los MANUAL de ESE ticket. Acceso en dos grados: lectura
+(`sessions/{sid}/ticketAccess/{uid}`) e identificación como un MANUAL, con
+cerrojo determinista `ticketClaims/{ticketId}_{manualId}` que resuelve la
+colisión entre dispositivos (el primero gana). La identificación es TEMPORAL:
+no escribe `linkedUid`, no cambia el actor `manual:{id}` y recompute no la lee
+— usar `claimedByDevice` habría migrado el actor por la puerta de atrás,
+porque tiene precedencia sobre `manualId`. P5 no cambia. Rutas `/t/{token}` y
+`/ticket/{token}`. Contrato: `docs/ENLACES_TICKET.md`.
+**Reestructuración Relaciones/Grupos (ADR-030):** `spaces` es ahora la raíz
+visible del producto: `relationship` reserva una pareja canónica de UID y
+`group` representa contextos de tres o más miembros. Inicio ya no crea ni lista
+tickets sueltos; el escaneo nace dentro del contexto. Sesión y ticket nuevos
+comparten `spaceId` + `contextModelVersion: 1` y sus participantes registrados
+se reclaman por UID. Los datos anteriores no se reinterpretan: permanecen en
+«Histórico sin organizar» y solo se vinculan mediante acción explícita.
+P6 (ADR-031, rama claude/p6-activity) añade la cronología como proyección de
+auditoría: `activityEvents` escritos SOLO por triggers Admin con IDs
+deterministas (reintentos y recompute convergen en el mismo doc), audiencia
+`memberUids` congelada al momento del hecho (máx. 30; expulsados conservan
+sus hechos, miembros nuevos no heredan), actor derivado de datos
+autoritativos (expulsión vs salida via marcador `removedBy` validado por
+Rules), settlements `pending` y proyecciones legacy JAMÁS emiten (sin
+duplicar el mismo hecho entre sistemas). Pantalla global /home/activity +
+sección y cronología por espacio, tiempo real + paginación por fecha, dos
+índices compuestos. Sin retro-generación de P1–P5. Contrato:
+`docs/ACTIVIDAD.md`; especificación: `docs/P6_ESPECIFICACIONES.md`.
+P7 (ADR-032) añade chat privado dentro de cada Relación o Grupo mediante
+`spaces/{spaceId}/messages`: texto inmutable, identidad por UID, primera página
+en vivo y paginación histórica. Solo los miembros actuales leen y toda query se
+acota a `createdAt >= members/{uid}.joinedAt`, de modo que una incorporación no
+hereda conversaciones anteriores y salir o ser expulsado revoca el acceso. Los
+espacios archivados quedan en solo lectura; cada autor solo puede borrar sus
+propios mensajes. No genera actividad P6, no toca economía P5, no entra en el
+backup v1 y no añade Functions ni índices compuestos. Contrato: `docs/CHAT.md`.
 P5 (ADR-029) deriva obligaciones explicables por ticket en `economicEntries`,
 consolida bilateralmente por UID y moneda con `EconomicLedger` Dart/TypeScript,
 y registra pagos parciales idempotentes en `economicPayments`: el deudor marca y
@@ -123,10 +237,11 @@ avatar derivado (iniciales + color FNV-1a del uid sobre avatarPalette), búsqued
 prefijo de @username y nombre (queries de campo único, sin composites) y pantallas
 /home/profile y /home/people + banner de Home para completar el perfil. P3 reutiliza
 esa identidad pública para amistades basadas exclusivamente en UID. P4 añade
-espacios y P5 mantiene deuda, amistad y membresía como conceptos independientes;
-actividad y chat quedan fuera. Los contratos vigentes están en
-`docs/AUTENTICACION.md`, `docs/AMISTADES.md`, `docs/ESPACIOS.md` y
-`docs/RELACIONES_ECONOMICAS.md`.
+espacios y P5 mantiene deuda, amistad y membresía como conceptos independientes.
+P6 añade auditoría y P7 conversación sin mezclarlas con la verdad económica. Los
+contratos vigentes están en
+`docs/AUTENTICACION.md`, `docs/AMISTADES.md`, `docs/ESPACIOS.md`,
+`docs/RELACIONES_ECONOMICAS.md`, `docs/ACTIVIDAD.md` y `docs/CHAT.md`.
 
 **Qué se hizo en la última sesión de trabajo, en orden:**
 1. Se congeló la especificación v2.0 (`docs/ESPECIFICACION.md`) tras incorporar:
@@ -284,14 +399,19 @@ packages/ocr_parser/        Dart puro: OcrDocument/OcrRect (agnóstico de motor)
                             LineBuilder (geometría) → ReceiptParser (registry por país)
                             → EsReceiptParser (perfiles + reglas). test/corpus/ =
                             corpus de regresión con harness de métricas por campo
-packages/ai_providers/      Esqueleto para M6 (contrato AiReceiptProvider + adaptadores)
+packages/ai_providers/      COMPLETO (M6): contrato AiReceiptProvider, prompt canónico,
+                            parseAiResponse, adaptadores Claude/Gemini/OpenAI-compatible
 apps/mobile/                Flutter Android+iOS (org dev.salda, proyecto salda_mobile):
-                            core/{theme,routing,utils} · l10n/ (ARB es + generated/)
-                            features/home · features/scan · features/review
-apps/guest_web/             Svelte 5 + Vite + TS. Placeholder hasta M4. SIN dinero.
+                            core/{config,diagnostics,firebase,routing,theme,ui,utils}
+                            l10n/ (ARB es + generated/) · 14 features:
+                            activity · ai · auth · chat · economy · friends · home
+                            people · profile · review · scan · sessions · settings · spaces
+apps/guest_web/             Svelte 5 + Vite + TS. Web de invitados REAL (M4). SIN dinero:
+                            pinta los agregados que escribe la function.
 backend/functions/          Cloud Functions v2 TS (europe-west1, maxInstances 3):
+                            21 functions exportadas desde src/index.ts
                             src/domain/ = espejo TS de los motores; src/test/golden
-backend/firestore/          firestore.rules + storage.rules (deny-all) + índices
+backend/firestore/          firestore.rules (matriz §13.2, 472 tests) + storage.rules + índices
 firebase.json / .firebaserc Config + Emulator Suite (default: demo-salda)
 .github/workflows/ci.yml    CI: dart+flutter · guest-web · functions (job rules en M3)
 ```
@@ -305,9 +425,11 @@ on-device) · Functions v2 (SOLO 3: `recompute` autoritativa, `notify` FCM, `cle
 borrado en cascada) · Hosting (web invitados + deep links) · App Check (enforced, M3/M4)
 · FCM · Emulator Suite. Los proyectos reales `salda-dev` y `salda-prod` existen y
 pertenecen al usuario; `default` continúa siendo `demo-salda` para emuladores. Firebase
-registra tanto `dev.salda.app` como el paquete compatible del APK existente
-`dev.salda.salda_mobile`, que se conserva para no perder identidades locales; ver
-`docs/AUTENTICACION.md`. Presupuesto y alertas se gestionan en GCP.
+tiene registradas dos apps Android, pero la que compila y usa la app es
+`dev.salda.salda_mobile` (`1:923355592259:android:024e3c6d1eab95bfbac6f6`); la de
+`dev.salda.app` quedó como resto de un identificador provisional y no la usa nadie.
+No se cambia el paquete: Android trataría la app como otra y los invitados perderían
+su identidad local; ver `docs/AUTENTICACION.md`. Presupuesto y alertas se gestionan en GCP.
 
 **Modelo de datos (implantar en M3 EXACTAMENTE como spec §7):** raíz = **sesión**
 (cuenta suelta = sesión `kind:"single"`, la UI oculta la capa):
@@ -387,7 +509,12 @@ firebase CLI → keyring del SO del desarrollador.
 14. **image_picker (cámara del sistema) por ahora** — flujo completo sin custom UI;
     captura guiada cuando haya dispositivo.
 15. **l10n ARB desde M2** — deuda RNF-05 saldada antes de crecer la UI.
-16. **applicationId provisional `dev.salda.app`** — cambiable gratis hasta publicar.
+16. **applicationId oficial `dev.salda.salda_mobile`** — fuente de verdad ÚNICA en
+    `android/app/build.gradle.kts`. No se cambia: Android trataría la app como otra
+    distinta y los invitados perderían su identidad local (ADR-034). `dev.salda.app`
+    fue un valor provisional que nunca llegó a compilar; ya no se declara en ningún
+    sitio. `android_identity_test.dart` vigila que Gradle, manifest y assetlinks no
+    se separen.
 17. **Repo GitHub privado** (`DaoeZ/salda`) — branding y producto aún provisionales.
 
 ## 9. Enfoques probados y descartados (NO repetir)
@@ -417,6 +544,8 @@ firebase CLI → keyring del SO del desarrollador.
 
 | Archivo | Qué es / por qué consultarlo |
 |---|---|
+| **`docs/BACKLOG_SALDA.md`** | **Contrato y estado canónico de A1–A20 + N1–N3.** Léelo ANTES de tocar cualquier A#. Incluye el aviso de colisión de numeración con las tareas internas de A19 |
+| **`docs/BIBLIA_CODIGO_SALDA.md`** | Memoria técnica acumulativa por sesión: decisiones, errores, trampas del código e invariantes transversales |
 | `docs/ESPECIFICACION.md` | Spec v2.0 congelada: requisitos RF/RNF, matriz de seguridad §13.2, modelo de datos §7, guía de diseño §3, roadmap §19 |
 | `packages/domain/lib/src/money.dart` | Money + allocateProportionally: LA primitiva de redondeo |
 | `packages/domain/lib/src/engines/split_engine.dart` | Reparto por ticket (modos, pesos, política de líneas sin asignar) |
@@ -427,7 +556,7 @@ firebase CLI → keyring del SO del desarrollador.
 | `packages/ocr_parser/lib/src/es/es_receipt_parser.dart` | Orquestador del parser: fases, reglas, issues (el archivo más denso del proyecto) |
 | `packages/ocr_parser/lib/src/es/es_profiles.dart` | Perfiles por cadena; aquí se añade una cadena nueva |
 | `packages/ocr_parser/test/corpus/` + su README | Corpus de regresión y protocolo para añadir tickets reales |
-| `packages/design_tokens/assets/brand.json` | ÚNICO lugar del branding (nombre, tagline, applicationId) |
+| `packages/design_tokens/assets/brand.json` | ÚNICO lugar del branding (nombre, tagline, dominios de Hosting). El identificador Android NO vive aquí: manda `android/app/build.gradle.kts` |
 | `packages/design_tokens/bin/generate.dart` | Codegen tokens → Dart + CSS |
 | `apps/mobile/lib/features/review/application/review_draft.dart` | Estado editable de la revisión y su lógica de cuadre |
 | `apps/mobile/lib/features/scan/application/scan_service.dart` | Orquestación cámara/galería → OCR → parser |
@@ -437,20 +566,20 @@ firebase CLI → keyring del SO del desarrollador.
 | `.github/workflows/ci.yml` | Qué verifica la CI (incluida la frescura de los `.g.`) |
 | `docs/AMISTADES.md` | Contrato P3: identidad canónica, concurrencia, UX y seguridad social |
 | `docs/RELACIONES_ECONOMICAS.md` | Contrato P5: fuente de verdad, neteo bilateral, pagos y privacidad |
+| `docs/ESPACIOS.md` | Contrato ADR-030: relaciones, grupos, contexto obligatorio y compatibilidad histórica |
+| `docs/ACTIVIDAD.md` | Contrato P6/ADR-031: cronología autoritativa, audiencia y eventos |
+| `docs/CHAT.md` | Contrato P7/ADR-032: chat contextual, privacidad temporal y alcance |
+| `docs/CIERRE_DE_CONSUMO.md` | Contrato A19/ADR-041: `picking.open`, economía congelada, `ledgerIds` y el techo de Rules que no se puede romper |
 
 ## 11. Próximos pasos concretos (en orden)
 
-1. Revisar y fusionar el PR de P4 (rama claude/p4-spaces → main) y validar
-   P1–P4 en un dispositivo Android: email real, verificación, Google, conversión
-   de invitado, perfil con propuesta de username, búsqueda, amistades entre dos
-   cuentas y espacios (crear, invitar, aceptar, tickets vinculados, transferir,
-   archivar).
-2. Replicar en producción los proveedores Email/Password, Anonymous y Google ya
-   verificados en `salda-dev`; registrar también las huellas de firma release/Play.
-3. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
+1. Validar P6 y P7 manualmente en `salda-dev` con dos cuentas para una Relación y
+   tres para un Grupo; fusionar el PR solo con CI verde.
+2. Integrar App Check en móvil y web, observar métricas y solo después forzar; nunca
    activar enforcement únicamente para un cliente.
-4. Validar P5 manualmente con tres cuentas y revisar/fusionar su PR. No empezar P6,
-   chat ni actividad hasta una decisión expresa del usuario.
+3. Mantener producción intacta hasta una ventana explícita de promoción y registrar
+   entonces las huellas de firma release/Play.
+4. No empezar P8 sin una decisión expresa del usuario.
 
 ## 12. Cosas "raras" o no obvias (leer antes de romper algo)
 
@@ -466,18 +595,50 @@ firebase CLI → keyring del SO del desarrollador.
 - **`ShareCode.toString()` es opaco** a propósito (no filtrar secretos a logs).
 - **Umbral de revisión**: `needsReview` = issues no vacíos O confianza global < 0,75
   (DC-13; calibrable con el corpus real).
+- **«Cuadrar» solo habla de aritmética (A15)**: la suma de líneas − descuentos +
+  propina frente al `grandTotal`, con tolerancia FIJA de **2 céntimos**
+  (`receiptBalanceToleranceCents` en `domain`, usada por el parser, por el borrador
+  de revisión y por la validación de la respuesta de IA — antes eran tres copias del
+  1 % y un ticket de 15,96 € daba por bueno un descuadre de 15 céntimos). Un ticket
+  puede cuadrar al céntimo con el comercio mal leído o una cantidad equivocada: por
+  eso la revisión dice «El total cuadra», nunca «el ticket cuadra», y editar a mano y
+  «Analizar con IA» siguen disponibles con el total cuadrado.
+- **Techo de Rules en el reparto por unidades (A19)**: la rama de
+  `lines/{lid}` admite UN acceso de documento adicional, y `validUnitWrite` se
+  evalúa UNA sola vez, izada a la rama. Antes la llamaban las dos funciones de
+  autoridad por separado; con esa duplicación, añadir la comprobación de
+  reapertura agotaba las 1000 expresiones en el camino de A10 sobre un MANUAL.
+  Si vuelves a meterla dentro de `canPickOwnUnit`/`canAssignWithProvenance`, o
+  añades un segundo `get`/`getAfter`, revienta. Lo vigila
+  `backend/firestore/test/picking.test.mjs`.
 - **Functions**: `maxInstances: 3` y europe-west1 en `setGlobalOptions` son el techo de
   coste (spec §12.4) — no subirlos sin consultar al usuario.
 - **Presupuesto de peso de la web**: `chunkSizeWarningLimit: 300` en vite.config.ts;
   si un cambio lo dispara, replantear (lazy import de Firebase, etc.).
 - **El smoke test de la app** usa `Brand.appName`/`Brand.tagline`: si cambias el branding,
   sincroniza también el ARB (`homeTagline`).
-- **Entorno Windows de esta máquina**: Flutter en `C:\dev\flutter` y JDK Temurin 21 en
-  `C:\dev\jdk-21.0.11+10` (ambos en PATH de usuario; JAVA_HOME persistido — lo necesita
-  el emulador de Firestore). Node 26, Firebase CLI y gh (cuenta DaoeZ) globales.
+- **Montar el proyecto en otra máquina**: la guía completa es
+  `docs/SETUP_NUEVO_ORDENADOR.md`, y `scripts/bootstrap-windows.ps1` /
+  `scripts/bootstrap.sh` lo automatizan. Lo único que NO viaja por Git es la
+  keystore de desarrollo y sus contraseñas: sin ellas el proyecto compila y los
+  tests pasan, pero los APK salen con otro certificado y eso rompe Google
+  Sign-In, los App Links y la actualización sobre la app instalada.
+  `scripts/verify-signing-key.ps1` lo comprueba y falla si no coincide.
+  Versiones fijadas en `.fvmrc` (Flutter 3.44.8), `.nvmrc` (Node 22),
+  `.java-version` (JDK 17 — Gradle usa JAVA_HOME, no el `java` del PATH) y
+  `.tool-versions`.
+- **Entorno Windows de esta máquina**: Flutter en `C:\Users\Usuario\development\flutter`;
+  JDK Temurin 21 (`21.0.12`) en `%JAVA_HOME%` (Program Files\Eclipse Adoptium), sin
+  necesidad de un JDK 17 aparte — verificado ejecutando `gradlew.bat :app:help` desde
+  `apps/mobile/android`: Gradle Wrapper 9.1.0 + AGP 9.0.1 + Kotlin 2.3.20 configuran y
+  compilan sin problemas sobre JDK 21 (el `sourceCompatibility`/`jvmTarget = 17` de
+  `app/build.gradle.kts` fija el bytecode de salida, no el JDK que ejecuta Gradle).
+  Android SDK permanente en `%LOCALAPPDATA%\Android\Sdk` (`ANDROID_HOME` de usuario;
+  antes vivía en una carpeta temporal de Codex referenciada solo desde
+  `apps/mobile/android/local.properties`, ya corregido). Node 24,
+  Firebase CLI y gh (cuenta DaoeZ) globales. Keystore de desarrollo FUERA del repo
+  (ver `docs/ENTORNOS.md`, sección "Firma de desarrollo compartida").
   PowerShell 5.1: sin `&&`; primeras ejecuciones de flutter lentas (compila su tool).
-  En otra máquina: clonar, instalar Flutter estable, `dart pub get` en la raíz,
-  `npm install` en apps/guest_web y backend/functions, y listo.
 - **Comandos de verificación por fase** (ejecutarlos TODOS antes de dar una fase por
   cerrada): `dart analyze --fatal-infos` (raíz) · `dart test` en packages/domain y
   packages/ocr_parser · `flutter test` en apps/mobile · `npm run build` en

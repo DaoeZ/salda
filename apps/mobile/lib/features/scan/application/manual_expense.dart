@@ -8,7 +8,8 @@ ReceiptExtraction manualExpenseExtraction({
   required Money amount,
   required DateTime date,
 }) {
-  final iso = '${date.year.toString().padLeft(4, '0')}-'
+  final iso =
+      '${date.year.toString().padLeft(4, '0')}-'
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
   return ReceiptExtraction(
@@ -16,9 +17,7 @@ ReceiptExtraction manualExpenseExtraction({
     merchantName: Extracted(concept, 1.0),
     category: 'otros',
     date: Extracted(iso, 1.0),
-    lines: [
-      ExtractedLine(name: concept, totalPrice: amount, confidence: 1.0),
-    ],
+    lines: [ExtractedLine(name: concept, totalPrice: amount, confidence: 1.0)],
     grandTotal: Extracted(amount, 1.0),
   );
 }

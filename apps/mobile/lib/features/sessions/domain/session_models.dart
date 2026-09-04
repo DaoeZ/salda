@@ -158,6 +158,21 @@ class SessionDetail {
 }
 
 /// Ticket dentro de una cuenta (historial, RF-80/83).
+/// Un ticket alcanzado por DERECHO HISTÓRICO (A11d).
+///
+/// Es lo que puede abrir quien participó económicamente en él pero ya no es
+/// miembro del grupo: el ticket y los nombres de ESE reparto, nada más. Los
+/// nombres viajan aquí porque un `pid` suelto no explica ninguna deuda y el
+/// censo de la sesión no se le abre a un ex-miembro.
+class HistoricTicket {
+  const HistoricTicket({required this.ticket, required this.participantNames});
+
+  final SessionTicket ticket;
+
+  /// pid → nombre visible, congelado por recompute para este ticket.
+  final Map<String, String> participantNames;
+}
+
 class SessionTicket {
   const SessionTicket({
     required this.id,
@@ -170,7 +185,21 @@ class SessionTicket {
     this.imagePath,
     this.splitModeOverride,
     this.spaceId,
+    this.contextModelVersion = 0,
+    this.lastEditedByUid,
+    this.lastEditedAt,
+    this.pickingModelVersion = 0,
+    this.pickingOpen = const <String>{},
   });
+
+  /// A19: 1 = el gasto espera a que todo el mundo termine de elegir. 0 (o
+  /// ausente) = gasto anterior al protocolo, se comporta como siempre.
+  final int pickingModelVersion;
+
+  /// pids que todavía NO han dicho «he terminado».
+  final Set<String> pickingOpen;
+
+  bool get usesPicking => pickingModelVersion == 1;
 
   final String id;
 
@@ -191,8 +220,16 @@ class SessionTicket {
   /// ticket pertenece como máximo a UN espacio y vincularlo no cambia
   /// participantes, asignaciones, balances ni pagos.
   final String? spaceId;
+  final int contextModelVersion;
+
+  /// Firma de la última corrección (A11c): quién la hizo y cuándo. Se
+  /// conserva aunque quien corrige no sea el creador — si no, un gasto
+  /// podría cambiar de importe sin poder explicar después quién lo cambió.
+  final String? lastEditedByUid;
+  final DateTime? lastEditedAt;
 
   bool get hasSpace => spaceId != null && spaceId!.isNotEmpty;
+  bool get isContextual => contextModelVersion >= 1;
 }
 
 /// Línea VIVA de un ticket (P2.1): el creador ve y edita las asignaciones
@@ -333,8 +370,12 @@ class NewSessionInput {
     this.kind = 'single',
     required this.splitModeDefault,
     required this.participantNames,
+    this.participantUids = const [],
+    this.participantManualIds = const [],
     this.payerIndex = 0,
     required this.ticket,
+    this.spaceId,
+    this.spaceName,
     this.accountName,
     this.paymentMethodsSnapshot = const {},
   });
@@ -345,8 +386,15 @@ class NewSessionInput {
 
   /// El índice 0 es SIEMPRE el anfitrión.
   final List<String> participantNames;
+  final List<String> participantUids;
+
+  /// Identidad manual por posición (ADR-033), '' para quien tiene cuenta.
+  /// Un participante es de cuenta O manual, nunca ambos.
+  final List<String> participantManualIds;
   final int payerIndex;
   final NewTicketInput ticket;
+  final String? spaceId;
+  final String? spaceName;
   final String? accountName;
 
   /// Snapshot de métodos de pago del anfitrión (RF-72): se congela al crear

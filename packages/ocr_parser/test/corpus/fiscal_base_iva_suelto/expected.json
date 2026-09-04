@@ -1,0 +1,12 @@
+{
+  "_comment": "A12/A15: el desglose fiscal impreso ANTES del total y sin la cabecera combinada (BASE ... CUOTA) se colaba como DOS productos: 'BASE IMPONIBLE' 13,19 e 'IVA 21%' 2,77. Sumaban exactamente el total, así que el ticket aparecía cuadrado, sin issues y sin aviso, con cero productos reales. Ahora esas líneas no son productos y el ticket dice la verdad: solo se reconoció un producto y falta dinero por explicar.",
+  "mustPass": true,
+  "merchantName": "FAMILYCASH",
+  "date": "2026-08-28",
+  "grandTotal": 1596,
+  "issues": ["sumMismatch"],
+  "needsReview": true,
+  "lines": [
+    { "name": "PAN DE MOLDE", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 120 }
+  ]
+}
