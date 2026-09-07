@@ -1213,7 +1213,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get spaceLeaveBody =>
-      'Dejarás de ver este espacio. Los tickets, pagos e historial no se tocan.';
+      'Dejarás de participar en los gastos nuevos. Tus tickets, pagos e historial no se tocan, y las cuentas pendientes siguen vivas hasta que se liquiden.';
+
+  @override
+  String spaceLeaveOwnerBody(String name) {
+    return 'Administras este grupo, así que al salir la propiedad pasará a $name. Dejarás de participar en los gastos nuevos. Tus tickets, pagos e historial no se tocan, y las cuentas pendientes siguen vivas hasta que se liquiden.';
+  }
+
+  @override
+  String get spaceLeaveBlockedTitle => 'Todavía no puedes salir';
+
+  @override
+  String get spaceLeaveBlockedBody =>
+      'Administras este grupo y no queda nadie con cuenta a quien dejárselo: un grupo no puede quedarse sin propietario. Invita a alguien con cuenta de Salda y transfiere la propiedad, o archiva el grupo.';
 
   @override
   String get spaceInviteAction => 'Invitar';

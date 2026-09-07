@@ -975,13 +975,23 @@ service cloud.firestore {
         && (
           // Editar nombre/avatar o archivar/reactivar: el owner no cambia.
           (request.resource.data.ownerUid == resource.data.ownerUid)
-          // Transferencia a un miembro ACTIVO (su membresía no está en el
-          // batch, así que exists() es seguro).
+          // Transferencia a un miembro ACTIVO. Se valida DESPUÉS del commit
+          // (A3): desde que el propietario puede salir transfiriendo en el
+          // mismo batch, `exists()` sobre la pre-imagen dejaría pasar un
+          // commit que nombra sucesor a quien ese mismo commit retira, y el
+          // grupo se quedaría sin nadie dentro que lo administre.
+          //
+          // Y el sucesor debe tener CUENTA: un INVITADO no tiene con qué
+          // administrar (ADR-034) y A11a ya le niega hasta el rol de
+          // administrador, así que menos aún puede heredar el contexto
+          // entero por la puerta de atrás de una transferencia.
           || (
             resource.data.status == 'active'
             && request.resource.data.status == 'active'
             && request.resource.data.ownerUid != request.auth.uid
-            && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.ownerUid))
+            && existsAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.ownerUid))
+            && getAfter(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.resource.data.ownerUid))
+                .data.get('kind', 'account') == 'account'
           )
         );
 
@@ -1156,8 +1166,18 @@ service cloud.firestore {
 
         // Dos bajas con naturalezas distintas (A11d):
         //
-        //  (a) SALIR: acto propio, sin rastro administrativo. Su alcance no
-        //      se toca aquí (A3 se ocupará del ciclo de vida completo).
+        //  (a) SALIR: acto propio, sin rastro administrativo. El PROPIETARIO
+        //      de un grupo también sale (A3), pero solo si el MISMO commit
+        //      deja la propiedad en otras manos: `futureSpaceData` mira el
+        //      estado posterior, así que borrar la membresía a secas —o
+        //      transferirse el grupo a uno mismo— sigue denegado y no existe
+        //      un grupo sin propietario. La regla de `spaces/{spaceId}` de
+        //      arriba valida al sucesor (miembro, con cuenta, tras el
+        //      commit); las dos escrituras se aceptan juntas o ninguna.
+        //
+        //      Una RELACIÓN queda fuera: es una pareja simétrica, no una
+        //      jerarquía, y su propietario sigue sin poder salir dejando un
+        //      contexto de una sola identidad.
         //
         //  (b) EXPULSAR: acto de quien administra el GRUPO. Exige, en el
         //      MISMO commit, la evidencia inmutable de ESTE ciclo y el
@@ -1171,8 +1191,10 @@ service cloud.firestore {
         //      contexto de una sola identidad.
         allow delete: if
           (canUseSocial()
-            && resource.data.uid != spaceData(spaceId).ownerUid
-            && memberUid == request.auth.uid)
+            && memberUid == request.auth.uid
+            && (resource.data.uid != spaceData(spaceId).ownerUid
+              || (spaceData(spaceId).get('kind', 'group') == 'group'
+                && futureSpaceData(spaceId).ownerUid != request.auth.uid)))
           || (managesGroupOf(spaceId)
             && memberUid != request.auth.uid
             && resource.data.uid != spaceData(spaceId).ownerUid

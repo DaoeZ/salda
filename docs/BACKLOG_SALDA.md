@@ -46,7 +46,7 @@ sirven para distinguir «no existe» de «falta un camino»— y **no** son cont
 |---|---|---|---|
 | A1 | Home más visual + fotos | PARCIAL | 30% |
 | A2 | Eliminar tickets (lifecycle del gasto) | **RESUELTO** | 100% |
-| A3 | Abandonar un grupo | PARCIAL | 60% |
+| A3 | Abandonar un grupo | **RESUELTO** | 100% |
 | A4 | Eliminar grupo con papelera, historial y aviso | PENDIENTE (contrato cerrado) | 5% |
 | A5 | Enlace único de grupo para guests/manuales | PARCIAL + conflicto de diseño | 40% |
 | A6 | Reserva persistente de identidad guest | PARCIAL (muy avanzado) | 85% |
@@ -170,7 +170,8 @@ frente a correcciones, y esa decisión es de A11d, no de A2.
 
 # A3 — Abandonar un grupo
 
-**Estado: PARCIAL (~60%).**
+**Estado: RESUELTO (100%).** Cerrado el 2026-09-07 en la rama
+`codex/relations-groups-navigation`.
 
 ## Contrato
 
@@ -190,33 +191,73 @@ Debe poder abandonarse un grupo **aunque existan saldos**. Al abandonar:
 > **No es requisito** mostrar cuánto debes antes de salir. No usar su ausencia
 > como motivo para dejar A3 abierto.
 
-## Qué existe hoy
+## Cómo quedó resuelto
 
-- `spaces_repository.dart:992` `leave()`: borra **solo** la membresía y **no**
-  comprueba saldos (correcto según contrato).
-- **Derecho histórico garantizado**: `ticketEntitlements` no se retiran jamás
-  (`backend/functions/src/recompute.ts:204-209`), que es lo que permite a quien
-  se fue seguir auditando y liquidando su deuda. Reforzado por ADR-039.
-- UI: `space_management_screen.dart:1098` (tile «Salir») y `:1191` (`_leave`).
-- Rules y concurrencia probadas en `backend/firestore/test/group_member_removal.test.mjs` (33 casos).
+**Salida de un miembro normal** (ya existía, sin cambios de contrato): `leave()`
+borra **solo** la membresía. No comprueba saldos, no escribe `removals` ni
+`entryBlocks` —esos son exclusivos de la expulsión (A11d)— y el derecho
+histórico sigue garantizado por `ticketEntitlements`, que no se retiran jamás
+(`backend/functions/src/recompute.ts:204-209`, ADR-039). Al desaparecer de
+`members`, deja de ofrecerse como participante de gastos nuevos
+(`people_sheet.dart:88` lee esa misma lista).
 
-## Qué falta
+**Sucesión del propietario** (lo que faltaba). `ownershipSuccessor()`
+(`apps/mobile/lib/features/spaces/domain/space_models.dart`) es una función pura
+con un orden **determinista y documentado**:
 
-**La sucesión del propietario no existe en ninguno de sus cuatro pasos.**
+1. **administradores antes que miembros normales** — lo manda el contrato de
+   A3 de arriba, y se sostiene en **A11a**: el rol solo lo concede el
+   propietario, nadie nace con él y un invitado no puede tenerlo, así que es
+   la única delegación explícita que existe. **No** se apoya en ADR-038, que
+   es autoridad ECONÓMICA y dice justo lo contrario en su terreno:
+   administrar no da acceso al saldo de una cuenta ajena. Heredar el grupo
+   tampoco lo da;
+2. dentro de cada grupo, el `joinedAt` **más antiguo** —único dato de
+   antigüedad autoritativo, sellado por el servidor—;
+3. desempate por `uid`. **Nunca** se depende del orden en que Firestore
+   devuelva la colección.
 
-- `canLeave = !owner && isFullAccount` (`space_management_screen.dart:1076`): al
-  propietario **ni siquiera se le muestra «Salir»**.
-- `leave()` lanza `SpaceFailureCode.ownerCannotLeave` en seco; si se alcanzara,
-  la UI muestra un `spaceActionError` genérico, sin explicación ni salida.
-- `transferOwnership` (`spaces_repository.dart:701`) existe pero es una acción
-  **manual y separada**: elegir a dedo un miembro desde la gestión (`:964`).
-- No hay criterio determinista, ni caída al miembro registrado más antiguo, ni
-  exclusión explícita de guest/manual como sucesores, ni bloqueo razonado.
+Un INVITADO queda excluido por construcción y los MANUALES ni siquiera son
+miembros. Sin candidato → `SpaceFailureCode.noSuccessor` y la salida se bloquea
+con una explicación propia (`spaceLeaveBlockedTitle/Body`), nunca con el error
+genérico. Una **relación** no entra en el sistema: sigue devolviendo
+`ownerCannotLeave` (es una pareja simétrica, no una jerarquía).
+
+**Atomicidad.** Transferir y salir son UN `WriteBatch` de dos escrituras
+(`ownerUid` + borrado de la membresía). Rules lo valida cruzado:
+
+- `spaces/{spaceId}` update usa ahora `existsAfter` + `getAfter` sobre la
+  membresía del sucesor: debe seguir siendo miembro **después** del commit y
+  tener `kind == 'account'`. Cierra dos huecos: nombrar sucesor y expulsarlo en
+  el mismo batch, y transferir el contexto a un invitado (que además contradecía
+  ADR-034/038).
+- `members/{memberUid}` delete admite al propietario **solo** si
+  `futureSpaceData(spaceId).ownerUid != request.auth.uid` y el espacio es un
+  grupo. Borrar la membresía a secas, o «transferirse» el grupo a uno mismo,
+  siguen denegados: no existe un grupo sin propietario.
+
+Ningún estado intermedio es observable, y si el candidato deja de ser válido
+entre la lectura y el commit, **falla la operación entera** sin escribir nada.
+
+## Tests
+
+- `backend/firestore/test/group_member_removal.test.mjs` — 11 casos nuevos
+  (suite de Rules: **483** en verde, sin agotar el presupuesto de expresiones).
+- `apps/mobile/test/space_leave_test.dart` — 21 casos (sucesión determinista,
+  historial que sobrevive, economía nueva, bloqueo sin sucesor, interfaz).
+- `apps/mobile/test/spaces_repository_test.dart` — el caso «el owner no puede
+  salir» reescrito: ese contrato es justo el que A3 sustituye.
+
+## Deuda residual
+
+La transferencia exige el espacio **activo**, así que el propietario de un grupo
+**archivado** reactiva antes de salir; la interfaz no le ofrece la acción
+mientras esté archivado. Fijado con test.
 
 ## Dependencias
 
-Toca el ciclo de vida del espacio, igual que **A4**. Conviene resolver A3 antes,
-porque A4 hereda la pregunta «¿quién manda aquí?».
+Toca el ciclo de vida del espacio, igual que **A4**, que hereda de aquí la
+respuesta a «¿quién manda aquí?».
 
 ---
 
@@ -1160,7 +1201,7 @@ independientes solo porque estén al mismo porcentaje.
 | 1 | **A5** — decisión de seguridad: enlace único + identidad vs ADR-036 rev.2 | ADR, sin código | — |
 | 2 | **A9** — decisión/ADR sobre la excepción bilateral a ADR-021 | ADR, sin código | — |
 | 3 | **N3** — cerrar el diseño económico del reembolso local y trazable | ADR, sin código | — |
-| 4 | **A3** — completar el abandono y la sucesión del propietario | Implementación | — |
+| ~~4~~ | ~~**A3** — completar el abandono y la sucesión del propietario~~ | **HECHO** (2026-09-07) | — |
 | 5 | **A8** — revisión explícita del ticket (modelo propio) | Implementación | — |
 | 6 | **A13** — señales de atención por espacio | Implementación | A8 (no fingir «revisión» antes de que exista) |
 | 7 | **A1 fase 1** — Home sin ruido: quitar «Espacios», contexto útil, presencia | Implementación | A13 |

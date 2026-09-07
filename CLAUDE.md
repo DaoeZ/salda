@@ -199,6 +199,20 @@ hereda conversaciones anteriores y salir o ser expulsado revoca el acceso. Los
 espacios archivados quedan en solo lectura; cada autor solo puede borrar sus
 propios mensajes. No genera actividad P6, no toca economía P5, no entra en el
 backup v1 y no añade Functions ni índices compuestos. Contrato: `docs/CHAT.md`.
+
+**A3 (abandonar un grupo) RESUELTO (2026-09-07).** La salida de un miembro
+normal ya existía y era correcta: no se reimplementó, se fijó con tests. Lo
+nuevo es la **sucesión del propietario**, que se resuelve sola y de forma
+determinista: administrador más antiguo → miembro registrado más antiguo →
+desempate por `uid`. Un INVITADO o un MANUAL **nunca** heredan; sin sucesor la
+salida se **bloquea con explicación propia**, porque un grupo no puede quedarse
+sin dueño. Transferir y salir son UN `WriteBatch`, y una RELACIÓN no adquiere
+esta semántica (sigue transfiriendo o archivando). De paso se cerraron dos
+huecos de autoridad preexistentes en Rules: se podía transferir el contexto a
+un invitado, y se podía nombrar sucesor a alguien y borrar su membresía en el
+mismo batch (`exists()` mira la pre-imagen). Deuda aceptada, NO bloqueante: el
+propietario de un grupo **archivado** debe reactivarlo antes de salir; se
+decide en A4. Contrato canónico en `docs/BACKLOG_SALDA.md` § A3.
 P5 (ADR-029) deriva obligaciones explicables por ticket en `economicEntries`,
 consolida bilateralmente por UID y moneda con `EconomicLedger` Dart/TypeScript,
 y registra pagos parciales idempotentes en `economicPayments`: el deudor marca y
@@ -611,6 +625,15 @@ firebase CLI → keyring del SO del desarrollador.
   Si vuelves a meterla dentro de `canPickOwnUnit`/`canAssignWithProvenance`, o
   añades un segundo `get`/`getAfter`, revienta. Lo vigila
   `backend/firestore/test/picking.test.mjs`.
+- **En un batch, `exists()` y `get()` responden por el PASADO (A3)**: leen la
+  pre-imagen. Toda condición sobre **cómo queda el mundo tras el commit** —«el
+  sucesor sigue siendo miembro», «el propietario ya no soy yo»— necesita
+  `existsAfter`/`getAfter`, y vale igual para autorizar que para prohibir. Con
+  `exists()` se podía nombrar sucesor a alguien y expulsarlo en el mismo batch,
+  dejando el grupo con un `ownerUid` que ya no estaba dentro. La comprobación
+  de futuro va **después** de la barata, para que el camino frecuente corte en
+  corto y no gaste un acceso de documento (ver el techo de A19, justo arriba).
+  Lo vigila `backend/firestore/test/group_member_removal.test.mjs`.
 - **Functions**: `maxInstances: 3` y europe-west1 en `setGlobalOptions` son el techo de
   coste (spec §12.4) — no subirlos sin consultar al usuario.
 - **Presupuesto de peso de la web**: `chunkSizeWarningLimit: 300` en vite.config.ts;

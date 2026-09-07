@@ -198,12 +198,18 @@ Decisiones clave:
   reutiliza el documento. Aceptar une al receptor y resuelve la invitación
   en el MISMO batch (validado con getAfter); una cancelada ya no se puede
   aceptar.
-- **El owner no puede salir**: antes transfiere o archiva. Salir o expulsar
-  borra SOLO la membresía: tickets, asignaciones, pagos, balances e
-  historial quedan intactos, incluida la identidad del ex-miembro en
-  operaciones anteriores. Si participa en tickets aún activos, esos tickets
-  no cambian: su relación con ellos es por sesión (nombres/guestAccess), no
-  por membresía.
+- **El owner de un GRUPO también sale (A3)**, y la sucesión se resuelve sola:
+  administrador más antiguo → miembro registrado más antiguo → desempate por
+  `uid`. Nunca un invitado ni un manual; sin candidato la salida se bloquea y
+  se explica, porque un grupo no puede quedarse sin propietario. Transferir y
+  salir son UN commit, validado cruzado por Rules (`existsAfter`/`getAfter`
+  sobre la membresía del sucesor, y `futureSpaceData` en el borrado). Una
+  RELACIÓN no adquiere sucesión: es una pareja simétrica y su owner sigue
+  transfiriendo o archivando. Salir o expulsar borra SOLO la membresía:
+  tickets, asignaciones, pagos, balances e historial quedan intactos, incluida
+  la identidad del ex-miembro en operaciones anteriores. Si participa en
+  tickets aún activos, esos tickets no cambian: su relación con ellos es por
+  sesión (nombres/guestAccess), no por membresía.
 - **Archivar** oculta el espacio de la lista principal, conserva miembros,
   tickets e historial, bloquea invitaciones/edición/vínculos nuevos y es
   reversible. P5 permite consultar y liquidar una deuda ya originada porque el
@@ -581,11 +587,14 @@ detalle del ticket, y lista en vivo en el detalle del espacio.
   membresías restringido a `uid == auth.uid`.
 - Editar/archivar/reactivar/transferir: solo el owner ACTUAL (pre-imagen del
   doc, sin get()); createdAt y schemaVersion inmutables; transferencia solo
-  a miembro existente y con el espacio activo.
+  con el espacio activo y a quien SIGA siendo miembro tras el commit
+  (`existsAfter`) y tenga CUENTA (`kind == 'account'`): un invitado no
+  administra, así que tampoco hereda el contexto (A3).
 - Invitar: owner de espacio activo, a cuenta con perfil que no es miembro,
   con ID canónico; aceptar/rechazar solo el receptor; cancelar/reenviar solo
   el owner; alta de miembro solo con invitación aceptada en el mismo batch.
-- Salir: acto propio, nunca el owner (antes transfiere o archiva).
+- Salir: acto propio. El owner de un GRUPO también, pero solo si el MISMO
+  commit deja la propiedad en otras manos (A3); el de una RELACIÓN, no.
 - Expulsar (A11d, solo GRUPOS): el propietario a miembros y administradores;
   un administrador solo a miembros normales; nunca al owner ni a uno mismo.
   Es un batch de tres escrituras y las tres se validan cruzadas: sin

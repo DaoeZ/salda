@@ -273,7 +273,7 @@ void main() {
 
   group('membresía', () {
     test(
-      'el owner no puede salir; un miembro sí (solo su doc social)',
+      'salir borra solo el doc social; el owner además cede la propiedad',
       () async {
         final repoA = repoFor('uid-a');
         final id = await repoA.createSpace('Piso');
@@ -281,25 +281,34 @@ void main() {
           'uid': 'uid-b',
           'joinedAt': DateTime(2026, 7),
         });
-
-        await expectLater(
-          repoA.leave(id),
-          throwsA(
-            isA<SpaceFailure>().having(
-              (f) => f.code,
-              'code',
-              SpaceFailureCode.ownerCannotLeave,
-            ),
-          ),
-        );
+        await firestore.doc('spaces/$id/members/uid-c').set({
+          'uid': 'uid-c',
+          'joinedAt': DateTime(2026, 8),
+        });
 
         await repoFor('uid-b').leave(id);
         expect(
           (await firestore.doc('spaces/$id/members/uid-b').get()).exists,
           false,
         );
-        // El espacio y su otro miembro siguen intactos.
+        // El espacio, su propietario y su otro miembro siguen intactos.
         expect((await firestore.doc('spaces/$id').get()).exists, true);
+        expect(
+          (await firestore.doc('spaces/$id').get()).data()!['ownerUid'],
+          'uid-a',
+        );
+
+        // A3: el propietario también sale, y la propiedad la hereda el único
+        // miembro registrado que queda. Antes se le denegaba en seco.
+        await repoA.leave(id);
+        expect(
+          (await firestore.doc('spaces/$id').get()).data()!['ownerUid'],
+          'uid-c',
+        );
+        expect(
+          (await firestore.doc('spaces/$id/members/uid-a').get()).exists,
+          false,
+        );
       },
     );
 

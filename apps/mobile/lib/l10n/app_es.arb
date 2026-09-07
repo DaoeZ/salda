@@ -427,7 +427,14 @@
   "spaceArchive": "Archivar",
   "spaceReactivate": "Reactivar",
   "spaceLeave": "Salir del espacio",
-  "spaceLeaveBody": "Dejarás de ver este espacio. Los tickets, pagos e historial no se tocan.",
+  "spaceLeaveBody": "Dejarás de participar en los gastos nuevos. Tus tickets, pagos e historial no se tocan, y las cuentas pendientes siguen vivas hasta que se liquiden.",
+  "spaceLeaveOwnerBody": "Administras este grupo, así que al salir la propiedad pasará a {name}. Dejarás de participar en los gastos nuevos. Tus tickets, pagos e historial no se tocan, y las cuentas pendientes siguen vivas hasta que se liquiden.",
+  "@spaceLeaveOwnerBody": {
+    "description": "A3: el propietario sale y la sucesion se resuelve sola. No se le pide elegir sucesor: el criterio es determinista (admin mas antiguo, o miembro registrado mas antiguo).",
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "spaceLeaveBlockedTitle": "Todavía no puedes salir",
+  "spaceLeaveBlockedBody": "Administras este grupo y no queda nadie con cuenta a quien dejárselo: un grupo no puede quedarse sin propietario. Invita a alguien con cuenta de Salda y transfiere la propiedad, o archiva el grupo.",
   "spaceInviteAction": "Invitar",
   "spaceInviteSheetTitle": "Invitar a un amigo",
   "spaceInviteNoFriends": "Aún no tienes amigos en Salda. Añádelos desde Buscar personas.",

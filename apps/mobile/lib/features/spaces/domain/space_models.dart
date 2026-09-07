@@ -125,6 +125,57 @@ class SpaceMember {
 
 enum SpaceMemberKind { account, guest }
 
+/// Sucesor DETERMINISTA de la propiedad cuando el propietario abandona un
+/// grupo (A3). Devuelve `null` cuando no hay nadie a quien dejársela, y ese
+/// caso BLOQUEA la salida: un grupo sin propietario no tiene quien lo
+/// administre, y no existe un owner técnico que inventar.
+///
+/// El orden es contrato de producto, no un detalle de implementación:
+///
+///  1. **administradores antes que miembros normales** — lo fija el contrato
+///     de A3 (`docs/BACKLOG_SALDA.md`), y se sostiene en A11a: el rol de
+///     administrador solo lo concede el propietario, nadie nace con él y un
+///     INVITADO no puede tenerlo. Es la única delegación explícita que
+///     existe, así que es el candidato natural. **Ojo:** heredar el grupo NO
+///     hereda autoridad sobre el saldo de nadie — eso sigue siendo del
+///     receptor del dinero (ADR-038), y A3 no lo toca;
+///  2. dentro de cada grupo, **el más antiguo** por `joinedAt`, que es el
+///     único dato de antigüedad autoritativo que existe (lo sella el
+///     servidor al crear la membresía);
+///  3. desempate por `uid`, para que dos lecturas —o dos dispositivos— den
+///     siempre el mismo sucesor. Nunca se depende del orden en que Firestore
+///     devuelva la colección.
+///
+/// Nunca un INVITADO: no tiene cuenta con la que administrar (ADR-034) y
+/// Rules deniega la transferencia igualmente. Los participantes MANUALES no
+/// aparecen aquí porque no son miembros: no tienen UID ni dispositivo, y
+/// promover una identidad económica a autoridad administrativa no existe.
+///
+/// Una membresía sin `joinedAt` (escritura local aún sin sellar) va al
+/// final: no se puede afirmar que sea la más antigua.
+SpaceMember? ownershipSuccessor(
+  Iterable<SpaceMember> members,
+  String ownerUid,
+) {
+  final candidates = [
+    for (final member in members)
+      if (member.uid != ownerUid && !member.isGuest) member,
+  ]..sort(_bySuccessionOrder);
+  return candidates.isEmpty ? null : candidates.first;
+}
+
+int _bySuccessionOrder(SpaceMember a, SpaceMember b) {
+  if (a.isAdmin != b.isAdmin) return a.isAdmin ? -1 : 1;
+  final left = a.joinedAt;
+  final right = b.joinedAt;
+  if (left == null || right == null) {
+    if (left != right) return left == null ? 1 : -1;
+  } else if (left != right) {
+    return left.compareTo(right);
+  }
+  return a.uid.compareTo(b.uid);
+}
+
 /// Un administrador puede editar el contexto y representar económicamente a
 /// quien NO tiene cuenta. Nunca puede tocar el saldo de una cuenta ajena:
 /// eso lo impide la autoridad económica, no la interfaz (ADR-038).

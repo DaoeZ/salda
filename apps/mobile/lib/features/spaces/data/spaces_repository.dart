@@ -15,6 +15,13 @@ enum SpaceFailureCode {
   notAllowed,
   alreadyMember,
   ownerCannotLeave,
+
+  /// A3: el propietario quiere salir de un grupo y no queda ningún usuario
+  /// REGISTRADO a quien dejarle la propiedad. No se inventa un propietario
+  /// técnico ni se promociona a un invitado: se bloquea la salida y se
+  /// explica. Distinto de [ownerCannotLeave], que es estructural (una
+  /// relación no tiene sucesión: es una pareja, no una jerarquía).
+  noSuccessor,
   targetUnavailable,
 
   /// La otra persona ya creó la relación y te invitó: hay que ACEPTAR, no
@@ -241,22 +248,22 @@ class SpacesRepository {
       .collection('members')
       .orderBy('joinedAt')
       .snapshots()
-      .map(
-        (snap) => [
-          for (final d in snap.docs)
-            SpaceMember(
-              uid: d.id,
-              joinedAt: (d.data()['joinedAt'] as Timestamp?)?.toDate(),
-              kind: d.data()['kind'] == 'guest'
-                  ? SpaceMemberKind.guest
-                  : SpaceMemberKind.account,
-              displayName: d.data()['displayName'] as String?,
-              role: d.data()['role'] == 'admin'
-                  ? SpaceMemberRole.admin
-                  : SpaceMemberRole.member,
-            ),
-        ],
-      );
+      .map((snap) => snap.docs.map(_memberFrom).toList());
+
+  SpaceMember _memberFrom(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    return SpaceMember(
+      uid: doc.id,
+      joinedAt: (data['joinedAt'] as Timestamp?)?.toDate(),
+      kind: data['kind'] == 'guest'
+          ? SpaceMemberKind.guest
+          : SpaceMemberKind.account,
+      displayName: data['displayName'] as String?,
+      role: data['role'] == 'admin'
+          ? SpaceMemberRole.admin
+          : SpaceMemberRole.member,
+    );
+  }
 
   // ── Participantes manuales (ADR-033) ─────────────────────────────────
 
@@ -986,16 +993,60 @@ class SpacesRepository {
 
   // ── Membresía ─────────────────────────────────────────────────────────
 
-  /// Salir del espacio. El OWNER no puede salir: antes debe transferir la
-  /// propiedad (o archivar el espacio). Solo borra la membresía: tickets,
-  /// asignaciones, pagos y balances históricos quedan intactos.
+  /// Salir del espacio (A3). Solo borra la membresía: tickets, asignaciones,
+  /// obligaciones, pagos y balances históricos quedan intactos, y el derecho
+  /// a auditarlos y liquidarlos vive en `ticketEntitlements`, que no se
+  /// retiran jamás (ADR-039). Salir no bloquea la reentrada: `entryBlocks`
+  /// es exclusivo de la expulsión.
+  ///
+  /// El PROPIETARIO de un grupo también sale, y la propiedad se resuelve
+  /// sola: [ownershipSuccessor] elige al administrador más antiguo, o al
+  /// miembro registrado más antiguo si no hay administradores. Nunca un
+  /// invitado ni un manual; si no queda nadie, se bloquea la salida con
+  /// [SpaceFailureCode.noSuccessor] en vez de dejar el grupo sin dueño.
+  ///
+  /// Transferencia y baja son UN batch: los dos estados intermedios que
+  /// harían daño —fuera con el `ownerUid` antiguo, o un grupo sin
+  /// propietario— no llegan a existir. Y no basta con que el sucesor fuera
+  /// válido al pintarlo: Rules revalida en el commit que siga siendo miembro
+  /// con cuenta, así que una membresía que cambie entre la lectura y la
+  /// escritura hace fallar la operación ENTERA, sin estado parcial.
+  ///
+  /// Una RELACIÓN no tiene sucesión: es una pareja simétrica, no una
+  /// jerarquía (A11). Su propietario sigue sin poder salir.
   Future<void> leave(String spaceId) async {
     _requireAccount();
-    final space = await _spaces.doc(spaceId).get();
-    if (space.data()?['ownerUid'] == uid()) {
-      throw const SpaceFailure(SpaceFailureCode.ownerCannotLeave);
+    try {
+      final spaceRef = _spaces.doc(spaceId);
+      final memberRef = spaceRef.collection('members').doc(uid());
+      final space = _spaceFrom(await spaceRef.get());
+      if (space == null) {
+        throw const SpaceFailure(SpaceFailureCode.targetUnavailable);
+      }
+      if (space.ownerUid != uid()) {
+        await memberRef.delete();
+        return;
+      }
+      if (space.isRelationship) {
+        throw const SpaceFailure(SpaceFailureCode.ownerCannotLeave);
+      }
+      final successor = ownershipSuccessor(
+        (await spaceRef.collection('members').get()).docs.map(_memberFrom),
+        uid(),
+      );
+      if (successor == null) {
+        throw const SpaceFailure(SpaceFailureCode.noSuccessor);
+      }
+      final batch = firestore.batch();
+      batch.update(spaceRef, {
+        'ownerUid': successor.uid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      batch.delete(memberRef);
+      await batch.commit();
+    } on Object catch (error) {
+      _rethrowAsSpaceFailure('leave', error);
     }
-    await _spaces.doc(spaceId).collection('members').doc(uid()).delete();
   }
 
   /// Expulsión administrativa (A11d). Mismo contrato económico que salir:
@@ -1197,6 +1248,22 @@ final iAdministerSpaceProvider = Provider.autoDispose.family<bool, String>((
   final members = ref.watch(spaceMembersProvider(spaceId)).value;
   return members?.any((member) => member.uid == uid && member.isAdmin) ?? false;
 });
+
+/// A quién pasaría la propiedad si el propietario saliera AHORA (A3).
+///
+/// Solo sirve para DECIR quién será y para saber si la acción se puede
+/// ofrecer: la autoridad la aplican Rules, que revalidan al sucesor en el
+/// commit. `null` con la lista ya cargada significa «no hay sucesor y la
+/// salida está bloqueada»; mientras la lista no ha llegado también es
+/// `null`, y por eso la pantalla solo ofrece salir con los miembros leídos.
+final spaceOwnershipSuccessorProvider = Provider.autoDispose
+    .family<SpaceMember?, String>((ref, spaceId) {
+      final space = ref.watch(spaceProvider(spaceId)).value;
+      if (space == null || space.isRelationship) return null;
+      final members = ref.watch(spaceMembersProvider(spaceId)).value;
+      if (members == null) return null;
+      return ownershipSuccessor(members, space.ownerUid);
+    });
 
 /// ¿Puedo EXPULSAR a esta persona del grupo? (A11d)
 ///

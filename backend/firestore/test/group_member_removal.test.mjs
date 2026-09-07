@@ -419,3 +419,122 @@ describe('A11d: ciclos repetidos', () => {
       db(AJENA), `spaces/gr1/removals/${cicloId(JORGE, CICLO_A)}`)));
   });
 });
+
+// ── A3: el propietario abandona el grupo ────────────────────────────────
+//
+// Transferir y salir son UNA operación: dos escrituras en el mismo commit.
+// Rules las valida cruzadas, así que ninguno de los estados intermedios que
+// harían daño —grupo sin propietario, saliente fuera con el `ownerUid`
+// antiguo, o un INVITADO heredando el contexto— llega a existir.
+const GUEST = 'uid-guest';
+const CICLO_JEFA = Timestamp.fromMillis(1_000_000);
+
+/** Salida del propietario: transferencia + baja, un solo commit. */
+const salirTransfiriendo = (actor, sucesor, { spaceId = 'gr1' } = {}) => {
+  const f = db(actor);
+  const batch = writeBatch(f);
+  batch.update(doc(f, `spaces/${spaceId}`), {
+    ownerUid: sucesor, updatedAt: serverTimestamp(),
+  });
+  batch.delete(doc(f, `spaces/${spaceId}/members/${actor}`));
+  return batch.commit();
+};
+
+describe('A3: salida del propietario y sucesión', () => {
+  beforeEach(async () => {
+    await sembrar();
+    await env.withSecurityRulesDisabled((ctx) => setDoc(
+      doc(ctx.firestore(), `spaces/gr1/members/${GUEST}`), {
+        uid: GUEST, joinedAt: Timestamp.fromMillis(500_000),
+        kind: 'guest', displayName: 'Nico',
+      }));
+  });
+
+  it('sale transfiriendo a un administrador en el mismo commit', async () => {
+    await assertSucceeds(salirTransfiriendo(JEFA, ADMIN));
+    const espacio = await getDoc(doc(db(ADMIN), 'spaces/gr1'));
+    const antigua = await getDoc(doc(db(ADMIN), `spaces/gr1/members/${JEFA}`));
+    if (espacio.data().ownerUid !== ADMIN) {
+      throw new Error('la propiedad no cambió de manos');
+    }
+    if (antigua.exists()) throw new Error('la membresía anterior sobrevivió');
+  });
+
+  it('también a un miembro normal: la sucesión no exige rol', () =>
+    assertSucceeds(salirTransfiriendo(JEFA, JORGE)));
+
+  it('borrar SOLO su membresía deja el grupo sin dueño: denegado', () =>
+    assertFails(deleteDoc(doc(db(JEFA), `spaces/gr1/members/${JEFA}`))));
+
+  it('transferirse el grupo a sí mismo no habilita la salida', () =>
+    assertFails(salirTransfiriendo(JEFA, JEFA)));
+
+  it('un INVITADO no hereda el contexto', async () => {
+    await assertFails(salirTransfiriendo(JEFA, GUEST));
+    // Ni siquiera con la transferencia suelta de siempre.
+    await assertFails(updateDoc(doc(db(JEFA), 'spaces/gr1'), {
+      ownerUid: GUEST, updatedAt: serverTimestamp(),
+    }));
+  });
+
+  it('no se nombra sucesor a quien no es miembro', () =>
+    assertFails(salirTransfiriendo(JEFA, AJENA)));
+
+  it('nombrar sucesor y expulsarlo en el mismo commit: denegado', async () => {
+    const f = db(JEFA);
+    const batch = writeBatch(f);
+    batch.update(doc(f, 'spaces/gr1'), {
+      ownerUid: JORGE, updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(f, `spaces/gr1/removals/${cicloId(JORGE, CICLO_A)}`), {
+      uid: JORGE, membershipJoinedAt: CICLO_A, removedBy: JEFA,
+      removedAt: serverTimestamp(), schemaVersion: 1,
+    });
+    batch.set(doc(f, `spaces/gr1/entryBlocks/${JORGE}`), {
+      uid: JORGE, membershipJoinedAt: CICLO_A,
+      blockedAt: serverTimestamp(), schemaVersion: 1,
+    });
+    batch.delete(doc(f, `spaces/gr1/members/${JORGE}`));
+    await assertFails(batch.commit());
+  });
+
+  it('un miembro no saca al propietario disfrazándolo de sucesión', async () => {
+    const f = db(JORGE);
+    const batch = writeBatch(f);
+    batch.update(doc(f, 'spaces/gr1'), {
+      ownerUid: JORGE, updatedAt: serverTimestamp(),
+    });
+    batch.delete(doc(f, `spaces/gr1/members/${JEFA}`));
+    await assertFails(batch.commit());
+  });
+
+  it('una RELACIÓN no adquiere sucesión: su propietario no sale', async () => {
+    await assertFails(salirTransfiriendo(JEFA, PAREJA, { spaceId: 'rel1' }));
+    // La otra mitad sigue pudiendo irse por su pie.
+    await assertSucceeds(
+      deleteDoc(doc(db(PAREJA), `spaces/rel1/members/${PAREJA}`)));
+  });
+
+  it('salir NO deja evidencia ni bloquea la reentrada del propietario',
+    async () => {
+      await assertSucceeds(salirTransfiriendo(JEFA, ADMIN));
+      const cliente = db(ADMIN);
+      const evidencia = await getDoc(doc(
+        cliente, `spaces/gr1/removals/${cicloId(JEFA, CICLO_JEFA)}`));
+      const bloqueo = await getDoc(
+        doc(cliente, `spaces/gr1/entryBlocks/${JEFA}`));
+      if (evidencia.exists()) throw new Error('una salida dejó evidencia');
+      if (bloqueo.exists()) throw new Error('una salida dejó bloqueo');
+    });
+
+  // Residual conocido: la transferencia exige el espacio ACTIVO, así que el
+  // propietario de un grupo archivado reactiva antes de salir. La interfaz
+  // tampoco le ofrece la acción mientras esté archivado.
+  it('en un grupo ARCHIVADO la salida del propietario no está abierta',
+    async () => {
+      await assertSucceeds(updateDoc(doc(db(JEFA), 'spaces/gr1'), {
+        status: 'archived', updatedAt: serverTimestamp(),
+      }));
+      await assertFails(salirTransfiriendo(JEFA, ADMIN));
+    });
+});

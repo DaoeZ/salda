@@ -140,9 +140,232 @@ revisión».
 `backend/functions`, `npm run build` + vitest en `apps/guest_web`, y los tests de
 Rules contra el emulador.
 
+### C13. En un batch, `exists()` y `get()` responden por el PASADO
+
+Leen la pre-imagen. Cualquier condición sobre **cómo queda el mundo tras el
+commit** —«el sucesor sigue siendo miembro», «el propietario ya no soy yo»—
+necesita `existsAfter`/`getAfter`, y eso vale igual para autorizar que para
+prohibir. Con `exists()` se podía nombrar sucesor a alguien y expulsarlo en el
+mismo batch: el grupo se quedaba con un `ownerUid` que ya no estaba dentro.
+Lo descubrió A3 (2026-09-07) y lo vigila `group_member_removal.test.mjs`.
+
+Corolario de coste: la comprobación de futuro va **después** de la barata, para
+que el camino frecuente corte en corto y no gaste un acceso de documento (ver
+C5, el presupuesto es finito).
+
 ---
 
 # Entradas cronológicas
+
+## A3 — ABANDONAR UN GRUPO Y SUCESIÓN DEL PROPIETARIO — 2026-09-07
+
+**Rama:** `codex/relations-groups-navigation` · **HEAD al empezar:** `d53d213`
+**Tipo de sesión:** implementación acotada a A3. Sin deploy. `main` y
+`salda-prod` intactos.
+
+### Qué se pidió
+
+Completar el contrato canónico de A3 **sin reimplementar lo que ya
+funcionaba**. El encargo lo decía explícitamente: «la auditoría anterior
+encontró que la salida de un miembro normal ya existe parcialmente; investiga
+primero la implementación real y completa únicamente lo que falte». Esa
+instrucción resultó ser el eje de la sesión: la mitad del trabajo fue
+demostrar qué **no** había que tocar.
+
+### Estado inicial encontrado
+
+La salida de un **miembro normal** ya funcionaba y era correcta. Se verificó
+la cadena entera (C2: existir en el código no es funcionar) antes de dejarla
+en paz:
+
+- `leave()` borraba **solo** la membresía y **no** comprobaba saldos — que es
+  exactamente lo que el contrato manda: se puede abandonar con deudas vivas;
+- no escribía `removals` ni `entryBlocks`; esos son **exclusivos de la
+  expulsión** (A11d), y confundirlos habría bloqueado la reentrada de quien se
+  va por su pie;
+- el derecho histórico no depende de la membresía: lo sostienen los
+  `ticketEntitlements`, que `recompute` escribe y **jamás retira**
+  (`recompute.ts:204-209`, ADR-039). Son monotónicos frente a correcciones, y
+  son la razón de que un ex-miembro pueda seguir auditando y liquidando lo
+  suyo sin seguir dentro del grupo;
+- «no participa en gastos nuevos» tampoco necesitaba código: al desaparecer de
+  `members`, deja de aparecer en la lista que `people_sheet.dart:88` ofrece al
+  crear un gasto. La membresía **es** el filtro.
+
+**Conclusión reutilizable:** cuando un contrato parece exigir cuatro
+comportamientos y tres ya emergen del modelo de datos, la tarea es
+*demostrarlos con tests*, no reimplementarlos. Se añadieron pruebas de
+regresión que los fijan; no se cambió una línea de esa ruta.
+
+Lo que faltaba era la **sucesión del propietario, en sus cuatro pasos**:
+
+- `canLeave = !owner && isFullAccount` — al propietario ni se le ofrecía salir;
+- `leave()` lanzaba `ownerCannotLeave` en seco y la UI lo mostraba como
+  `spaceActionError` genérico;
+- `transferOwnership()` existía, pero como acción **manual y separada**;
+- no había criterio determinista, ni exclusión de guest/manual, ni bloqueo
+  razonado.
+
+### Dos huecos de autoridad que la implementación destapó
+
+Ninguno era A3 «pendiente»; los dos eran **agujeros preexistentes** que
+completar A3 obligaba a cerrar, porque son justo los estados corruptos que la
+sesión tenía que impedir:
+
+1. **Se podía transferir el grupo a un INVITADO.** La regla solo exigía
+   `exists(members/{nuevoOwner})`, y un invitado tiene documento de membresía.
+   Un invitado no puede ser ni administrador (ADR-034/038), así que heredar el
+   contexto entero era una escalada por la puerta de atrás. Cerrado exigiendo
+   `kind == 'account'`.
+2. **Se podía nombrar sucesor y expulsarlo en el mismo batch.** `exists()` lee
+   la **pre-imagen**, así que el sucesor «existía» aunque ese mismo commit
+   borrara su membresía → grupo con un `ownerUid` que ya no está dentro.
+   Cerrado pasando a `existsAfter` + `getAfter`.
+
+**Lección transversal (ver C13): en un batch, `exists()`/`get()` responden por
+el pasado.** Cualquier condición sobre «cómo queda el mundo» necesita
+`existsAfter`/`getAfter`, y eso vale tanto para autorizar como para prohibir.
+
+### Decisión: la sucesión la elige el CLIENTE, la valida el SERVIDOR
+
+`ownershipSuccessor()` es una función **pura** en `space_models.dart`: admins
+primero, luego `joinedAt` ascendente, desempate por `uid`. Nunca se depende del
+orden en que Firestore devuelva la colección — la query de `watchMembers` sí
+ordena por `joinedAt`, pero el lote que lee `leave()` no, y confiar en eso
+habría hecho el resultado dependiente de la implementación del SDK. Hay un test
+que le pasa la misma lista **invertida** y exige el mismo sucesor.
+
+Los tres criterios, y de dónde sale cada uno:
+
+- **admin antes que miembro** — del contrato de A3 y de **A11a** (el rol solo
+  lo concede el propietario, nadie nace con él, un invitado no puede tenerlo).
+  ⚠️ **No de ADR-038**: ese ADR es autoridad **económica** y su decisión dice
+  justo lo contrario en su terreno —administrar no da acceso al saldo de una
+  cuenta ajena—. La primera redacción de esta entrada lo citaba mal y se
+  corrigió antes del cierre. Heredar el grupo **no** hereda saldos de nadie.
+- **`joinedAt` ascendente** — es el único dato de antigüedad **autoritativo**:
+  lo sella el servidor al crear la membresía y Rules lo exige `is timestamp`.
+  Una membresía todavía sin sellar (escritura local pendiente) va **al final**:
+  no se puede afirmar que sea la más antigua.
+- **desempate por `uid`** — para que dos lecturas, dos dispositivos o dos
+  reintentos den siempre el mismo sucesor.
+
+**Exclusión de manual/guest, por dos vías independientes.** Los MANUALES no
+son miembros (no tienen UID ni dispositivo), así que ni entran en la lista: no
+existe «promover una identidad económica a autoridad administrativa». Los
+GUESTS sí tienen documento de membresía, así que se excluyen explícitamente en
+la función **y** en Rules. Que hicieran falta las dos es el hallazgo 1 de más
+abajo.
+
+Rules **no** puede comprobar «es el más antiguo»: eso exigiría recorrer la
+colección, que no existe en el lenguaje de reglas. Y no hace falta. Lo que
+Rules garantiza son los invariantes que sí duelen —hay propietario, tiene
+cuenta, es miembro después del commit, no es uno mismo—; el orden es contrato
+de **producto**, fijado por tests. Es exactamente C8: la autoridad la aplican
+las Rules, el cliente solo decide qué ofrecer.
+
+**Alternativa descartada:** una Cloud Function `leaveSpace` que resolviera la
+sucesión en el servidor. Habría añadido una Function, una latencia y un camino
+que no funciona offline, para una garantía que el batch de dos escrituras ya
+da. El estado corrupto lo impide la atomicidad, no el runtime.
+
+**Alternativa descartada:** transacción con **reelección silenciosa**. Una
+transacción de cliente reintenta sola cuando cambia un documento leído, y era
+tentador usarla para «buscar otro candidato si el primero ya no vale». Se
+descartó por producto, no por técnica: la interfaz acaba de decir «la propiedad
+pasará a **Alba**», y un reintento invisible podría dejársela a **Jorge**. La
+persona habría regalado su grupo a alguien que nunca vio en el diálogo. El
+batch ya impide el estado corrupto; ante un candidato inválido lo correcto es
+**fallar entero y volver a preguntar**, no acertar por su cuenta.
+
+**Alternativa descartada:** obligar al propietario a elegir sucesor a mano.
+El contrato lo permite explícitamente («no hace falta obligar al usuario a
+escoger si la regla determinista ya lo resuelve») y `transferOwnership()`
+manual sigue existiendo para quien quiera decidirlo. Añadir un selector
+obligatorio habría convertido una salida en un trámite.
+
+### Trampa que costó una vuelta: el orden de las dos ramas del `delete`
+
+La condición del propietario **debe ir después** de
+`resource.data.uid != spaceData(spaceId).ownerUid`, no envolviéndola. Así la
+salida de un miembro normal —el caso frecuente— corta en corto y no gasta el
+`getAfter`. Poner la comprobación de futuro delante habría añadido un acceso de
+documento a todas las salidas.
+
+### Relación con A11d: qué se reutilizó y qué NO se duplicó
+
+A3 **no** inventa una segunda semántica de «miembro retirado». Se apoya en lo
+que A11d ya cerró y respeta la frontera entre las dos bajas:
+
+| | Salir (A3) | Expulsar (A11d) |
+|---|---|---|
+| `removals/{uid}_{joinedAtMillis}` | **no** se escribe | obligatorio |
+| `entryBlocks/{uid}` | **no** se escribe | obligatorio |
+| Reentrada | por enlace o invitación, sin trámite | solo invitación posterior al bloqueo |
+| Evento P6 | `member_left`, actor = uno mismo | `member_removed`, actor = quien expulsa |
+| `ticketEntitlements` | intactos | intactos |
+| Economía | intacta | intacta |
+
+Los eventos de P6 salen **solos y correctos** sin tocar `activity.ts`:
+`buildMemberEvents` distingue expulsión de salida por la *presencia* de la
+evidencia, y como A3 no la escribe, la salida del propietario se registra como
+`member_left`; el cambio de `ownerUid` genera además `space_transferred` desde
+`buildSpaceEvents`, con actor = el owner **anterior**, que es justo quien la
+inició. Cero líneas de Functions.
+
+### Un test existente se reescribió a propósito
+
+`spaces_repository_test.dart` afirmaba «el owner no puede salir». Ese es
+literalmente el contrato que A3 sustituye: se reescribió, no se silenció.
+Regla que conviene recordar: un test en rojo solo se toca cuando el **contrato**
+cambió y se puede citar dónde; entonces se reescribe entero para afirmar el
+contrato nuevo, nunca se relaja el aserto para que pase.
+
+### Validación (todo en verde)
+
+| Suite | Resultado |
+|---|---|
+| `dart analyze --fatal-infos` | 0 avisos |
+| Rules contra el emulador | **483** ✅ (472 antes; +11 de A3), 0 fail |
+| `flutter test` en `apps/mobile` | **671** ✅ / 5 skip (650 antes; +21) |
+| `dart test` en `packages/domain` | 130 ✅ |
+| `dart test` en `packages/ocr_parser` | 33 ✅ |
+| `npm test` en `backend/functions` | 203 ✅ |
+
+Las Rules siguen sin agotar el presupuesto de expresiones: `picking.test.mjs`,
+que es el que vigila el techo de C5, pasa dentro de la misma ejecución.
+`guest_web` no se ejecutó **a propósito**: A3 no toca una sola línea de la web.
+
+Los 32 tests nuevos se repartieron por capa a conciencia: el ORDEN de sucesión
+es contrato de producto y se prueba en Dart (barato, sin emulador); la
+AUTORIDAD se prueba contra Rules reales, porque un provider de interfaz que
+diga «puedo» no demuestra nada (C8).
+
+### Deuda residual conocida
+
+La transferencia exige el espacio **activo**, así que el propietario de un
+grupo **archivado** debe reactivarlo antes de salir. La interfaz no le ofrece
+la acción mientras esté archivado, así que **no hay callejón sin salida**, solo
+un paso extra; por eso es deuda de UX y **no** deja A3 en PARCIAL. Está fijado
+con test para que no se rompa por accidente, y su sitio natural es **A4**, que
+es quien va a rediseñar el ciclo de vida completo del espacio (archivado ≠
+eliminado): allí habrá que decidir si un grupo archivado admite salida directa
+o sigue exigiendo reactivar.
+
+### Qué debe anticipar la siguiente sesión
+
+1. **A4 hereda esto.** «Quién manda aquí» ya tiene respuesta: propietario único
+   en `ownerUid`, sucesión determinista, y un grupo nunca sin dueño. Eliminar
+   un grupo **no puede** reintroducir un estado sin propietario, y la deuda del
+   archivado se decide ahí.
+2. **C13 aplica a cualquier operación compuesta futura**, no solo a esta. A4
+   va a escribir varios documentos por acción (papelera, avisos individuales,
+   reconocimiento): cada condición sobre «cómo queda el mundo» necesita
+   `existsAfter`/`getAfter`.
+3. Sigue pendiente el **CHECKPOINT en dispositivo real**: llevamos varios
+   bloques estructurales (A19, A3) sin ejecutar el cliente completo.
+4. La app y la web viajan en la rama; el único componente que A3 necesitaba
+   desplegar son las Rules.
 
 ## AUDITORÍA A1–A20 + N1–N3 — 2026-09-04
 

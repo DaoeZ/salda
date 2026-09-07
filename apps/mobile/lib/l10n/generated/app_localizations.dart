@@ -2125,8 +2125,26 @@ abstract class AppLocalizations {
   /// No description provided for @spaceLeaveBody.
   ///
   /// In es, this message translates to:
-  /// **'Dejarás de ver este espacio. Los tickets, pagos e historial no se tocan.'**
+  /// **'Dejarás de participar en los gastos nuevos. Tus tickets, pagos e historial no se tocan, y las cuentas pendientes siguen vivas hasta que se liquiden.'**
   String get spaceLeaveBody;
+
+  /// A3: el propietario sale y la sucesion se resuelve sola. No se le pide elegir sucesor: el criterio es determinista (admin mas antiguo, o miembro registrado mas antiguo).
+  ///
+  /// In es, this message translates to:
+  /// **'Administras este grupo, así que al salir la propiedad pasará a {name}. Dejarás de participar en los gastos nuevos. Tus tickets, pagos e historial no se tocan, y las cuentas pendientes siguen vivas hasta que se liquiden.'**
+  String spaceLeaveOwnerBody(String name);
+
+  /// No description provided for @spaceLeaveBlockedTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Todavía no puedes salir'**
+  String get spaceLeaveBlockedTitle;
+
+  /// No description provided for @spaceLeaveBlockedBody.
+  ///
+  /// In es, this message translates to:
+  /// **'Administras este grupo y no queda nadie con cuenta a quien dejárselo: un grupo no puede quedarse sin propietario. Invita a alguien con cuenta de Salda y transfiere la propiedad, o archiva el grupo.'**
+  String get spaceLeaveBlockedBody;
 
   /// No description provided for @spaceInviteAction.
   ///

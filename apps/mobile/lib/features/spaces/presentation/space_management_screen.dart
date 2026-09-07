@@ -1073,8 +1073,13 @@ class _ActionsState extends ConsumerState<_Actions> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // A3: el propietario de un GRUPO activo también sale — la propiedad la
+    // hereda un sucesor determinista, o la salida se bloquea explicándolo.
+    // Una relación no tiene sucesión, así que su propietario sigue sin la
+    // acción; archivada, la transferencia que exigiría no está permitida.
     final canLeave =
-        !owner && (ref.watch(currentAppUserProvider)?.isFullAccount ?? false);
+        (ref.watch(currentAppUserProvider)?.isFullAccount ?? false) &&
+        (!owner || (space.isActive && !space.isRelationship));
     return CoverSection(
       title: l10n.spaceManageActions,
       child: SaldaCardList(
@@ -1190,11 +1195,31 @@ class _ActionsState extends ConsumerState<_Actions> {
 
   Future<void> _leave(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
+    // A3: al propietario se le dice a quién pasará el grupo. No se le hace
+    // elegir: el criterio ya es determinista. Si no hay sucesor la salida
+    // está bloqueada, y eso se explica — nunca con un error genérico.
+    final successor = owner
+        ? ref.read(spaceOwnershipSuccessorProvider(space.id))
+        : null;
+    if (owner && successor == null) {
+      await _explainBlocked(context);
+      return;
+    }
+    final successorName = successor == null
+        ? ''
+        : successor.isGuest
+        ? l10n.guestBadge
+        : ref.read(publicProfileProvider(successor.uid)).value?.displayName ??
+              '';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.spaceLeave),
-        content: Text(l10n.spaceLeaveBody),
+        content: Text(
+          successor == null
+              ? l10n.spaceLeaveBody
+              : l10n.spaceLeaveOwnerBody(successorName),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -1215,6 +1240,18 @@ class _ActionsState extends ConsumerState<_Actions> {
       if (context.mounted) {
         context.go('/home/spaces');
       }
+    } on SpaceFailure catch (failure) {
+      // El sucesor pudo dejar de serlo entre pintar el diálogo y confirmar:
+      // Rules lo revalida y el batch entero falla, sin estado a medias.
+      if (!context.mounted) return;
+      if (failure.code == SpaceFailureCode.noSuccessor ||
+          failure.code == SpaceFailureCode.ownerCannotLeave) {
+        await _explainBlocked(context);
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
     } on Object {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -1222,6 +1259,23 @@ class _ActionsState extends ConsumerState<_Actions> {
         ).showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
       }
     }
+  }
+
+  Future<void> _explainBlocked(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.spaceLeaveBlockedTitle),
+        content: Text(l10n.spaceLeaveBlockedBody),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.commonDone),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _run(Future<void> Function() action) async {
