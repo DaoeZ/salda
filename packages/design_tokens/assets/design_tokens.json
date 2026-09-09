@@ -1,41 +1,81 @@
 {
-  "_comment": "Tokens de diseño según ESPECIFICACION.md §3. Colores en hex #RRGGBB.",
+  "_comment": "Sistema visual de Salda. Fuente unica: app Flutter y web de invitados. Colores en hex #RRGGBB.",
+  "_direccion": "Verde bosque como color principal; naranja calido como acento MUY controlado (nunca dominante); fondos claros templados, no blanco azulado; oscuros carbon con matiz verde, no negro absoluto.",
   "color": {
-    "seed": "#0B6E5D",
+    "seed": "#0B5E4E",
+    "roles": {
+      "background":     { "light": "#F7F6F2", "dark": "#101413" },
+      "surface":        { "light": "#FFFFFF", "dark": "#181D1C" },
+      "surfaceElevated":{ "light": "#FFFFFF", "dark": "#1F2624" },
+      "surfaceMuted":   { "light": "#EFEEE8", "dark": "#141918" },
+      "border":         { "light": "#E2E0D8", "dark": "#2A312F" },
+      "borderStrong":   { "light": "#C9C6BB", "dark": "#3C4542" },
+      "textPrimary":    { "light": "#15201C", "dark": "#F1F3F1" },
+      "textSecondary":  { "light": "#4C5A55", "dark": "#AFBAB6" },
+      "textMuted":      { "light": "#77837E", "dark": "#7C8783" },
+      "primary":        { "light": "#0B5E4E", "dark": "#4FD1A5" },
+      "onPrimary":      { "light": "#FFFFFF", "dark": "#062119" },
+      "primaryMuted":   { "light": "#E3EFEA", "dark": "#17332B" },
+      "accent":         { "light": "#C2612B", "dark": "#E8925A" },
+      "accentMuted":    { "light": "#F8EBE2", "dark": "#33231A" },
+      "positive":       { "light": "#1B7A4B", "dark": "#5FCE92" },
+      "positiveMuted":  { "light": "#E4F1E9", "dark": "#132A1F" },
+      "negative":       { "light": "#B3261E", "dark": "#F09891" },
+      "negativeMuted":  { "light": "#FAE9E7", "dark": "#31191A" },
+      "warning":        { "light": "#8A5A00", "dark": "#E9B65C" },
+      "pending":        { "light": "#6B6558", "dark": "#B0A995" },
+      "disabled":       { "light": "#A9B2AE", "dark": "#525C59" },
+      "overlay":        { "light": "#15201C", "dark": "#000000" },
+      "skeleton":       { "light": "#E7E5DD", "dark": "#232A28" },
+      "focus":          { "light": "#0B5E4E", "dark": "#4FD1A5" }
+    },
     "semantic": {
-      "settlementPending": { "light": "#5F6368", "dark": "#9AA0A6" },
-      "settlementMarked": { "light": "#B58500", "dark": "#FFD166" },
-      "settlementConfirmed": { "light": "#1B7A43", "dark": "#6CD597" },
-      "balancePositive": { "light": "#1B7A43", "dark": "#6CD597" },
-      "balanceNegative": { "light": "#B3261E", "dark": "#F2B8B5" }
+      "settlementPending": { "light": "#6B6558", "dark": "#B0A995" },
+      "settlementMarked": { "light": "#8A5A00", "dark": "#E9B65C" },
+      "settlementConfirmed": { "light": "#1B7A4B", "dark": "#5FCE92" },
+      "balancePositive": { "light": "#1B7A4B", "dark": "#5FCE92" },
+      "balanceNegative": { "light": "#B3261E", "dark": "#F09891" }
     },
     "avatarPalette": [
-      "#0B6E5D", "#5B7C99", "#8C6D4F", "#7A5EA6",
-      "#B05A7A", "#4E8098", "#96772E", "#5E8C5A"
+      "#0B5E4E", "#3F6B8A", "#8A6136", "#6B5296",
+      "#9E4A68", "#3D7A78", "#7C6A22", "#4A7C50"
     ]
   },
   "typography": {
-    "fontFamily": "Inter",
+    "fontFamily": "",
+    "_fontFamily": "Vacio = pila del sistema (Roboto en Android). Se evita empaquetar una fuente de terceros: el caracter lo dan peso, tamano y tracking, no una tipografia de novedad. Ver docs/DISENO.md.",
     "moneyFeatures": ["tnum"],
     "scale": {
-      "displayLarge": { "size": 45, "weight": 600 },
-      "headline": { "size": 28, "weight": 600 },
-      "title": { "size": 20, "weight": 600 },
-      "body": { "size": 16, "weight": 400 },
-      "bodySmall": { "size": 14, "weight": 400 },
-      "label": { "size": 12, "weight": 500 }
+      "display":      { "size": 40, "weight": 700, "tracking": -1.0, "height": 1.05 },
+      "pageTitle":    { "size": 26, "weight": 700, "tracking": -0.5, "height": 1.15 },
+      "sectionTitle": { "size": 15, "weight": 600, "tracking": 0.2,  "height": 1.3 },
+      "cardTitle":    { "size": 16, "weight": 600, "tracking": -0.1, "height": 1.3 },
+      "body":         { "size": 15, "weight": 400, "tracking": 0.0,  "height": 1.45 },
+      "bodyStrong":   { "size": 15, "weight": 600, "tracking": 0.0,  "height": 1.45 },
+      "label":        { "size": 13, "weight": 500, "tracking": 0.1,  "height": 1.3 },
+      "caption":      { "size": 12, "weight": 400, "tracking": 0.1,  "height": 1.3 },
+      "moneyLarge":   { "size": 34, "weight": 700, "tracking": -1.0, "height": 1.1 },
+      "moneyMedium":  { "size": 19, "weight": 600, "tracking": -0.3, "height": 1.2 },
+      "moneySmall":   { "size": 15, "weight": 600, "tracking": -0.1, "height": 1.2 }
     }
   },
-  "spacing": { "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32 },
+  "spacing": {
+    "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 20,
+    "xxl": 24, "xxxl": 32, "section": 40
+  },
   "radius": {
-    "card": 16, "sheet": 28, "button": 24, "field": 12, "thumbnail": 8
+    "control": 10, "field": 10, "card": 14, "sheet": 24,
+    "button": 10, "thumbnail": 8, "pill": 999
   },
   "motion": {
     "easingEmphasized": [0.2, 0.0, 0.0, 1.0],
-    "durations": { "toggleMs": 150, "exitMs": 200, "enterMs": 350, "maxMs": 500 },
-    "listStaggerMs": 25,
-    "skeletonShimmerMs": 1200,
+    "durations": { "toggleMs": 120, "exitMs": 150, "enterMs": 220, "maxMs": 300 },
+    "listStaggerMs": 20,
+    "skeletonShimmerMs": 1100,
     "syncIndicatorDelayMs": 400
   },
-  "layout": { "screenMargin": 16, "minTouchTarget": 48, "thumbnailSize": 56 }
+  "layout": {
+    "screenMargin": 20, "minTouchTarget": 48, "thumbnailSize": 52,
+    "hairline": 1, "maxContentWidth": 560
+  }
 }

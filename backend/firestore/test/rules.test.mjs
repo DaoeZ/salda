@@ -22,7 +22,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -374,6 +377,33 @@ describe('friendships', () => {
     assert.deepEqual(saved.data().memberUids, [OWNER, STRANGER].sort());
   });
 
+  // Regresión: el cliente envía la solicitud dentro de una transacción que
+  // primero LEE el documento (aún inexistente). La regla de get debe admitir
+  // esa lectura o la transacción entera muere con permission-denied.
+  it('el flujo real del cliente: transacción que lee el doc inexistente y lo crea',
+      async () => {
+    const database = db(OWNER);
+    await assertSucceeds(runTransaction(database, async (tx) => {
+      const snapshot = await tx.get(doc(database, `friendships/${id()}`));
+      assert.equal(snapshot.exists(), false);
+      tx.set(
+        doc(database, `friendships/${id()}`),
+        friendshipData(OWNER, STRANGER),
+      );
+    }));
+    const saved = await getDoc(refFor());
+    assert.equal(saved.data().status, 'pending');
+  });
+
+  it('get de una relación inexistente: solo si el ID incluye al lector',
+      async () => {
+    await assertSucceeds(getDoc(refFor(OWNER)));
+    await assertSucceeds(getDoc(refFor(STRANGER)));
+    // Cuenta social válida pero ajena al par: no puede sondear existencia.
+    await assertFails(getDoc(refFor(SOCIAL_OUTSIDER)));
+    await assertFails(getDoc(refFor(GUEST)));
+  });
+
   it('solo los participantes completos leen y la query exige arrayContains',
       async () => {
     await env.withSecurityRulesDisabled((ctx) => setDoc(
@@ -500,6 +530,17 @@ describe('sessions.create', () => {
 
   it('owner crea una sesión válida', () =>
     assertSucceeds(setDoc(doc(db(OWNER), 'sessions/nueva'), valid)));
+
+  it('sesión contextual exige un espacio del que el owner sea miembro',
+      async () => {
+    await assertSucceeds(setDoc(doc(db(OWNER), 'sessions/contextual'), {
+      ...valid, contextModelVersion: 1, spaceId: 'sp1', spaceName: 'Viaje',
+    }));
+    await assertFails(setDoc(doc(db(FOURTH), 'sessions/contextual-ajena'), {
+      ...valid, ownerUid: FOURTH, contextModelVersion: 1,
+      spaceId: 'sp1', spaceName: 'Viaje',
+    }));
+  });
 
   it('invitado móvil crea una sesión propia', () =>
     assertSucceeds(setDoc(doc(db(GUEST), 'sessions/nueva'),
@@ -958,6 +999,197 @@ describe('spaces', () => {
   it('cuenta completa crea espacio + membresía owner en batch', () =>
     assertSucceeds(createSpace(db(FOURTH), FOURTH, 'nuevo')));
 
+  // REGRESIÓN: la app NO escribe a ciegas. Invitar y crear una relación
+  // empiezan leyendo dentro de una transacción el documento que van a
+  // crear (para ser idempotentes), y ese documento todavía NO existe.
+  // Si `read` no contempla `resource == null`, la transacción muere con
+  // permission-denied antes de escribir nada.
+  it('grupo: invitar lee la invitación inexistente y la crea (como la app)',
+      async () => {
+    const f = db(SOCIAL_OUTSIDER); // owner de sp1
+    const inviteId = `sp1_${FOURTH}`;
+    await assertSucceeds(runTransaction(f, async (tx) => {
+      const existing = await tx.get(doc(f, `spaceInvites/${inviteId}`));
+      assert.equal(existing.exists(), false);
+      tx.set(doc(f, `spaceInvites/${inviteId}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: FOURTH, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }));
+  });
+
+  it('relación: se lee el espacio inexistente y se crea entero (como la app)',
+      async () => {
+    const relationId = `relationship_${FOURTH}~${THIRD}`;
+    const f = db(FOURTH);
+    await assertSucceeds(runTransaction(f, async (tx) => {
+      const existing = await tx.get(doc(f, `spaces/${relationId}`));
+      assert.equal(existing.exists(), false);
+      tx.set(doc(f, `spaces/${relationId}`), {
+        name: 'Relación', ownerUid: FOURTH, kind: 'relationship',
+        relationshipUids: [FOURTH, THIRD], status: 'active',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+      tx.set(doc(f, `spaces/${relationId}/members/${FOURTH}`), {
+        uid: FOURTH, joinedAt: serverTimestamp(),
+      });
+      tx.set(doc(f, `spaceInvites/${relationId}_${THIRD}`), {
+        spaceId: relationId, spaceName: 'Relación', fromUid: FOURTH,
+        toUid: THIRD, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }));
+  });
+
+  // ── Participantes manuales (ADR-033) ──────────────────────────────────
+  const manualDoc = (manualId, overrides = {}) => ({
+    manualId,
+    displayName: 'Lucía',
+    linkedUid: null,
+    createdByUid: SOCIAL_OUTSIDER,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  it('MANUAL: el owner crea una persona sin cuenta y cualquier miembro la ve',
+      async () => {
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/mp1'),
+      manualDoc('mp1')));
+    await assertSucceeds(
+      getDoc(doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp1')));
+  });
+
+  it('MANUAL: solo el owner la crea; ni un miembro ni un extraño', async () => {
+    await assertFails(setDoc(
+      doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp2'),
+      manualDoc('mp2', { createdByUid: STRANGER })));
+    await assertFails(setDoc(
+      doc(db(FOURTH), 'spaces/sp1/manualParticipants/mp3'),
+      manualDoc('mp3', { createdByUid: FOURTH })));
+  });
+
+  it('MANUAL: forma inválida denegada (id, nombre, vínculo o autoría)',
+      async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    // manualId incompatible con el actor `manual:{id}`.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp:x'), manualDoc('mp:x')));
+    // El campo debe coincidir con el id del documento.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp4'), manualDoc('otro')));
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp5'),
+      manualDoc('mp5', { displayName: '' })));
+    // La vinculación con una cuenta es fase futura: hoy siempre null.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp6'),
+      manualDoc('mp6', { linkedUid: FOURTH })));
+    // No se puede atribuir la creación a otro.
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp7'),
+      manualDoc('mp7', { createdByUid: STRANGER })));
+  });
+
+  it('MANUAL: se renombra, pero identidad y vínculo son inmutables',
+      async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    await setDoc(doc(f, 'spaces/sp1/manualParticipants/mp8'), manualDoc('mp8'));
+
+    await assertSucceeds(updateDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp8'),
+      { displayName: 'Lucía G.', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp8'),
+      { manualId: 'otro', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(
+      doc(f, 'spaces/sp1/manualParticipants/mp8'),
+      { linkedUid: FOURTH, updatedAt: serverTimestamp() }));
+    // Un miembro cualquiera no la renombra.
+    await assertFails(updateDoc(
+      doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp8'),
+      { displayName: 'Hack', updatedAt: serverTimestamp() }));
+  });
+
+  it('MANUAL: la retira el owner; un miembro no', async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    await setDoc(doc(f, 'spaces/sp1/manualParticipants/mp9'), manualDoc('mp9'));
+    await assertFails(
+      deleteDoc(doc(db(STRANGER), 'spaces/sp1/manualParticipants/mp9')));
+    await assertSucceeds(
+      deleteDoc(doc(f, 'spaces/sp1/manualParticipants/mp9')));
+  });
+
+  it('MANUAL: un extraño no lista las personas sin cuenta del espacio', () =>
+    assertFails(getDocs(collection(db(FOURTH),
+      'spaces/sp1/manualParticipants'))));
+
+  it('invitar comprueba antes si el destino ya es miembro (get ajeno)', () =>
+    assertSucceeds(
+      getDoc(doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${FOURTH}`))));
+
+  it('leer un espacio o invitación ajenos inexistentes SIGUE denegado',
+      async () => {
+    // El hueco de lectura no puede convertirse en un oráculo de existencia
+    // para terceros: FOURTH no participa en esta pareja ni en sp2.
+    await assertFails(getDoc(
+      doc(db(FOURTH), `spaces/relationship_${THIRD}~${SOCIAL_OUTSIDER}`)));
+    await assertFails(getDoc(doc(db(FOURTH), `spaceInvites/sp2_${THIRD}`)));
+  });
+
+  it('crea una relación canónica con invitación en el mismo batch', async () => {
+    const relationId = `relationship_${FOURTH}~${THIRD}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${relationId}`), {
+      name: 'Relación', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD], status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${relationId}/members/${FOURTH}`), {
+      uid: FOURTH, joinedAt: serverTimestamp(),
+    });
+    batch.set(doc(f, `spaceInvites/${relationId}_${THIRD}`), {
+      spaceId: relationId, spaceName: 'Relación', fromUid: FOURTH,
+      toUid: THIRD, status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('deniega relación con id no canónico o invitación a un tercer UID',
+      async () => {
+    await assertFails(createSpace(db(FOURTH), FOURTH, 'relacion-falsa', {
+      kind: 'relationship', relationshipUids: [FOURTH, THIRD],
+      schemaVersion: 2,
+    }));
+
+    const relationId = `relationship_${FOURTH}~${THIRD}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${relationId}`), {
+      name: 'Relación', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD], status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${relationId}/members/${FOURTH}`), {
+      uid: FOURTH, joinedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+    await assertFails(setDoc(
+      doc(f, `spaceInvites/${relationId}_${SOCIAL_OUTSIDER}`), {
+        spaceId: relationId, spaceName: 'Relación', fromUid: FOURTH,
+        toUid: SOCIAL_OUTSIDER, status: 'pending',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      }));
+  });
+
   it('espacio sin membresía owner en el batch: denegado', () =>
     assertFails(setDoc(doc(db(FOURTH), 'spaces/suelto'), spaceDoc())));
 
@@ -1077,9 +1309,19 @@ describe('spaces', () => {
   it('rechazo del receptor, cancelación del owner y reenvío', async () => {
     await assertSucceeds(updateDoc(doc(db(THIRD), `spaceInvites/sp1_${THIRD}`),
       { status: 'rejected', updatedAt: serverTimestamp() }));
-    await assertSucceeds(updateDoc(
+    // A11d: reenviar es una decisión NUEVA y renueva `createdAt`. Esa fecha
+    // es la que después demuestra que una readmisión es posterior a la
+    // expulsión vigente, así que sin renovarla el reenvío se deniega.
+    await assertFails(updateDoc(
       doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
       { status: 'pending', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
+      {
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
     await assertSucceeds(updateDoc(
       doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${THIRD}`),
       { status: 'cancelled', updatedAt: serverTimestamp() }));
@@ -1094,7 +1336,10 @@ describe('spaces', () => {
     await assertFails(batch.commit());
   });
 
-  it('salir (miembro), expulsión (owner) y límites', async () => {
+  // A11d: salir es un acto propio y sigue siendo un borrado suelto. Expulsar
+  // ya NO lo es: exige evidencia del ciclo y bloqueo en el mismo commit, y
+  // eso se prueba entero en `group_member_removal.test.mjs`.
+  it('salir (miembro) y límites del borrado suelto', async () => {
     // El miembro sale por sí mismo.
     await assertSucceeds(
       deleteDoc(doc(db(STRANGER), `spaces/sp1/members/${STRANGER}`)));
@@ -1106,8 +1351,8 @@ describe('spaces', () => {
       deleteDoc(doc(db(FOURTH), `spaces/sp1/members/${STRANGER}`)));
   });
 
-  it('el owner expulsa a un miembro', () =>
-    assertSucceeds(deleteDoc(
+  it('ni siquiera el owner borra una membresía a secas (A11d)', () =>
+    assertFails(deleteDoc(
       doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${STRANGER}`))));
 
   it('tickets vinculados: los miembros del espacio leen el resumen', async () => {
@@ -1130,6 +1375,188 @@ describe('spaces', () => {
     await assertSucceeds(createSpace(db(FOURTH), FOURTH, 'ajeno'));
     await assertFails(updateDoc(
       doc(db(OWNER), `${S}/accounts/a1/tickets/t1`), { spaceId: 'ajeno' }));
+  });
+});
+
+// ─── Chat contextual (P7): membresía + frontera temporal ────────────────
+describe('space chat', () => {
+  const joinedAt = new Date('2026-07-01T10:00:00.000Z');
+  const thirdJoinedAt = new Date('2026-07-03T10:00:00.000Z');
+  const visibleAt = new Date('2026-07-02T10:00:00.000Z');
+  const afterThirdAt = new Date('2026-07-04T10:00:00.000Z');
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      for (const uid of [SOCIAL_OUTSIDER, STRANGER, OWNER]) {
+        await setDoc(doc(f, `spaces/sp1/members/${uid}`), {
+          uid,
+          joinedAt,
+        });
+      }
+      await setDoc(doc(f, `spaces/sp1/members/${THIRD}`), {
+        uid: THIRD,
+        joinedAt: thirdJoinedAt,
+      });
+      await setDoc(doc(f, 'spaces/sp1/messages/before'), {
+        authorUid: SOCIAL_OUTSIDER,
+        text: 'Conversación anterior',
+        createdAt: new Date('2026-06-30T10:00:00.000Z'),
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'spaces/sp1/messages/visible'), {
+        authorUid: SOCIAL_OUTSIDER,
+        text: 'Mensaje visible',
+        createdAt: visibleAt,
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'spaces/sp1/messages/after-third'), {
+        authorUid: STRANGER,
+        text: 'Mensaje para todos los miembros actuales',
+        createdAt: afterThirdAt,
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'spaces/sp2/messages/archived'), {
+        authorUid: SOCIAL_OUTSIDER,
+        text: 'Contexto archivado',
+        createdAt: visibleAt,
+        schemaVersion: 1,
+      });
+    });
+  });
+
+  const chatQuery = (f, spaceId, cutoff) => query(
+    collection(f, `spaces/${spaceId}/messages`),
+    where('createdAt', '>=', cutoff),
+    orderBy('createdAt', 'desc'),
+    limit(40),
+  );
+
+  const validMessage = (overrides = {}) => ({
+    authorUid: STRANGER,
+    text: 'Hola, grupo',
+    createdAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  it('miembro actual consulta solo desde su fecha de incorporación', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(chatQuery(db(STRANGER), 'sp1', joinedAt)),
+    );
+    assert.deepEqual(
+      snapshot.docs.map((document) => document.id),
+      ['after-third', 'visible'],
+    );
+    await assertFails(getDoc(doc(db(STRANGER), 'spaces/sp1/messages/before')));
+  });
+
+  it('miembro nuevo no hereda historial y la consulta sin cota se deniega',
+      async () => {
+    await assertFails(
+      getDoc(doc(db(THIRD), 'spaces/sp1/messages/visible')),
+    );
+    const snapshot = await assertSucceeds(
+      getDocs(chatQuery(db(THIRD), 'sp1', thirdJoinedAt)),
+    );
+    assert.deepEqual(
+      snapshot.docs.map((document) => document.id),
+      ['after-third'],
+    );
+    await assertFails(getDocs(query(
+      collection(db(THIRD), 'spaces/sp1/messages'),
+      orderBy('createdAt', 'desc'),
+      limit(40),
+    )));
+  });
+
+  it('no miembros, invitados anónimos y cuentas no verificadas no leen',
+      async () => {
+    await assertFails(
+      getDoc(doc(db(FOURTH), 'spaces/sp1/messages/visible')),
+    );
+    await assertFails(
+      getDoc(doc(db(GUEST), 'spaces/sp1/messages/visible')),
+    );
+    await assertFails(
+      getDoc(doc(db(UNVERIFIED), 'spaces/sp1/messages/visible')),
+    );
+  });
+
+  it('miembro activo envía con identidad propia y server timestamp',
+      async () => {
+    await assertSucceeds(setDoc(
+      doc(db(STRANGER), 'spaces/sp1/messages/new'),
+      validMessage(),
+    ));
+    await assertFails(setDoc(
+      doc(db(STRANGER), 'spaces/sp2/messages/new'),
+      validMessage(),
+    ));
+  });
+
+  it('deniega suplantación, forma inválida y campos adicionales', async () => {
+    const target = (id) => doc(db(STRANGER), `spaces/sp1/messages/${id}`);
+    await assertFails(setDoc(
+      target('spoof'),
+      validMessage({ authorUid: OWNER }),
+    ));
+    await assertFails(setDoc(target('empty'), validMessage({ text: '' })));
+    await assertFails(setDoc(
+      target('long'),
+      validMessage({ text: 'x'.repeat(2001) }),
+    ));
+    await assertFails(setDoc(
+      target('schema'),
+      validMessage({ schemaVersion: 2 }),
+    ));
+    await assertFails(setDoc(
+      target('extra'),
+      validMessage({ moderation: true }),
+    ));
+  });
+
+  it('mensajes inmutables; solo el autor borra en un espacio activo',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spaces/sp1/messages/third-before'), {
+        authorUid: THIRD,
+        text: 'Mensaje propio de una membresía anterior',
+        createdAt: visibleAt,
+        schemaVersion: 1,
+      });
+    });
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/messages/visible'),
+      { text: 'Editado' },
+    ));
+    await assertFails(deleteDoc(
+      doc(db(STRANGER), 'spaces/sp1/messages/visible'),
+    ));
+    await assertFails(deleteDoc(
+      doc(db(THIRD), 'spaces/sp1/messages/third-before'),
+    ));
+    await assertSucceeds(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/messages/visible'),
+    ));
+    await assertFails(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp2/messages/archived'),
+    ));
+  });
+
+  it('al salir se pierde inmediatamente todo acceso al chat', async () => {
+    const memberDb = db(STRANGER);
+    await assertSucceeds(
+      deleteDoc(doc(memberDb, `spaces/sp1/members/${STRANGER}`)),
+    );
+    await assertFails(
+      getDoc(doc(memberDb, 'spaces/sp1/messages/after-third')),
+    );
+    await assertFails(setDoc(
+      doc(memberDb, 'spaces/sp1/messages/after-leave'),
+      validMessage(),
+    ));
   });
 });
 
@@ -1186,6 +1613,1941 @@ describe('economic relations', () => {
       memberUids: [OWNER, STRANGER].sort(), amount: 1,
     }));
     await assertFails(deleteDoc(doc(db(OWNER), 'economicPayments/p1')));
+  });
+});
+
+// ─── Permisos económicos y representación (ADR-038) ────────────────────
+// sp1: propietario SOCIAL_OUTSIDER; miembros STRANGER y OWNER; FOURTH fuera.
+describe('economic permissions', () => {
+  const MANUAL = 'manual:mpj';
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/mpj'), {
+        manualId: 'mpj', displayName: 'Javi', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+      // Deuda de una CUENTA hacia alguien SIN cuenta: un solo lector natural.
+      await setDoc(doc(f, 'economicEntries/eManual'), {
+        memberUids: [STRANGER], debtorUid: STRANGER, creditorUid: MANUAL,
+        amount: 1000, currency: 'EUR', sessionId: 's1', accountId: 'a1',
+        ticketId: 't1', ticketName: 'Familycash', spaceId: 'sp1',
+        hasManualParty: true, schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'economicPayments/pManual'), {
+        memberUids: [STRANGER], pairId: 'pair', payerUid: STRANGER,
+        receiverUid: MANUAL, amount: 400, currency: 'EUR',
+        status: 'confirmed', source: 'user', spaceId: 'sp1',
+        hasManualParty: true, schemaVersion: 1,
+      });
+      // Deuda entre DOS CUENTAS en el mismo espacio: nadie más la ve.
+      await setDoc(doc(f, 'economicEntries/eAccounts'), {
+        memberUids: [STRANGER, THIRD].sort(), debtorUid: STRANGER,
+        creditorUid: THIRD, amount: 700, currency: 'EUR', sessionId: 's1',
+        accountId: 'a1', ticketId: 't2', ticketName: 'Cena', spaceId: 'sp1',
+        hasManualParty: false, schemaVersion: 1,
+      });
+    });
+  });
+
+  const makeAdmin = (uid) => env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), `spaces/sp1/members/${uid}`),
+      { role: 'admin' });
+  });
+
+  it('el propietario del espacio representa a quien no tiene cuenta',
+      async () => {
+    await assertSucceeds(
+      getDoc(doc(db(SOCIAL_OUTSIDER), 'economicEntries/eManual')));
+    await assertSucceeds(
+      getDoc(doc(db(SOCIAL_OUTSIDER), 'economicPayments/pManual')));
+  });
+
+  it('un administrador nombrado también, y un miembro normal no', async () => {
+    await assertFails(getDoc(doc(db(OWNER), 'economicEntries/eManual')));
+    await makeAdmin(OWNER);
+    await assertSucceeds(getDoc(doc(db(OWNER), 'economicEntries/eManual')));
+  });
+
+  it('NADIE ajeno al espacio representa a ese manual', async () => {
+    await assertFails(getDoc(doc(db(FOURTH), 'economicEntries/eManual')));
+    await assertFails(getDoc(doc(db(GUEST), 'economicEntries/eManual')));
+  });
+
+  it('un administrador NO puede leer deuda entre dos cuentas ajenas',
+      async () => {
+    await makeAdmin(OWNER);
+    await assertFails(getDoc(doc(db(OWNER), 'economicEntries/eAccounts')));
+    await assertFails(
+      getDoc(doc(db(SOCIAL_OUTSIDER), 'economicEntries/eAccounts')));
+  });
+
+  it('la consulta del administrador se acota a las deudas representables',
+      async () => {
+    await makeAdmin(OWNER);
+    await assertSucceeds(getDocs(query(
+      collection(db(OWNER), 'economicEntries'),
+      where('spaceId', '==', 'sp1'),
+      where('hasManualParty', '==', true),
+    )));
+    // Sin el filtro arrastraría la deuda entre dos cuentas: denegada entera.
+    await assertFails(getDocs(query(
+      collection(db(OWNER), 'economicEntries'),
+      where('spaceId', '==', 'sp1'),
+    )));
+  });
+
+  it('solo el propietario nombra o retira administradores', async () => {
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OWNER}`),
+      { role: 'admin' }));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OWNER}`),
+      { role: 'member' }));
+    // Ni uno se asciende a sí mismo, ni un miembro asciende a otro.
+    await assertFails(updateDoc(
+      doc(db(OWNER), `spaces/sp1/members/${OWNER}`), { role: 'admin' }));
+    await assertFails(updateDoc(
+      doc(db(STRANGER), `spaces/sp1/members/${OWNER}`), { role: 'admin' }));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OWNER}`),
+      { role: 'superadmin' }));
+  });
+
+  it('un grupo admite varios administradores a la vez', async () => {
+    const owner = db(SOCIAL_OUTSIDER);
+    await assertSucceeds(updateDoc(
+      doc(owner, `spaces/sp1/members/${OWNER}`), { role: 'admin' }));
+    await assertSucceeds(updateDoc(
+      doc(owner, `spaces/sp1/members/${STRANGER}`), { role: 'admin' }));
+    await assertSucceeds(getDoc(doc(db(OWNER), 'economicEntries/eManual')));
+    await assertSucceeds(getDoc(doc(db(STRANGER), 'economicEntries/eManual')));
+  });
+
+  it('un administrador NO nombra ni retira administradores', async () => {
+    await makeAdmin(OWNER);
+    // Ni asciende a un miembro normal…
+    await assertFails(updateDoc(
+      doc(db(OWNER), `spaces/sp1/members/${STRANGER}`), { role: 'admin' }));
+    // …ni degrada a otro administrador.
+    await makeAdmin(STRANGER);
+    await assertFails(updateDoc(
+      doc(db(OWNER), `spaces/sp1/members/${STRANGER}`), { role: 'member' }));
+  });
+
+  it('quien no tiene cuenta no puede ser administrado ni administrar',
+      async () => {
+    // Un MANUAL no es miembro: no hay documento de membresía que ascender, y
+    // su propio documento no admite el campo.
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/mpj'),
+      { role: 'admin' }));
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${MANUAL}`),
+      { uid: MANUAL, joinedAt: serverTimestamp(), role: 'admin' }));
+  });
+
+  it('una RELACIÓN no entra en el sistema de roles', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/rel1'), {
+        name: 'Pedro y Edgar', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+        kind: 'relationship', relationshipUids: [OWNER, SOCIAL_OUTSIDER].sort(),
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+      for (const uid of [SOCIAL_OUTSIDER, OWNER]) {
+        await setDoc(doc(f, `spaces/rel1/members/${uid}`), {
+          uid, joinedAt: serverTimestamp(),
+        });
+      }
+    });
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/rel1/members/${OWNER}`),
+      { role: 'admin' }));
+  });
+
+  it('un INVITADO no administra el contexto', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `spaces/sp1/members/${OTHER}`), {
+        uid: OTHER, joinedAt: serverTimestamp(), kind: 'guest',
+        displayName: 'Invitado',
+      });
+    });
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/members/${OTHER}`),
+      { role: 'admin' }));
+  });
+
+  it('nadie NACE administrador al unirse', async () => {
+    const f = db(THIRD);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/sp1_${THIRD}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${THIRD}`), {
+      uid: THIRD, joinedAt: serverTimestamp(), role: 'admin',
+    });
+    await assertFails(batch.commit());
+  });
+
+  // Que la representación CESE al vincular el manual con una cuenta lo
+  // decide la Function, que es quien lee `linkedUid`: está cubierto en
+  // packages/domain (economic_authority_test.dart) y en backend/functions
+  // (settleEconomicEntries.test.ts). Rules solo delimita quién puede leer.
+});
+
+// ─── Actividad (P6): proyección de auditoría ────────────────────────────
+describe('activityEvents', () => {
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      // Evento con audiencia congelada: STRANGER y SOCIAL_OUTSIDER.
+      await setDoc(doc(f, 'activityEvents/ev1'), {
+        type: 'space_created', actorUid: SOCIAL_OUTSIDER,
+        memberUids: [SOCIAL_OUTSIDER, STRANGER], spaceId: 'sp1',
+        summary: { spaceName: 'Viaje' }, at: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, 'activityEvents/ev2'), {
+        type: 'payment_confirmed', actorUid: STRANGER,
+        memberUids: [STRANGER, THIRD], paymentId: 'pay1',
+        summary: { amount: 500, currency: 'EUR' }, at: serverTimestamp(),
+        schemaVersion: 1,
+      });
+    });
+  });
+
+  it('lee un evento SOLO quien está en su audiencia congelada', async () => {
+    await assertSucceeds(getDoc(doc(db(STRANGER), 'activityEvents/ev1')));
+    await assertSucceeds(getDoc(doc(db(THIRD), 'activityEvents/ev2')));
+    // THIRD es miembro actual de nada en ev1: fuera de audiencia, fuera.
+    await assertFails(getDoc(doc(db(THIRD), 'activityEvents/ev1')));
+    await assertFails(getDoc(doc(db(FOURTH), 'activityEvents/ev2')));
+  });
+
+  it('la query global (array-contains propio + orden) es demostrable', () =>
+    assertSucceeds(getDocs(query(
+      collection(db(STRANGER), 'activityEvents'),
+      where('memberUids', 'array-contains', STRANGER)))));
+
+  it('anónimos y no verificados no leen actividad', async () => {
+    await assertFails(getDoc(doc(db(GUEST), 'activityEvents/ev1')));
+    await assertFails(getDoc(doc(db(UNVERIFIED), 'activityEvents/ev1')));
+  });
+
+  it('ningún cliente escribe eventos (ni fraudulentos a nombre de otro)',
+      async () => {
+    await assertFails(setDoc(doc(db(STRANGER), 'activityEvents/falso'), {
+      type: 'payment_confirmed', actorUid: THIRD,
+      memberUids: [STRANGER, THIRD], summary: {},
+      at: serverTimestamp(), schemaVersion: 1,
+    }));
+    await assertFails(updateDoc(doc(db(STRANGER), 'activityEvents/ev1'),
+      { actorUid: STRANGER }));
+    await assertFails(deleteDoc(doc(db(STRANGER), 'activityEvents/ev1')));
+  });
+
+  // A11d retiró `removedBy`: escribir sobre el documento que se va a borrar
+  // no servía —el trigger recibe el cambio NETO del commit y el marcador no
+  // llegaba a verse—, así que la evidencia vive fuera y es inmutable.
+  it('P6: `removedBy` ya no se escribe sobre la membresía', async () => {
+    for (const actor of [SOCIAL_OUTSIDER, STRANGER]) {
+      await assertFails(updateDoc(
+        doc(db(actor), `spaces/sp1/members/${STRANGER}`),
+        { removedBy: actor }));
+    }
+  });
+});
+
+// ─── Modo invitado (GUEST, ADR-034) ─────────────────────────────────────
+describe('guest', () => {
+  // GUEST = Auth anónimo CON identidad de invitado. La identidad persiste
+  // en el dispositivo (la sesión anónima de Firebase sobrevive a reinicios).
+  const identity = (uid, overrides = {}) => ({
+    uid,
+    displayName: 'Invitada',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `guestIdentities/${GUEST}`), {
+        uid: GUEST, displayName: 'Alba invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      // El invitado ya es miembro de sp1 (su alta se prueba aparte).
+      await setDoc(doc(f, `spaces/sp1/members/${GUEST}`), {
+        uid: GUEST, kind: 'guest', displayName: 'Alba invitada',
+        joinedAt: serverTimestamp(),
+      });
+    });
+  });
+
+  it('crea y mantiene su identidad; nadie más puede escribirla', async () => {
+    await assertSucceeds(setDoc(
+      doc(db(OTHER), `guestIdentities/${OTHER}`), identity(OTHER)));
+    // Renombrarse: el nombre visible es suyo.
+    await assertSucceeds(updateDoc(
+      doc(db(GUEST), `guestIdentities/${GUEST}`),
+      { displayName: 'Alba G.', updatedAt: serverTimestamp() }));
+    // Suplantación y escritura ajena: denegadas.
+    await assertFails(setDoc(
+      doc(db(OTHER), `guestIdentities/${GUEST}`), identity(GUEST)));
+    await assertFails(updateDoc(
+      doc(db(STRANGER), `guestIdentities/${GUEST}`),
+      { displayName: 'Hack', updatedAt: serverTimestamp() }));
+    // Forma inválida (nombre vacío o campo de más).
+    await assertFails(setDoc(
+      doc(db(OTHER), `guestIdentities/${OTHER}`),
+      identity(OTHER, { displayName: '' })));
+    await assertFails(setDoc(
+      doc(db(OTHER), `guestIdentities/${OTHER}`),
+      identity(OTHER, { username: 'alba' })));
+  });
+
+  it('la identidad NO es pública: se lee por UID pero jamás es buscable',
+      async () => {
+    await assertSucceeds(getDoc(doc(db(OWNER), `guestIdentities/${GUEST}`)));
+    await assertFails(getDocs(collection(db(OWNER), 'guestIdentities')));
+  });
+
+  it('participa: lee su contexto, sus miembros y sus balances', async () => {
+    await assertSucceeds(getDoc(doc(db(GUEST), 'spaces/sp1')));
+    await assertSucceeds(
+      getDocs(collection(db(GUEST), 'spaces/sp1/members')));
+    await assertSucceeds(getDocs(query(
+      collection(db(GUEST), 'economicEntries'),
+      where('memberUids', 'array-contains', GUEST))));
+  });
+
+  it('NO crea contextos, ni invita, ni administra, ni tiene perfil público',
+      async () => {
+    // Crear un espacio (aunque sea con su propia membresía en el batch).
+    const f = db(GUEST);
+    const batch = writeBatch(f);
+    batch.set(doc(f, 'spaces/guest-space'), {
+      name: 'Mío', ownerUid: GUEST, status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 1,
+    });
+    batch.set(doc(f, `spaces/guest-space/members/${GUEST}`), {
+      uid: GUEST, joinedAt: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+
+    // Invitar a alguien a un contexto del que es miembro.
+    await assertFails(setDoc(doc(f, `spaceInvites/sp1_${FOURTH}`), {
+      spaceId: 'sp1', spaceName: 'Viaje', fromUid: GUEST, toUid: FOURTH,
+      status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    // Administrar: renombrar, archivar, transferir o expulsar.
+    await assertFails(updateDoc(doc(f, 'spaces/sp1'),
+      { name: 'Renombrado', updatedAt: serverTimestamp() }));
+    await assertFails(
+      deleteDoc(doc(f, `spaces/sp1/members/${STRANGER}`)));
+    // Perfil público y amistades: fuera de su alcance.
+    await assertFails(setDoc(doc(f, `profiles/${GUEST}`), {
+      displayName: 'Alba', displayNameLower: 'alba', username: 'albaguest',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 1,
+    }));
+    await assertFails(setDoc(
+      doc(f, `friendships/${friendshipId(GUEST, STRANGER)}`),
+      friendshipData(GUEST, STRANGER)));
+  });
+
+  it('el anfitrión puede invitar a un invitado (sin perfil público)',
+      async () => {
+    await env.withSecurityRulesDisabled((ctx) => setDoc(
+      doc(ctx.firestore(), `guestIdentities/${OTHER}`), {
+        uid: OTHER, displayName: 'Lucía invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      }));
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${OTHER}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: OTHER, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+    // Un UID sin ninguna identidad (ni perfil ni invitado) sigue denegado.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceInvites/sp1_fantasma-uid'), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: 'fantasma-uid', status: 'pending',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      }));
+  });
+
+  it('se une aceptando su invitación, con su nombre como snapshot',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `guestIdentities/${OTHER}`), {
+        uid: OTHER, displayName: 'Lucía invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      await setDoc(doc(f, `spaceInvites/sp1_${OTHER}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: OTHER, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+
+    const f = db(OTHER);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/sp1_${OTHER}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${OTHER}`), {
+      uid: OTHER, kind: 'guest', displayName: 'Lucía invitada',
+      joinedAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('gastos: solo si el anfitrión lo permite en ese contexto', async () => {
+    const session = {
+      ownerUid: GUEST, kind: 'single', name: 'Cena', status: 'open',
+      splitModeDefault: 'equal', shareCode: 'GUEST-CODE-16CHARS',
+      currency: 'EUR', computeVersion: 0,
+      contextModelVersion: 1, spaceId: 'sp1',
+    };
+    // Por defecto (bandera ausente) el invitado NO origina gasto.
+    await assertFails(setDoc(doc(db(GUEST), 'sessions/guest-1'), session));
+
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(
+      doc(ctx.firestore(), 'spaces/sp1'), { guestsCanCreateExpenses: true }));
+    await assertSucceeds(setDoc(doc(db(GUEST), 'sessions/guest-2'), session));
+
+    // Un miembro con cuenta nunca depende de esa bandera.
+    await env.withSecurityRulesDisabled((ctx) => updateDoc(
+      doc(ctx.firestore(), 'spaces/sp1'), { guestsCanCreateExpenses: false }));
+    await assertSucceeds(setDoc(doc(db(OWNER), 'sessions/host-1'),
+      { ...session, ownerUid: OWNER, shareCode: 'HOST-CODE-16CHARSX' }));
+  });
+
+  it('la política de invitados solo la fija el owner del contexto',
+      async () => {
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1'),
+      { guestsCanCreateExpenses: true, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(GUEST), 'spaces/sp1'),
+      { guestsCanCreateExpenses: true, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(STRANGER), 'spaces/sp1'),
+      { guestsCanCreateExpenses: true, updatedAt: serverTimestamp() }));
+  });
+
+  it('un anónimo SIN identidad de invitado no participa', async () => {
+    // OTHER es anónimo pero aún no ha elegido nombre: no es guest.
+    await assertFails(getDoc(doc(db(OTHER), 'spaces/sp1')));
+  });
+});
+
+// ─── Enlaces de grupo (Sprint 4, ADR-035) ──────────────────────────────
+describe('enlaces de grupo', () => {
+  // sp1 (grupo activo) lo posee SOCIAL_OUTSIDER; STRANGER y OWNER son
+  // miembros; FOURTH está fuera; GUEST es un anónimo con identidad.
+  const TOKEN = 'AAAAAAAAAAAAAAAAAAAAAA'; // 22 chars, como un ShareCode real
+  const OTHER_TOKEN = 'BBBBBBBBBBBBBBBBBBBBBB';
+  const DEAD_TOKEN = 'CCCCCCCCCCCCCCCCCCCCCC';
+
+  const linkDoc = (overrides = {}) => ({
+    spaceId: 'sp1',
+    spaceName: 'Viaje',
+    createdByUid: SOCIAL_OUTSIDER,
+    status: 'active',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  /** Canje completo: prueba de conocimiento + membresía en UN batch. */
+  const redeem = (f, uid, token, spaceId = 'sp1', memberExtra = {}) => {
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${spaceId}/joinGrants/${uid}`), {
+      uid, token, createdAt: serverTimestamp(),
+    });
+    batch.set(doc(f, `spaces/${spaceId}/members/${uid}`), {
+      uid, joinedAt: serverTimestamp(), ...memberExtra,
+    });
+    return batch.commit();
+  };
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `spaceLinks/${TOKEN}`), linkDoc());
+      await setDoc(doc(f, `spaceLinks/${DEAD_TOKEN}`),
+        linkDoc({ status: 'revoked' }));
+      // Enlace de OTRO grupo: sirve para probar que un token no abre un
+      // espacio distinto del suyo.
+      await setDoc(doc(f, `spaceLinks/${OTHER_TOKEN}`),
+        linkDoc({ spaceId: 'sp2', spaceName: 'Antiguo' }));
+      await setDoc(doc(f, `guestIdentities/${GUEST}`), {
+        uid: GUEST, displayName: 'Alba invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      // Relación canónica: nunca debe admitir enlaces (pareja inmutable).
+      await setDoc(doc(f, `spaces/relationship_a~b`), {
+        name: 'Ana y Bruno', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+        kind: 'relationship', relationshipUids: ['a', 'b'],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+      await setDoc(doc(f, `spaces/relationship_a~b/members/${SOCIAL_OUTSIDER}`),
+        { uid: SOCIAL_OUTSIDER, joinedAt: serverTimestamp() });
+    });
+  });
+
+  // ── Creación y gobierno del enlace ──────────────────────────────────
+  it('solo el propietario crea el enlace de su grupo', async () => {
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/NUEVOAAAAAAAAAAAAAAAA'), linkDoc()));
+    // Un MIEMBRO no puede abrir la puerta del grupo: incorporar gente sigue
+    // siendo del propietario.
+    await assertFails(setDoc(
+      doc(db(STRANGER), 'spaceLinks/DEMIEMBROAAAAAAAAAAAA'),
+      linkDoc({ createdByUid: STRANGER })));
+    // Un extraño, menos aún.
+    await assertFails(setDoc(
+      doc(db(FOURTH), 'spaceLinks/DEEXTRANOAAAAAAAAAAAA'),
+      linkDoc({ createdByUid: FOURTH })));
+    // Falsear la autoría tampoco cuela.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/FALSOAAAAAAAAAAAAAAAA'),
+      linkDoc({ createdByUid: STRANGER })));
+  });
+
+  it('un espacio archivado o una RELACIÓN no admiten enlace', async () => {
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/ARCHIVADOAAAAAAAAAAAA'),
+      linkDoc({ spaceId: 'sp2', spaceName: 'Antiguo' })));
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/RELACIONAAAAAAAAAAAAA'),
+      linkDoc({ spaceId: 'relationship_a~b', spaceName: 'Ana y Bruno' })));
+  });
+
+  it('el enlace NUNCA es enumerable; solo lo lista su propietario',
+      async () => {
+    await assertFails(getDocs(collection(db(FOURTH), 'spaceLinks')));
+    await assertFails(getDocs(query(
+      collection(db(STRANGER), 'spaceLinks'),
+      where('spaceId', '==', 'sp1'))));
+    await assertSucceeds(getDocs(query(
+      collection(db(SOCIAL_OUTSIDER), 'spaceLinks'),
+      where('spaceId', '==', 'sp1'), where('status', '==', 'active'))));
+  });
+
+  it('quien recibe el enlace ve el nombre del grupo sin ser miembro',
+      async () => {
+    // Conocer el token de 128 bits ES la autorización (ADR-012).
+    await assertSucceeds(getDoc(doc(db(FOURTH), `spaceLinks/${TOKEN}`)));
+    await assertSucceeds(getDoc(doc(db(GUEST), `spaceLinks/${TOKEN}`)));
+    // Pero seguir sin poder leer el espacio: el enlace solo dice su nombre.
+    await assertFails(getDoc(doc(db(FOURTH), 'spaces/sp1')));
+    // Sin sesión no se lee nada.
+    await assertFails(getDoc(doc(db(null), `spaceLinks/${TOKEN}`)));
+  });
+
+  it('revocar y refrescar el rótulo son del propietario; el destino no muta',
+      async () => {
+    // Un miembro cualquiera no revoca el enlace del grupo.
+    await assertFails(updateDoc(
+      doc(db(STRANGER), `spaceLinks/${TOKEN}`),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+    // Reapuntar un enlace a otro grupo sería un secuestro: prohibido.
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceLinks/${TOKEN}`),
+      { spaceId: 'sp2', updatedAt: serverTimestamp() }));
+    // Nada destructivo en caliente: primero se revoca y luego se limpia.
+    await assertFails(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceLinks/${TOKEN}`)));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceLinks/${TOKEN}`),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+    await assertSucceeds(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceLinks/${DEAD_TOKEN}`)));
+    // Renombrar el grupo puede refrescar el rótulo del enlace.
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceLinks/${OTHER_TOKEN}`),
+      { spaceName: 'Antiguo renombrado', updatedAt: serverTimestamp() }));
+  });
+
+  // ── Caducidad ───────────────────────────────────────────────────────
+  it('la caducidad es opcional pero nunca puede nacer en el pasado',
+      async () => {
+    const future = new Date(Date.now() + 86400000);
+    const past = new Date(Date.now() - 60000);
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/CONCADUCIDADAAAAAAAAA'),
+      linkDoc({ expiresAt: future })));
+    // Nacer caducado enmascararía un reloj mal puesto en el cliente.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/YACADUCADOAAAAAAAAAAA'),
+      linkDoc({ expiresAt: past })));
+    // Y tiene que ser una fecha, no cualquier cosa.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaceLinks/BASURAAAAAAAAAAAAAAAA'),
+      linkDoc({ expiresAt: 'mañana' })));
+  });
+
+  it('un enlace caducado no admite a nadie, aunque siga active', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // Caducado pero SIN revocar: son dos cosas distintas y ambas cierran.
+      await setDoc(doc(ctx.firestore(), 'spaceLinks/CADUCADOAAAAAAAAAAAAA'),
+        { ...linkDoc(), expiresAt: new Date(Date.now() - 60000) });
+    });
+    await assertFails(redeem(db(FOURTH), FOURTH, 'CADUCADOAAAAAAAAAAAAA'));
+  });
+
+  it('la caducidad es INMUTABLE: no se alarga un enlace ya repartido',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+        { ...linkDoc(), expiresAt: new Date(Date.now() + 3600000) });
+    });
+    const f = db(SOCIAL_OUTSIDER);
+    // Alargarla resucitaría un enlace que ya circula: para cambiarla se rota.
+    await assertFails(updateDoc(doc(f, 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+      { expiresAt: new Date(Date.now() + 999999999), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(f, 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+      { expiresAt: null, updatedAt: serverTimestamp() }));
+    // Revocarlo sí, siempre.
+    await assertSucceeds(updateDoc(doc(f, 'spaceLinks/CONFECHAAAAAAAAAAAAAA'),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+  });
+
+  // ── Canje ───────────────────────────────────────────────────────────
+  it('una CUENTA entra presentando el token en el mismo batch', async () => {
+    await assertSucceeds(redeem(db(FOURTH), FOURTH, TOKEN));
+  });
+
+  it('un INVITADO entra igual, con su nombre como snapshot', async () => {
+    await assertSucceeds(redeem(db(GUEST), GUEST, TOKEN, 'sp1',
+      { kind: 'guest', displayName: 'Alba invitada' }));
+  });
+
+  it('sin prueba de conocimiento no hay membresía', async () => {
+    // Escribir solo la membresía: ni invitación ni enlace que lo respalde.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/sp1/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() }));
+  });
+
+  it('un token inventado, revocado o de OTRO grupo no abre la puerta',
+      async () => {
+    await assertFails(redeem(db(FOURTH), FOURTH, 'INVENTADOAAAAAAAAAAAA'));
+    await assertFails(redeem(db(FOURTH), FOURTH, DEAD_TOKEN));
+    // El token de sp2 no vale para entrar en sp1.
+    await assertFails(redeem(db(FOURTH), FOURTH, OTHER_TOKEN));
+  });
+
+  it('el enlace no sirve para colar a un tercero ni para suplantar',
+      async () => {
+    // Dar de alta a OTRA persona con mi conocimiento del enlace.
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/sp1/joinGrants/${THIRD}`),
+      { uid: THIRD, token: TOKEN, createdAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${THIRD}`),
+      { uid: THIRD, joinedAt: serverTimestamp() });
+    await assertFails(batch.commit());
+
+    // Prueba a nombre propio pero membresía ajena.
+    const g = db(FOURTH);
+    const batch2 = writeBatch(g);
+    batch2.set(doc(g, `spaces/sp1/joinGrants/${FOURTH}`),
+      { uid: FOURTH, token: TOKEN, createdAt: serverTimestamp() });
+    batch2.set(doc(g, `spaces/sp1/members/${THIRD}`),
+      { uid: THIRD, joinedAt: serverTimestamp() });
+    await assertFails(batch2.commit());
+  });
+
+  it('la prueba de conocimiento es de SOLO ESCRITURA', async () => {
+    await assertSucceeds(redeem(db(FOURTH), FOURTH, TOKEN));
+    // Nadie la lee — ni el propio autor ni el propietario del grupo — para
+    // que el token no se filtre a los demás miembros a través de ella.
+    await assertFails(getDoc(doc(db(FOURTH), `spaces/sp1/joinGrants/${FOURTH}`)));
+    await assertFails(getDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/joinGrants/${FOURTH}`)));
+    await assertFails(getDocs(collection(db(STRANGER), 'spaces/sp1/joinGrants')));
+  });
+
+  it('un anónimo SIN identidad de invitado no entra por enlace', async () => {
+    await assertFails(redeem(db(OTHER), OTHER, TOKEN));
+  });
+
+  it('revocar el enlace cierra la puerta aunque quede una prueba vieja',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // Prueba escrita cuando el enlace aún vivía; luego se revoca.
+      await setDoc(doc(ctx.firestore(), `spaces/sp1/joinGrants/${FOURTH}`),
+        { uid: FOURTH, token: TOKEN, createdAt: serverTimestamp() });
+      await updateDoc(doc(ctx.firestore(), `spaceLinks/${TOKEN}`),
+        { status: 'revoked', updatedAt: serverTimestamp() });
+    });
+    // La membresía revalida el enlace en CADA canje, no solo al escribir
+    // la prueba: un token repartido deja de servir en cuanto se revoca.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/sp1/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() }));
+  });
+
+  // ── Regresión: las otras dos vías de alta siguen vivas ───────────────
+  it('REGRESIÓN: aceptar una invitación sigue funcionando', async () => {
+    // La rama (b) de members.create pasó a llevar existsAfter() por delante
+    // para que entrar por enlace no muriera leyendo una invitación ausente.
+    const f = db(THIRD);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/sp1_${THIRD}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/members/${THIRD}`),
+      { uid: THIRD, joinedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('REGRESIÓN: fundar un espacio sigue funcionando', async () => {
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, 'spaces/recien-fundado'), {
+      name: 'Piso', ownerUid: FOURTH, status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 1,
+    });
+    batch.set(doc(f, `spaces/recien-fundado/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+  });
+
+  // ── El invitado ya puede LLEGAR a su grupo (ADR-034 en la práctica) ──
+  it('un invitado lista sus propias membresías por collection group',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `spaces/sp1/members/${GUEST}`), {
+        uid: GUEST, kind: 'guest', displayName: 'Alba invitada',
+        joinedAt: serverTimestamp(),
+      });
+    });
+    // Sin esta query el invitado quedaba dentro del grupo pero sin ninguna
+    // pantalla desde la que verlo.
+    await assertSucceeds(getDocs(query(
+      collectionGroup(db(GUEST), 'members'),
+      where('uid', '==', GUEST))));
+    // Sigue sin poder espiar las membresías de otro.
+    await assertFails(getDocs(query(
+      collectionGroup(db(GUEST), 'members'),
+      where('uid', '==', STRANGER))));
+  });
+
+  it('un invitado ve a los participantes MANUAL con los que reparte',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `spaces/sp1/members/${GUEST}`), {
+        uid: GUEST, kind: 'guest', displayName: 'Alba invitada',
+        joinedAt: serverTimestamp(),
+      });
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/mp9'), {
+        manualId: 'mp9', displayName: 'Tía Marta', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+    });
+    await assertSucceeds(getDoc(
+      doc(db(GUEST), 'spaces/sp1/manualParticipants/mp9')));
+    // Pero crearlos y editarlos sigue siendo del propietario.
+    await assertFails(setDoc(
+      doc(db(GUEST), 'spaces/sp1/manualParticipants/mp10'), {
+        manualId: 'mp10', displayName: 'Otro', linkedUid: null,
+        createdByUid: GUEST, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+  });
+});
+
+// ─── Enlaces de TICKET (Sprint 5, ADR-036) ─────────────────────────────
+describe('enlaces de ticket', () => {
+  // La sesión s1 la posee OWNER. p1=Edgar (owner), p2/p3 reclamados por
+  // GUEST/OTHER (cuenta e invitado), p4 sin reclamar. Añadimos manuales.
+  const T = 'AAAAAAAAAAAAAAAAAAAAAA'; // t1, DIRIGIDO a Marta (p5/m1)
+  const T_OTRO = 'BBBBBBBBBBBBBBBBBBBBBB'; // token de OTRO ticket (t2)
+  const T_MUERTO = 'CCCCCCCCCCCCCCCCCCCCCC'; // revocado
+  const T_CADUCADO = 'DDDDDDDDDDDDDDDDDDDDDD';
+  const T_LUIS = 'EEEEEEEEEEEEEEEEEEEEEE'; // t1, DIRIGIDO a Luis (p6/m2)
+  const T_LEGADO = 'FFFFFFFFFFFFFFFFFFFFFF'; // esquema 1, sin destinatario
+
+  // El enlace va DIRIGIDO: el destinatario es parte del token y Rules solo
+  // admite identificarse como él. Antes viajaba la lista `manuals` de todo
+  // el ticket y cualquiera de ellos era reclamable con cualquier enlace.
+  const linkDoc = (overrides = {}) => ({
+    sessionId: 's1', accountId: 'a1', ticketId: 't1',
+    merchantName: 'Mercadona',
+    targetPid: 'p5', targetManualId: 'm1', targetName: 'Marta',
+    createdByUid: OWNER, status: 'active',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    schemaVersion: 2,
+    ...overrides,
+  });
+
+  /** Enlace del esquema 1, tal y como quedaron los ya emitidos. */
+  const legacyLinkDoc = (overrides = {}) => ({
+    sessionId: 's1', accountId: 'a1', ticketId: 't1',
+    merchantName: 'Mercadona',
+    manuals: [
+      { pid: 'p5', manualId: 'm1', displayName: 'Marta' },
+      { pid: 'p6', manualId: 'm2', displayName: 'Tío Luis' },
+    ],
+    createdByUid: OWNER, status: 'active',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  /** Acceso como participante YA reclamado por ese UID (cuenta/invitado). */
+  const openAsKnown = (f, uid, token, { pid = 'p2', ticketId = 't1' } = {}) =>
+    setDoc(doc(f, `${S}/ticketAccess/${ticketId}_${uid}`), {
+      uid, token, ticketId, pid,
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    });
+
+  /** Paso 2: identificarse como un MANUAL (prueba + cerrojo en un batch). */
+  const identify = (f, uid, token, { pid = 'p5', manualId = 'm1',
+      ticketId = 't1', claimUid = uid } = {}) => {
+    const batch = writeBatch(f);
+    batch.set(doc(f, `${S}/ticketClaims/${ticketId}_${manualId}`), {
+      uid: claimUid, ticketId, manualId,
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    });
+    batch.set(doc(f, `${S}/ticketAccess/${ticketId}_${uid}`), {
+      uid, token, ticketId, pid, manualId,
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    });
+    return batch.commit();
+  };
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `${S}/participants/p5`), {
+        name: 'Marta', isOwner: false, order: 4, active: true,
+        claimedByDevice: '', manualId: 'm1',
+      });
+      await setDoc(doc(f, `${S}/participants/p6`), {
+        name: 'Tío Luis', isOwner: false, order: 5, active: true,
+        claimedByDevice: '', manualId: 'm2',
+      });
+      // Segundo ticket de la MISMA sesión, para probar el aislamiento.
+      await setDoc(doc(f, `${S}/accounts/a1/tickets/t2`), {
+        kind: 'manual', grandTotal: 500, paidByParticipantId: 'p1',
+        merchant: { name: 'Otro' },
+      });
+      // Proyeccion AUTORITATIVA que escribe recompute: quien participa en
+      // cada ticket. Las Rules la consultan en vez de fiarse del enlace.
+      for (const [tid, pid] of [
+        ['t1', 'p1'], ['t1', 'p2'], ['t1', 'p5'], ['t1', 'p6'],
+        ['t2', 'p1'], ['t2', 'p5'],
+      ]) {
+        await setDoc(doc(f, `${S}/ticketParticipants/${tid}_${pid}`),
+          { ticketId: tid, pid, schemaVersion: 1 });
+      }
+      // Señal de proyección PREPARADA, que recompute escribe en el mismo
+      // batch que las entradas. Sin ella no se puede crear un enlace.
+      for (const tid of ['t1', 't2']) {
+        await setDoc(doc(f, `${S}/ticketParticipantProjections/${tid}`), {
+          ticketId: tid, ready: true, fingerprint: 'x',
+          updatedAt: serverTimestamp(), schemaVersion: 1,
+        });
+      }
+      await setDoc(doc(f, `ticketLinks/${T}`), linkDoc());
+      await setDoc(doc(f, `ticketLinks/${T_OTRO}`),
+        linkDoc({ ticketId: 't2', merchantName: 'Otro' }));
+      await setDoc(doc(f, `ticketLinks/${T_MUERTO}`),
+        linkDoc({ status: 'revoked' }));
+      await setDoc(doc(f, `ticketLinks/${T_CADUCADO}`),
+        linkDoc({ expiresAt: new Date(Date.now() - 60000) }));
+      await setDoc(doc(f, `ticketLinks/${T_LUIS}`),
+        linkDoc({ targetPid: 'p6', targetManualId: 'm2',
+          targetName: 'Tío Luis' }));
+      await setDoc(doc(f, `ticketLinks/${T_LEGADO}`), legacyLinkDoc());
+      await setDoc(doc(f, `guestIdentities/${GUEST}`), {
+        uid: GUEST, displayName: 'Alba invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+    });
+  });
+
+  // ── Gobierno del enlace ─────────────────────────────────────────────
+  it('solo el dueño de la sesión crea el enlace, y hacia SU ticket', async () => {
+    await assertSucceeds(setDoc(doc(db(OWNER), 'ticketLinks/NUEVOAAAAAAAAAAAAAAAA'),
+      linkDoc({ createdByUid: OWNER })));
+    // Un participante cualquiera, no.
+    await assertFails(setDoc(doc(db(STRANGER), 'ticketLinks/DEOTROAAAAAAAAAAAAAAA'),
+      linkDoc({ createdByUid: STRANGER })));
+    // Apuntar a un ticket que no existe donde dice: denegado.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/FANTASMAAAAAAAAAAAAAA'),
+      linkDoc({ ticketId: 'no-existe' })));
+  });
+
+  it('el enlace NO es enumerable', async () => {
+    await assertFails(getDocs(collection(db(STRANGER), 'ticketLinks')));
+    await assertFails(getDocs(query(collection(db(FOURTH), 'ticketLinks'),
+      where('sessionId', '==', 's1'))));
+    await assertSucceeds(getDocs(query(collection(db(OWNER), 'ticketLinks'),
+      where('sessionId', '==', 's1'), where('status', '==', 'active'))));
+  });
+
+  it('quien recibe el enlace ve el comercio, nada más', async () => {
+    await assertSucceeds(getDoc(doc(db(FOURTH), `ticketLinks/${T}`)));
+    // Pero sin identificarse no lee ni el ticket ni la sesión.
+    await assertFails(getDoc(doc(db(FOURTH), `${S}/accounts/a1/tickets/t1`)));
+    await assertFails(getDoc(doc(db(FOURTH), S)));
+  });
+
+  it('reapuntar el enlace a otro ticket es un secuestro: denegado', async () => {
+    await assertFails(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { ticketId: 't2', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+  });
+
+  // ── Acceso de lectura ───────────────────────────────────────────────
+  it('poseer el enlace NO basta: hay que representar a alguien del ticket',
+      async () => {
+    const f = db(FOURTH);
+    // Sin identificarse, el enlace no abre nada.
+    await assertFails(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    // Ni se puede fabricar un acceso "en blanco".
+    await assertFails(setDoc(doc(f, `${S}/ticketAccess/t1_${FOURTH}`), {
+      uid: FOURTH, token: T, ticketId: 't1', pid: '',
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    }));
+    // Tras elegir un MANUAL valido, si.
+    await assertSucceeds(identify(f, FOURTH, T));
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    await assertSucceeds(getDocs(collection(f, `${S}/accounts/a1/tickets/t1/lines`)));
+    // Pero los participantes de la sesion siguen sin abrirse.
+    await assertFails(getDocs(collection(f, `${S}/participants`)));
+  });
+
+  it('una cuenta/invitado ya participante entra sin elegir MANUAL', async () => {
+    await assertSucceeds(openAsKnown(db(GUEST), GUEST, T));
+    await assertSucceeds(
+      getDoc(doc(db(GUEST), `${S}/accounts/a1/tickets/t1`)));
+    // Un desconocido no puede colgarse de un participante ajeno.
+    await assertFails(openAsKnown(db(FOURTH), FOURTH, T, { pid: 'p2' }));
+  });
+
+  it('un pid que NO participa en el ticket es rechazado', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${S}/participants/p7`), {
+        name: 'Ajeno', isOwner: false, order: 6, active: true,
+        claimedByDevice: '', manualId: 'm9',
+      });
+    });
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p7', manualId: 'm9' }));
+  });
+
+  it('el enlace NO da acceso al resto: ni otro ticket, ni la sesión, ni el grupo',
+      async () => {
+    const f = db(FOURTH);
+    await identify(f, FOURTH, T);
+    // Otro ticket de la MISMA sesión: fuera.
+    await assertFails(getDoc(doc(f, `${S}/accounts/a1/tickets/t2`)));
+    // La sesión (con sus balances) y las liquidaciones: fuera.
+    await assertFails(getDoc(doc(f, S)));
+    await assertFails(getDocs(collection(f, `${S}/settlements`)));
+    // Y nada del espacio: ni miembros ni membresía.
+    await assertFails(getDocs(collection(f, 'spaces/sp1/members')));
+    await assertFails(setDoc(doc(f, `spaces/sp1/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() }));
+  });
+
+  it('abrir un 2o ticket NO invalida el acceso al 1o', async () => {
+    const f = db(FOURTH);
+    await assertSucceeds(identify(f, FOURTH, T));
+    await assertSucceeds(identify(f, FOURTH, T_OTRO, { ticketId: 't2' }));
+    // La clave incluye ticketId, asi que el primero SIGUE vivo.
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t2`)));
+  });
+
+  it('enlace revocado o caducado: ni acceso ni identificación', async () => {
+    await assertFails(identify(db(FOURTH), FOURTH, T_MUERTO));
+    await assertFails(identify(db(FOURTH), FOURTH, T_CADUCADO));
+    await assertFails(openAsKnown(db(GUEST), GUEST, T_MUERTO));
+  });
+
+  it('revocar el enlace corta la lectura ya concedida', async () => {
+    const f = db(FOURTH);
+    await identify(f, FOURTH, T);
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), `ticketLinks/${T}`),
+        { status: 'revoked', updatedAt: serverTimestamp() });
+    });
+    // La prueba sigue escrita, pero se revalida el enlace en CADA lectura.
+    await assertFails(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+  });
+
+  // ── Identificación temporal como MANUAL ─────────────────────────────
+  it('identificarse como un MANUAL del ticket funciona', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('NO se puede suplantar a una cuenta ni a un invitado', async () => {
+    // p2 lo reclamó GUEST (cuenta/invitado): no tiene manualId.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p2', manualId: 'm1' }));
+    // p1 es el anfitrión.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p1', manualId: 'm1' }));
+  });
+
+  it('el pid y el manualId tienen que corresponderse de verdad', async () => {
+    // p5 es m1, no m2: declarar otro manualId no cuela.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p5', manualId: 'm2' }));
+  });
+
+  it('no se puede crear la identificación para OTRO uid', async () => {
+    const f = db(FOURTH);
+    await assertFails(setDoc(doc(f, `${S}/ticketAccess/t1_${THIRD}`), {
+      uid: THIRD, token: T, ticketId: 't1', pid: 'p5', manualId: 'm1',
+      createdAt: serverTimestamp(), schemaVersion: 1,
+    }));
+    // Ni con el cerrojo a nombre de otro.
+    await assertFails(identify(f, FOURTH, T, { claimUid: THIRD }));
+  });
+
+  it('la identificación es PRIVADA: solo la lee su dueño', async () => {
+    await identify(db(FOURTH), FOURTH, T);
+    await assertFails(getDoc(doc(db(THIRD), `${S}/ticketAccess/t1_${FOURTH}`)));
+    // Ni el dueño de la sesión audita quién dice ser quién.
+    await assertFails(getDoc(doc(db(OWNER), `${S}/ticketAccess/t1_${FOURTH}`)));
+    await assertFails(getDocs(collection(db(OWNER), `${S}/ticketAccess`)));
+  });
+
+  it('dos dispositivos no pueden quedarse con el MISMO manual', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    // El segundo choca con el cerrojo determinista: primero en llegar gana.
+    await assertFails(identify(db(THIRD), THIRD, T));
+    // Y sigue pudiendo identificarse con SU PROPIO enlace, el de Luis.
+    await assertSucceeds(identify(db(THIRD), THIRD, T_LUIS,
+      { pid: 'p6', manualId: 'm2' }));
+  });
+
+  // ── El enlace está LIMITADO a su destinatario (ADR-036 rev. 2) ───────
+  it('un enlace dirigido a Marta NO sirve para reclamar a Luis', async () => {
+    // Luis participa en el ticket y su manual está libre: lo único que lo
+    // impide es que el token no va dirigido a él.
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p6', manualId: 'm2' }));
+    // Y al revés, para que quede claro que no es una casualidad del orden.
+    await assertFails(identify(db(FOURTH), FOURTH, T_LUIS,
+      { pid: 'p5', manualId: 'm1' }));
+  });
+
+  it('manipular el pid conservando el manualId del token tampoco cuela',
+      async () => {
+    await assertFails(identify(db(FOURTH), FOURTH, T,
+      { pid: 'p6', manualId: 'm1' }));
+  });
+
+  it('cada destinatario entra con SU enlace, y a la vez', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    await assertSucceeds(identify(db(THIRD), THIRD, T_LUIS,
+      { pid: 'p6', manualId: 'm2' }));
+  });
+
+  it('un enlace del esquema 1 ya no identifica a nadie', async () => {
+    // Los emitidos antes publicaban la lista entera. Dejan de autorizar
+    // identificaciones en vez de seguir abiertos hasta que caduquen.
+    await assertFails(identify(db(FOURTH), FOURTH, T_LEGADO));
+    await assertFails(identify(db(FOURTH), FOURTH, T_LEGADO,
+      { pid: 'p6', manualId: 'm2' }));
+    // Pero el dueño SÍ puede revocarlo: si no, quedaría vivo para siempre.
+    await assertSucceeds(updateDoc(doc(db(OWNER), `ticketLinks/${T_LEGADO}`),
+      { status: 'revoked', updatedAt: serverTimestamp() }));
+  });
+
+  it('no se crea un enlace hacia quien no participa o no es ese manual',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `${S}/participants/p8`), {
+        name: 'Ajena', isOwner: false, order: 7, active: true,
+        claimedByDevice: '', manualId: 'm8',
+      });
+    });
+    // p8 no está en la proyección del ticket.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/NOPARTICIPAAAAAAAAAAA'),
+      linkDoc({ targetPid: 'p8', targetManualId: 'm8' })));
+    // p5 participa, pero su manual es m1, no m2.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/DESPAREJADOAAAAAAAAAA'),
+      linkDoc({ targetPid: 'p5', targetManualId: 'm2' })));
+  });
+
+  it('reapuntar el enlace a OTRA persona es un secuestro: denegado', async () => {
+    await assertFails(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { targetManualId: 'm2', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(OWNER), `ticketLinks/${T}`),
+      { targetPid: 'p6', updatedAt: serverTimestamp() }));
+  });
+
+  it('el enlace ya usado por otra cuenta se cierra para las demás', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    // Segunda cuenta con el MISMO enlace: el cerrojo ya es de otro.
+    await assertFails(identify(db(THIRD), THIRD, T));
+    // Y no le queda ninguna alternativa: el enlace representaba a UNA.
+    await assertFails(identify(db(THIRD), THIRD, T,
+      { pid: 'p6', manualId: 'm2' }));
+  });
+
+  it('reabrir el mismo enlace en el mismo dispositivo es idempotente', async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('un MANUAL ya VINCULADO deja de ser elegible', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      // El enlace apunta a un espacio y m1 aparece ya vinculado (Sprint 6).
+      await setDoc(doc(f, `ticketLinks/${T}`), linkDoc({ spaceId: 'sp1' }));
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/m1'), {
+        manualId: 'm1', displayName: 'Marta', linkedUid: FOURTH,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      });
+    });
+    await assertFails(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('el flujo de acceso NO puede tocar balances ni participantes', async () => {
+    const f = db(FOURTH);
+    await identify(f, FOURTH, T);
+    // Agregados: solo-lectura para todo cliente, tambien por enlace.
+    await assertFails(updateDoc(doc(f, S), { balances: {} }));
+    // Los participantes originales del ticket no se tocan.
+    await assertFails(updateDoc(doc(f, `${S}/participants/p5`),
+      { name: 'Otro' }));
+    await assertFails(updateDoc(doc(f, `${S}/participants/p5`),
+      { claimedByDevice: FOURTH }));
+    // Ni las lineas del ticket.
+    await assertFails(setDoc(doc(f, `${S}/accounts/a1/tickets/t1/lines/nueva`),
+      { name: 'Colada', totalPrice: 100, order: 99 }));
+  });
+
+  it('un anónimo SIN identidad de invitado no abre enlaces de ticket', async () => {
+    await assertFails(identify(db(OTHER), OTHER, T));
+  });
+
+  it('RECUPERACION: el dueño libera una reclamación errónea o maliciosa',
+      async () => {
+    await assertSucceeds(identify(db(FOURTH), FOURTH, T));
+    await assertFails(identify(db(THIRD), THIRD, T));
+    // El dueño de la sesión retira cerrojo y prueba...
+    await assertSucceeds(deleteDoc(doc(db(OWNER), `${S}/ticketClaims/t1_m1`)));
+    await assertSucceeds(
+      deleteDoc(doc(db(OWNER), `${S}/ticketAccess/t1_${FOURTH}`)));
+    // ...y el sitio queda libre otra vez.
+    await assertSucceeds(identify(db(THIRD), THIRD, T));
+    // El usurpador pierde el acceso.
+    await assertFails(getDoc(doc(db(FOURTH), `${S}/accounts/a1/tickets/t1`)));
+  });
+
+  it('un enlace NO puede nacer si la proyección aún no está preparada',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // Ticket recién creado: recompute todavía no ha proyectado nada.
+      const f = ctx.firestore();
+      await setDoc(doc(f, `${S}/accounts/a1/tickets/t9`), {
+        kind: 'manual', grandTotal: 100, paidByParticipantId: 'p1',
+        merchant: { name: 'Recien' },
+      });
+    });
+    // Así se resuelve la carrera: NO se crea un enlace que después fallaría.
+    await assertFails(setDoc(doc(db(OWNER), 'ticketLinks/SINPROYECCIONAAAAAAAA'),
+      linkDoc({ ticketId: 't9', merchantName: 'Recien' })));
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      // recompute termina: escribe las entradas Y la señal en el mismo batch.
+      await setDoc(doc(f, `${S}/ticketParticipants/t9_p5`),
+        { ticketId: 't9', pid: 'p5', schemaVersion: 1 });
+      await setDoc(doc(f, `${S}/ticketParticipantProjections/t9`),
+        { ticketId: 't9', ready: true, fingerprint: 'y',
+          updatedAt: serverTimestamp(), schemaVersion: 1 });
+    });
+    // Ya preparada: ahora sí.
+    await assertSucceeds(setDoc(doc(db(OWNER), 'ticketLinks/CONPROYECCIONAAAAAAAA'),
+      linkDoc({ ticketId: 't9', merchantName: 'Recien' })));
+  });
+
+  it('una entrada OBSOLETA de la proyección deja de conceder acceso',
+      async () => {
+    const f = db(FOURTH);
+    await assertSucceeds(identify(f, FOURTH, T));
+    await assertSucceeds(getDoc(doc(f, `${S}/accounts/a1/tickets/t1`)));
+    // recompute rehace el reparto y p5 deja de participar: borra su entrada.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), `${S}/ticketParticipants/t1_p5`));
+    });
+    // La identificación antigua ya no autoriza: se revalida en cada uso.
+    await assertFails(identify(f, FOURTH, T));
+  });
+
+  it('sin proyección NO hay fallback al array `manuals` del enlace',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      // El enlace SIGUE anunciando a Marta, pero la proyección ya no la tiene.
+      await deleteDoc(doc(ctx.firestore(), `${S}/ticketParticipants/t1_p5`));
+    });
+    // Si existiera fallback, esto pasaría. No existe.
+    await assertFails(identify(db(FOURTH), FOURTH, T));
+  });
+
+  it('la señal de preparación NO la escribe ningún cliente', async () => {
+    await assertFails(setDoc(
+      doc(db(OWNER), `${S}/ticketParticipantProjections/t1`),
+      { ticketId: 't1', ready: true, schemaVersion: 1 }));
+    await assertFails(setDoc(
+      doc(db(FOURTH), `${S}/ticketParticipantProjections/t9`),
+      { ticketId: 't9', ready: true, schemaVersion: 1 }));
+  });
+
+  it('la proyección de participación NO la escribe ningún cliente', async () => {
+    await assertFails(setDoc(doc(db(OWNER), `${S}/ticketParticipants/t1_p9`),
+      { ticketId: 't1', pid: 'p9', schemaVersion: 1 }));
+    await assertFails(setDoc(doc(db(FOURTH), `${S}/ticketParticipants/t1_p9`),
+      { ticketId: 't1', pid: 'p9', schemaVersion: 1 }));
+  });
+});
+
+
+// ─── Vinculación MANUAL → cuenta o invitado (Sprint 6, ADR-037) ────────
+describe('vinculación de identidad', () => {
+  // sp1: SOCIAL_OUTSIDER es el propietario; STRANGER y OWNER son MIEMBROS.
+  // FOURTH y THIRD quedan FUERA del espacio a propósito: son el forastero.
+  const req = (manualId, uid, overrides = {}) => ({
+    manualId, uid, displayName: 'Marta',
+    // M4: propietario denormalizado, validado por Rules contra el real.
+    spaceOwnerUid: SOCIAL_OUTSIDER,
+    status: 'pending', attempt: 1,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    schemaVersion: 1,
+    ...overrides,
+  });
+
+  /** Aprobar: solicitud + linkedUid + RESERVA del uid, los tres en UN batch. */
+  const approve = (f, manualId, uid) => {
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaces/sp1/manualLinkRequests/${manualId}_${uid}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/sp1/linkedIdentities/${uid}`), {
+      uid, manualId, createdAt: serverTimestamp(), schemaVersion: 1,
+    });
+    batch.update(doc(f, `spaces/sp1/manualParticipants/${manualId}`),
+      { linkedUid: uid, updatedAt: serverTimestamp() });
+    return batch.commit();
+  };
+
+  beforeEach(async () => {
+    await seedSocialProfiles();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      for (const [id, name] of [['m1', 'Marta'], ['m2', 'Luis']]) {
+        await setDoc(doc(f, `spaces/sp1/manualParticipants/${id}`), {
+          manualId: id, displayName: name, linkedUid: null,
+          createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(), schemaVersion: 1,
+        });
+      }
+      await setDoc(doc(f, `guestIdentities/${GUEST}`), {
+        uid: GUEST, displayName: 'Alba invitada',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 1,
+      });
+      // El invitado ES miembro de sp1: puede reclamar legítimamente.
+      await setDoc(doc(f, `spaces/sp1/members/${GUEST}`), {
+        uid: GUEST, kind: 'guest', displayName: 'Alba invitada',
+        joinedAt: serverTimestamp(),
+      });
+    });
+  });
+
+  // ── A1: quién puede siquiera PEDIRLO ────────────────────────────────
+  it('A1: un forastero NO puede inyectar solicitudes', async () => {
+    // Conocer el manualId no basta: el enlace de ticket lo publica a
+    // cualquiera que lo reciba reenviado.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/sp1/manualLinkRequests/m1_${FOURTH}`),
+      req('m1', FOURTH)));
+  });
+
+  it('A1: un MIEMBRO del espacio sí puede pedirlo', async () => {
+    await assertSucceeds(setDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER)));
+  });
+
+  it('M1: un INVITADO NO puede vincular hasta convertirse en cuenta',
+      async () => {
+    // Su UID anónimo desaparece con el dispositivo, y vincular es
+    // irreversible: quedaría un historial atado a una identidad muerta.
+    await assertFails(setDoc(
+      doc(db(GUEST), `spaces/sp1/manualLinkRequests/m2_${GUEST}`),
+      req('m2', GUEST)));
+    // Tras convertir a cuenta, el UID se conserva (ADR-023) y ya puede.
+    await assertSucceeds(setDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m2_${STRANGER}`),
+      req('m2', STRANGER)));
+  });
+
+  it('pedir EN NOMBRE de otro sigue denegado', async () => {
+    await assertFails(setDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${OWNER}`),
+      req('m1', OWNER)));
+  });
+
+  // ── A2: el texto que lee el anfitrión al decidir ────────────────────
+  it('A2: displayName acotado y obligatorio', async () => {
+    const bad = (overrides) => setDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER, overrides));
+    await assertFails(bad({ displayName: '' }));
+    await assertFails(bad({ displayName: 'x'.repeat(41) }));
+    await assertFails(bad({ displayName: 42 }));
+    await assertFails(bad({ displayName: 'Marta', apodo: 'extra' }));
+    await assertSucceeds(bad({ displayName: 'Marta' }));
+  });
+
+  it('A2: el nombre declarado queda CONGELADO tras crear', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    // Ni el solicitante ni el anfitrión lo reescriben: es la prueba de qué
+    // se enseñó al decidir.
+    await assertFails(updateDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      { displayName: 'Marta (verificado)', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      { displayName: 'Otro', updatedAt: serverTimestamp() }));
+  });
+
+  // ── Aprobación ──────────────────────────────────────────────────────
+  it('SUPLANTACIÓN: sin aprobación del anfitrión no hay vínculo', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await assertFails(approve(db(STRANGER), 'm1', STRANGER));
+    await assertFails(updateDoc(
+      doc(db(STRANGER), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: STRANGER, updatedAt: serverTimestamp() }));
+  });
+
+  it('el ANFITRIÓN acepta: solicitud, vínculo y reserva, los tres a la vez',
+      async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await assertSucceeds(approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER));
+  });
+
+  it('A3: aceptar SIN la reserva en el batch es imposible', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    const f = db(SOCIAL_OUTSIDER);
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.update(doc(f, 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: STRANGER, updatedAt: serverTimestamp() });
+    // Sin `linkedIdentities` no hay aceptación: nada de estados a medias.
+    await assertFails(batch.commit());
+  });
+
+  it('A3: un UID NO puede vincularse a dos manuales del mismo espacio',
+      async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER);
+    // La reserva corta ya en la solicitud: ni se molesta al anfitrión.
+    await assertFails(setDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m2_${STRANGER}`),
+      req('m2', STRANGER)));
+  });
+
+  it('A3: la reserva no la fabrica un cliente por su cuenta', async () => {
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/linkedIdentities/${STRANGER}`),
+      { uid: STRANGER, manualId: 'm1', createdAt: serverTimestamp(),
+        schemaVersion: 1 }));
+    await assertFails(setDoc(
+      doc(db(STRANGER), `spaces/sp1/linkedIdentities/${STRANGER}`),
+      { uid: STRANGER, manualId: 'm1', createdAt: serverTimestamp(),
+        schemaVersion: 1 }));
+  });
+
+  it('A3: la reserva es inmutable', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER);
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/linkedIdentities/${STRANGER}`),
+      { manualId: 'm2' }));
+    await assertFails(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/linkedIdentities/${STRANGER}`)));
+  });
+
+  it('el ANFITRIÓN puede rechazar, y entonces no hay vínculo', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      { status: 'rejected', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: STRANGER, updatedAt: serverTimestamp() }));
+  });
+
+  // ── C3: la puerta trasera del borrado ───────────────────────────────
+  it('C3: un MANUAL VINCULADO no se puede borrar', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER);
+    // Borrarlo eliminaba el alias: era desvincular por la puerta de atrás y
+    // dejaba la solicitud aceptada apuntando a la nada.
+    await assertFails(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1')));
+    // Uno SIN vincular sí se puede retirar, como siempre.
+    await assertSucceeds(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m2')));
+  });
+
+  it('vincular es IRREVERSIBLE: ni se revincula ni se desvincula', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), `spaces/sp1/manualLinkRequests/m1_${OWNER}`),
+        req('m1', OWNER));
+    });
+    await assertFails(approve(db(SOCIAL_OUTSIDER), 'm1', OWNER));
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { linkedUid: null, updatedAt: serverTimestamp() }));
+  });
+
+  it('no se solicita sobre un manual YA vinculado', async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER);
+    await assertFails(setDoc(
+      doc(db(OWNER), `spaces/sp1/manualLinkRequests/m1_${OWNER}`),
+      req('m1', OWNER)));
+  });
+
+  it('renombrar sigue funcionando y NO toca el vínculo', async () => {
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { displayName: 'Marta G.', updatedAt: serverTimestamp() }));
+  });
+
+  it('el UID vinculado solo obtiene su manual por get, nunca por list',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/sp1/manualParticipants/m2'), {
+        manualId: 'm2', displayName: 'Luis', linkedUid: FOURTH,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), linkStatus: 'processing',
+        schemaVersion: 1,
+      });
+    });
+
+    await assertSucceeds(getDoc(
+      doc(db(FOURTH), 'spaces/sp1/manualParticipants/m2')));
+    await assertFails(getDoc(
+      doc(db(THIRD), 'spaces/sp1/manualParticipants/m2')));
+    await assertFails(getDocs(
+      collection(db(FOURTH), 'spaces/sp1/manualParticipants')));
+    // Los miembros y el anfitrión conservan la lectura social existente.
+    await assertSucceeds(getDocs(
+      collection(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants')));
+  });
+
+  it('el cliente no puede escribir metadatos de propagación', async () => {
+    const f = db(SOCIAL_OUTSIDER);
+    for (const change of [
+      { linkStatus: 'processing' },
+      { linkError: 'propagation-error' },
+      { linkBlockedSessions: 1 },
+      { linkPropagatedSessions: 1 },
+      { linkPropagatedAt: serverTimestamp() },
+      { linkProcessingAt: serverTimestamp() },
+      { linkClaimId: 'client-claim' },
+      { linkRetryCount: 1 },
+      { linkRetryRequestedAt: serverTimestamp() },
+      { linkRetryRequestedBy: SOCIAL_OUTSIDER },
+    ]) {
+      await assertFails(updateDoc(
+        doc(f, 'spaces/sp1/manualParticipants/m1'),
+        { ...change, updatedAt: serverTimestamp() }));
+    }
+    await assertFails(setDoc(
+      doc(f, 'spaces/sp1/manualParticipants/client-status'),
+      {
+        manualId: 'client-status', displayName: 'Lucía', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), linkStatus: 'processing',
+        schemaVersion: 1,
+      }));
+  });
+
+  it('renombrar acepta un documento con metadatos publicados por Admin',
+      async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'spaces/sp1/manualParticipants/m1'), {
+        manualId: 'm1', displayName: 'Lucía', linkedUid: FOURTH,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), linkStatus: 'active',
+        linkPropagatedSessions: 2, linkPropagatedAt: serverTimestamp(),
+        linkProcessingAt: serverTimestamp(), linkClaimId: 'admin-claim',
+        linkRetryCount: 2, linkRetryRequestedAt: serverTimestamp(),
+        linkRetryRequestedBy: FOURTH,
+        schemaVersion: 1,
+      });
+    });
+    await assertSucceeds(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/m1'),
+      { displayName: 'Lucía G.', updatedAt: serverTimestamp() }));
+  });
+
+  it('las solicitudes NO son enumerables salvo por el anfitrión', async () => {
+    await assertFails(getDocs(
+      collection(db(STRANGER), 'spaces/sp1/manualLinkRequests')));
+    await assertSucceeds(getDocs(
+      collection(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualLinkRequests')));
+  });
+
+  // ── M4: bandeja global ──────────────────────────────────────────────
+  it('M4: el propietario denormalizado NO lo controla el cliente', async () => {
+    // Falsearlo para colarse en la bandeja de otro: denegado.
+    await assertFails(setDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER, { spaceOwnerUid: STRANGER })));
+    await assertSucceeds(setDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER)));
+    // Y es inmutable: el anfitrión tampoco puede reapuntarlo.
+    await assertFails(updateDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      { spaceOwnerUid: OWNER, updatedAt: serverTimestamp() }));
+  });
+
+  it('M4: solo el anfitrión enumera sus solicitudes por collection group',
+      async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    // El anfitrión ve las SUYAS, de todos sus espacios, en una consulta.
+    await assertSucceeds(getDocs(query(
+      collectionGroup(db(SOCIAL_OUTSIDER), 'manualLinkRequests'),
+      where('spaceOwnerUid', '==', SOCIAL_OUTSIDER),
+      where('status', '==', 'pending'))));
+    // Un miembro cualquiera no puede enumerar nada, ni acotando por otro.
+    await assertFails(getDocs(query(
+      collectionGroup(db(STRANGER), 'manualLinkRequests'),
+      where('spaceOwnerUid', '==', SOCIAL_OUTSIDER))));
+    await assertFails(getDocs(
+      collectionGroup(db(FOURTH), 'manualLinkRequests')));
+  });
+
+  // ── Ciclo de vida ───────────────────────────────────────────────────
+  it('CICLO: tras un rechazo se puede volver a intentar, versionado',
+      async () => {
+    const id = `spaces/sp1/manualLinkRequests/m1_${STRANGER}`;
+    await setDoc(doc(db(STRANGER), id), req('m1', STRANGER));
+    await updateDoc(doc(db(SOCIAL_OUTSIDER), id),
+      { status: 'rejected', updatedAt: serverTimestamp() });
+
+    // El contador sube: el terminal no se reescribe en silencio.
+    await assertSucceeds(updateDoc(doc(db(STRANGER), id),
+      { status: 'pending', attempt: 2, updatedAt: serverTimestamp() }));
+    // Sin subir el contador, no.
+    await updateDoc(doc(db(SOCIAL_OUTSIDER), id),
+      { status: 'rejected', updatedAt: serverTimestamp() });
+    await assertFails(updateDoc(doc(db(STRANGER), id),
+      { status: 'pending', attempt: 2, updatedAt: serverTimestamp() }));
+    // Y otro usuario no reabre lo ajeno.
+    await assertFails(updateDoc(doc(db(OWNER), id),
+      { status: 'pending', attempt: 3, updatedAt: serverTimestamp() }));
+  });
+
+  it('CICLO: `accepted` es TERMINAL de verdad, no se vuelve a pending',
+      async () => {
+    const id = `spaces/sp1/manualLinkRequests/m1_${STRANGER}`;
+    await setDoc(doc(db(STRANGER), id), req('m1', STRANGER));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER);
+    await assertFails(updateDoc(doc(db(STRANGER), id),
+      { status: 'pending', attempt: 2, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(SOCIAL_OUTSIDER), id),
+      { status: 'rejected', updatedAt: serverTimestamp() }));
+  });
+
+  it('CICLO: no se reintenta si el MANUAL ya se vinculó a OTRO uid',
+      async () => {
+    const mio = `spaces/sp1/manualLinkRequests/m1_${OWNER}`;
+    await setDoc(doc(db(OWNER), mio), req('m1', OWNER));
+    await updateDoc(doc(db(SOCIAL_OUTSIDER), mio),
+      { status: 'rejected', updatedAt: serverTimestamp() });
+    // Entretanto el manual se vincula a otra persona.
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await approve(db(SOCIAL_OUTSIDER), 'm1', STRANGER);
+    // El reintento del primero ya no procede: no hay nada que reclamar.
+    await assertFails(updateDoc(doc(db(OWNER), mio),
+      { status: 'pending', attempt: 2, updatedAt: serverTimestamp() }));
+  });
+
+  it('CICLO: crear la solicitud es idempotente y siempre nace en intento 1',
+      async () => {
+    const id = `spaces/sp1/manualLinkRequests/m1_${STRANGER}`;
+    await assertSucceeds(setDoc(doc(db(STRANGER), id), req('m1', STRANGER)));
+    // Nacer directamente en un intento posterior sería saltarse el rastro.
+    await assertFails(setDoc(
+      doc(db(OWNER), `spaces/sp1/manualLinkRequests/m1_${OWNER}`),
+      req('m1', OWNER, { attempt: 5 })));
+  });
+
+  // ── BUG-2: la segunda plaza de una RELACIÓN ────────────────────────
+  it('BUG-2: una RELACIÓN no admite participantes MANUAL', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/rel1'), {
+        name: 'Ana y Bruno', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+        kind: 'relationship', relationshipUids: [SOCIAL_OUTSIDER, THIRD],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+    });
+    // Un MANUAL no tiene UID: seria un tercer actor economico en un
+    // contexto de exactamente dos personas.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/rel1/manualParticipants/mx'), {
+        manualId: 'mx', displayName: 'Sin cuenta', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    // En un GRUPO sigue permitido, como siempre.
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/mx'), {
+        manualId: 'mx', displayName: 'Sin cuenta', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+  });
+
+  it('BUG-2: una RELACIÓN no admite una tercera plaza', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, 'spaces/rel1'), {
+        name: 'Ana y Bruno', ownerUid: SOCIAL_OUTSIDER, status: 'active',
+        kind: 'relationship', relationshipUids: [SOCIAL_OUTSIDER, THIRD],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        schemaVersion: 2,
+      });
+      await setDoc(doc(f, `spaces/rel1/members/${SOCIAL_OUTSIDER}`),
+        { uid: SOCIAL_OUTSIDER, joinedAt: serverTimestamp() });
+      await setDoc(doc(f, `spaceInvites/rel1_${FOURTH}`), {
+        spaceId: 'rel1', spaceName: 'Ana y Bruno',
+        fromUid: SOCIAL_OUTSIDER, toUid: FOURTH, status: 'accepted',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+    });
+    // FOURTH no esta en relationshipUids: la plaza esta reservada.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/rel1/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() }));
+    // Ni invitar a un tercero fuera de la pareja canonica.
+    await assertFails(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/rel1_${OWNER}`), {
+        spaceId: 'rel1', spaceName: 'Ana y Bruno',
+        fromUid: SOCIAL_OUTSIDER, toUid: OWNER, status: 'pending',
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      }));
+  });
+
+  it('la solicitud NO se puede borrar: es el rastro de la aprobación',
+      async () => {
+    await setDoc(doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`),
+      req('m1', STRANGER));
+    await assertFails(deleteDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`)));
+    await assertFails(deleteDoc(
+      doc(db(STRANGER), `spaces/sp1/manualLinkRequests/m1_${STRANGER}`)));
+  });
+});
+
+// ─── BUG-3: invitaciones de relación en AMBOS ordenes de UID ──────────
+describe('BUG-3 relaciones: crear en ambos sentidos', () => {
+  beforeEach(seedSocialProfiles);
+
+  // Orden lexicografico real: 'fourth-uid' < 'third-uid'.
+  const relId = (a, b) => {
+    const [x, y] = [a, b].sort();
+    return `relationship_${x}~${y}`;
+  };
+
+  /** Exactamente lo que hace createRelationship en la app. */
+  const crear = async (f, fromUid, toUid) => {
+    const id = relId(fromUid, toUid);
+    const pair = [fromUid, toUid].sort();
+    // La app LEE primero el doc canonico dentro de la transaccion.
+    await getDoc(doc(f, `spaces/${id}`));
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${id}`), {
+      name: 'Ana y Bruno', ownerUid: fromUid, kind: 'relationship',
+      relationshipUids: pair, status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${id}/members/${fromUid}`),
+      { uid: fromUid, joinedAt: serverTimestamp() });
+    batch.set(doc(f, `spaceInvites/${id}_${toUid}`), {
+      spaceId: id, spaceName: 'Ana y Bruno', fromUid, toUid,
+      status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return batch.commit();
+  };
+
+  /** Aceptar: membresia + invitacion resuelta en el mismo batch. */
+  const aceptar = (f, uid, id) => {
+    const batch = writeBatch(f);
+    batch.update(doc(f, `spaceInvites/${id}_${uid}`),
+      { status: 'accepted', updatedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/${id}/members/${uid}`),
+      { uid, joinedAt: serverTimestamp() });
+    return batch.commit();
+  };
+
+  it('el UID MENOR invita al MAYOR', async () => {
+    await assertSucceeds(crear(db(FOURTH), FOURTH, THIRD));
+    await assertSucceeds(aceptar(db(THIRD), THIRD, relId(FOURTH, THIRD)));
+  });
+
+  it('el UID MAYOR invita al MENOR', async () => {
+    await assertSucceeds(crear(db(THIRD), THIRD, FOURTH));
+    await assertSucceeds(aceptar(db(FOURTH), FOURTH, relId(THIRD, FOURTH)));
+  });
+
+  it('el creador NO puede aceptar su propia invitacion', async () => {
+    await crear(db(FOURTH), FOURTH, THIRD);
+    await assertFails(aceptar(db(FOURTH), FOURTH, relId(FOURTH, THIRD)));
+  });
+
+  it('una cuenta ajena no puede aceptar ni leer la invitacion', async () => {
+    await crear(db(FOURTH), FOURTH, THIRD);
+    const id = relId(FOURTH, THIRD);
+    await assertFails(aceptar(db(STRANGER), STRANGER, id));
+    await assertFails(getDoc(doc(db(STRANGER), `spaceInvites/${id}_${THIRD}`)));
+  });
+
+  it('el owner NO se deriva del orden lexicografico', async () => {
+    // Crea el MAYOR: el owner debe ser el, aunque vaya segundo en el id.
+    await crear(db(THIRD), THIRD, FOURTH);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await getDoc(
+        doc(ctx.firestore(), `spaces/${relId(THIRD, FOURTH)}`));
+      assert.equal(snap.data().ownerUid, THIRD);
+      assert.deepEqual(snap.data().relationshipUids, [FOURTH, THIRD]);
+    });
+  });
+});
+
+// ─── BUG-2: relacion ACCOUNT + MANUAL (schemaVersion 3) ───────────────
+describe('relacion con participante MANUAL', () => {
+  beforeEach(seedSocialProfiles);
+
+  /** Lo que escribe createRelationshipWithManual: espacio + membresia +
+   *  manual, todo en UN batch. */
+  const crear = (f, uid, spaceId, manualId, overrides = {}) => {
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${spaceId}`), {
+      name: 'Pablo', ownerUid: uid, kind: 'relationship',
+      relationshipUids: [uid], relationshipManualId: manualId,
+      status: 'active', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), schemaVersion: 3,
+      ...overrides,
+    });
+    batch.set(doc(f, `spaces/${spaceId}/members/${uid}`),
+      { uid, joinedAt: serverTimestamp() });
+    batch.set(doc(f, `spaces/${spaceId}/manualParticipants/${manualId}`), {
+      manualId, displayName: 'Pablo', linkedUid: null,
+      createdByUid: uid, createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), schemaVersion: 1,
+    });
+    return batch.commit();
+  };
+
+  it('una cuenta crea una relacion con alguien SIN cuenta', async () => {
+    await assertSucceeds(crear(db(FOURTH), FOURTH, 'relman1', 'pablo1'));
+  });
+
+  it('el MANUAL debe crearse en el MISMO batch: nada de relaciones a medias',
+      async () => {
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, 'spaces/relman2'), {
+      name: 'Pablo', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH], relationshipManualId: 'pablo2',
+      status: 'active', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), schemaVersion: 3,
+    });
+    batch.set(doc(f, `spaces/relman2/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() });
+    await assertFails(batch.commit());
+  });
+
+  it('NO admite un SEGUNDO manual: seria un tercer actor', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman3', 'pablo3');
+    await assertFails(setDoc(
+      doc(db(FOURTH), 'spaces/relman3/manualParticipants/otro'), {
+        manualId: 'otro', displayName: 'Tercero', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+  });
+
+  it('NO admite una tercera persona con cuenta', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman4', 'pablo4');
+    // relationshipUids solo contiene al propietario.
+    await assertFails(setDoc(
+      doc(db(THIRD), `spaces/relman4/members/${THIRD}`),
+      { uid: THIRD, joinedAt: serverTimestamp() }));
+    // Ni invitando: el destino tendria que estar en relationshipUids.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaceInvites/relman4_${THIRD}`), {
+        spaceId: 'relman4', spaceName: 'Pablo', fromUid: FOURTH,
+        toUid: THIRD, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+  });
+
+  it('el MANUAL de la segunda plaza no se puede retirar', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman5', 'pablo5');
+    // Retirarlo dejaria un contexto de una sola identidad.
+    await assertFails(deleteDoc(
+      doc(db(FOURTH), 'spaces/relman5/manualParticipants/pablo5')));
+  });
+
+  it('no se puede convertir en grupo ni falsear el propietario', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman6', 'pablo6');
+    await assertFails(updateDoc(doc(db(FOURTH), 'spaces/relman6'),
+      { kind: 'group', updatedAt: serverTimestamp() }));
+    // Declararse dueño de una relacion ajena.
+    await assertFails(crear(db(THIRD), FOURTH, 'relman7', 'pablo7'));
+  });
+
+  it('BUG-4: una relacion v2 PENDIENTE no admite manuales', async () => {
+    // Segunda plaza reservada por la invitacion: un manual seria un tercero.
+    const id = `relationship_${[FOURTH, THIRD].sort().join('~')}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${id}`), {
+      name: 'Pendiente', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD].sort(), status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${id}/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() });
+    batch.set(doc(f, `spaceInvites/${id}_${THIRD}`), {
+      spaceId: id, spaceName: 'Pendiente', fromUid: FOURTH, toUid: THIRD,
+      status: 'pending', createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await batch.commit();
+
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/${id}/manualParticipants/colado`), {
+        manualId: 'colado', displayName: 'Colado', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    // Y la segunda plaza sigue sin poder ocuparla otro UID.
+    await assertFails(setDoc(
+      doc(db(OWNER), `spaces/${id}/members/${OWNER}`),
+      { uid: OWNER, joinedAt: serverTimestamp() }));
+  });
+
+  it('BUG-4: en v3 no se sustituye el manual por otro', async () => {
+    await crear(db(FOURTH), FOURTH, 'relman8', 'pablo8');
+    // Ni añadiendo uno nuevo...
+    await assertFails(setDoc(
+      doc(db(FOURTH), 'spaces/relman8/manualParticipants/sustituto'), {
+        manualId: 'sustituto', displayName: 'Otro', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    // ...ni reapuntando el espacio a otro manual.
+    await assertFails(updateDoc(doc(db(FOURTH), 'spaces/relman8'),
+      { relationshipManualId: 'sustituto', updatedAt: serverTimestamp() }));
+  });
+
+  it('BUG-4: los GRUPOS conservan sus acciones', async () => {
+    // Regresion: añadir manual e invitar cuentas siguen funcionando.
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), 'spaces/sp1/manualParticipants/nuevo'), {
+        manualId: 'nuevo', displayName: 'Invitada', linkedUid: null,
+        createdByUid: SOCIAL_OUTSIDER, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
+    await assertSucceeds(setDoc(
+      doc(db(SOCIAL_OUTSIDER), `spaceInvites/sp1_${FOURTH}`), {
+        spaceId: 'sp1', spaceName: 'Viaje', fromUid: SOCIAL_OUTSIDER,
+        toUid: FOURTH, status: 'pending', createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+  });
+
+  it('LEGACY: las relaciones de dos cuentas siguen igual', async () => {
+    // v2 con id canonico: intacto, y sin relationshipManualId.
+    const id = `relationship_${[FOURTH, THIRD].sort().join('~')}`;
+    const f = db(FOURTH);
+    const batch = writeBatch(f);
+    batch.set(doc(f, `spaces/${id}`), {
+      name: 'Dos cuentas', ownerUid: FOURTH, kind: 'relationship',
+      relationshipUids: [FOURTH, THIRD].sort(), status: 'active',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      schemaVersion: 2,
+    });
+    batch.set(doc(f, `spaces/${id}/members/${FOURTH}`),
+      { uid: FOURTH, joinedAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+    // Y una v2 no puede colar un manual de segunda plaza.
+    await assertFails(setDoc(
+      doc(db(FOURTH), `spaces/${id}/manualParticipants/x`), {
+        manualId: 'x', displayName: 'X', linkedUid: null,
+        createdByUid: FOURTH, createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), schemaVersion: 1,
+      }));
   });
 });
 

@@ -63,5 +63,7 @@ abstract interface class AiReceiptProvider {
   Future<void> testConnection(AiProviderConfig config);
 
   Future<ReceiptExtraction> extractReceipt(
-      AiInput input, AiProviderConfig config);
+    AiInput input,
+    AiProviderConfig config,
+  );
 }

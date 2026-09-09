@@ -6,22 +6,30 @@ import 'package:salda_mobile/features/settings/data/user_profile_repository.dart
 
 void main() {
   group('UserProfileRepository', () {
-    test('guarda y recupera métodos de pago; el snapshot omite vacíos',
-        () async {
-      final repo = UserProfileRepository(
-          firestore: FakeFirebaseFirestore(), uid: () => 'owner');
+    test(
+      'guarda y recupera métodos de pago; el snapshot omite vacíos',
+      () async {
+        final repo = UserProfileRepository(
+          firestore: FakeFirebaseFirestore(),
+          uid: () => 'owner',
+        );
 
-      await repo.savePaymentMethods(const PaymentMethods(
-          bizumPhone: '612345678', iban: 'ES9121000418450200051332'));
-      final profile = await repo.fetch();
+        await repo.savePaymentMethods(
+          const PaymentMethods(
+            bizumPhone: '612345678',
+            iban: 'ES9121000418450200051332',
+          ),
+        );
+        final profile = await repo.fetch();
 
-      expect(profile.paymentMethods.bizumPhone, '612345678');
-      expect(profile.paymentMethods.paypalLink, '');
-      expect(profile.paymentMethods.toSnapshot(), {
-        'bizumPhone': '612345678',
-        'iban': 'ES9121000418450200051332',
-      });
-    });
+        expect(profile.paymentMethods.bizumPhone, '612345678');
+        expect(profile.paymentMethods.paypalLink, '');
+        expect(profile.paymentMethods.toSnapshot(), {
+          'bizumPhone': '612345678',
+          'iban': 'ES9121000418450200051332',
+        });
+      },
+    );
   });
 
   group('gasto manual', () {

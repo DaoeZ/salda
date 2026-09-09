@@ -5,7 +5,7 @@
  * Tres funciones conceptuales (spec §12.2):
  *  - recompute: calculadora autoritativa (3 triggers → mismo recálculo).
  *  - notify:    FCM al anfitrión.
- *  - cleanup:   borrado en cascada de sesiones.
+ *  - cleanup:   borrado en cascada de sesiones y de gastos eliminados (A2).
  * Los agregados que escribe recompute son solo-lectura para los clientes
  * (lo garantizan las reglas); el Admin SDK las ignora por diseño.
  */
@@ -30,8 +30,23 @@ export {
   rebuildMyEconomicRelations,
 } from './recompute.js';
 export { notifyOnSettlement } from './notify.js';
-export { cleanupOnSessionDelete } from './cleanup.js';
+export { cleanupOnSessionDelete, cleanupOnTicketDelete } from './cleanup.js';
 export {
   createEconomicPayment,
   resolveEconomicPayment,
+  settleEconomicEntries,
 } from './economicPayments.js';
+export {
+  activityOnSpace,
+  activityOnSpaceMember,
+  activityOnSpaceInvite,
+  activityOnTicketWrite,
+  activityOnSettlementWrite,
+  activityOnEconomicPaymentWrite,
+} from './activity.js';
+// Propagación de vinculaciones MANUAL↔identidad (ADR-037, C1).
+export {
+  propagateOnManualLink,
+  requestManualLink,
+  retryManualLinkPropagation,
+} from './manualLink.js';

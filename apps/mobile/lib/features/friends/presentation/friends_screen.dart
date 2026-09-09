@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../profile/data/profile_repository.dart';
@@ -21,7 +23,20 @@ class FriendsScreen extends ConsumerWidget {
     if (profile.isLoading) {
       return Scaffold(
         appBar: AppBar(title: Text(l10n.friendsTitle)),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const ScreenBody(children: [SkeletonList(rows: 5)]),
+      );
+    }
+    if (profile.hasError) {
+      return Scaffold(
+        appBar: AppBar(title: Text(l10n.friendsTitle)),
+        body: ScreenBody(
+          children: [
+            ErrorStateView(
+              message: l10n.profileLoadError,
+              onRetry: () => ref.invalidate(myProfileProvider),
+            ),
+          ],
+        ),
       );
     }
     if (profile.value == null) {
@@ -32,75 +47,98 @@ class FriendsScreen extends ConsumerWidget {
     }
 
     final relationships = ref.watch(friendshipsProvider);
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(l10n.friendsTitle),
-          actions: [
-            IconButton(
-              tooltip: l10n.searchPeopleTitle,
-              onPressed: () => context.push('/home/people'),
-              icon: const Icon(Icons.person_search_outlined),
-            ),
-          ],
-          bottom: TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: l10n.friendsTabFriends),
-              Tab(text: l10n.friendsTabReceived),
-              Tab(text: l10n.friendsTabSent),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.personasTitle),
+        actions: [
+          IconButton(
+            tooltip: l10n.searchPeopleTitle,
+            onPressed: () => context.push('/home/people-search'),
+            icon: const Icon(Icons.person_search_outlined),
           ),
+        ],
+      ),
+      body: relationships.when(
+        loading: () => const ScreenBody(children: [SkeletonList(rows: 5)]),
+        error: (_, _) => _ErrorState(
+          onRetry: () => ref.invalidate(friendshipsProvider),
+          l10n: l10n,
         ),
-        body: relationships.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) => _ErrorState(
-            onRetry: () => ref.invalidate(friendshipsProvider),
-            l10n: l10n,
-          ),
-          data: (items) {
-            final currentUid = ref.read(currentUserIdProvider);
-            final friends = items
-                .where((item) => item.status == FriendshipStatus.friends)
-                .toList();
-            final received = items
-                .where(
-                  (item) =>
-                      item.status == FriendshipStatus.pending &&
-                      item.receiverUid == currentUid,
-                )
-                .toList();
-            final sent = items
-                .where(
-                  (item) =>
-                      item.status == FriendshipStatus.pending &&
-                      item.requesterUid == currentUid,
-                )
-                .toList();
-            return TabBarView(
-              children: [
-                _RelationshipList(
-                  items: friends,
-                  currentUid: currentUid,
-                  emptyTitle: l10n.friendsEmpty,
-                  emptyBody: l10n.friendsEmptyBody,
-                  showSearchAction: true,
+        data: (items) {
+          // Usa la misma identidad que creó el repositorio/stream. Evita que
+          // una lectura sincrónica independiente clasifique una petición
+          // entrante con un UID anterior durante una transición de cuenta.
+          final currentUid = ref.watch(currentAppUserProvider)?.uid;
+          if (currentUid == null) return const SizedBox.shrink();
+          final friends = items
+              .where((item) => item.status == FriendshipStatus.friends)
+              .toList();
+          final received = items
+              .where(
+                (item) =>
+                    item.status == FriendshipStatus.pending &&
+                    item.relationFor(currentUid) ==
+                        FriendshipRelationState.incoming,
+              )
+              .toList();
+          final sent = items
+              .where(
+                (item) =>
+                    item.status == FriendshipStatus.pending &&
+                    item.relationFor(currentUid) ==
+                        FriendshipRelationState.outgoing,
+              )
+              .toList();
+          return ScreenBody(
+            children: [
+              if (received.isNotEmpty) ...[
+                SectionHeader(title: l10n.personasRequests),
+                SaldaCardList(
+                  children: [
+                    for (final item in received)
+                      _RelationshipCard(
+                        relationship: item,
+                        currentUid: currentUid,
+                      ),
+                  ],
                 ),
-                _RelationshipList(
-                  items: received,
-                  currentUid: currentUid,
-                  emptyTitle: l10n.friendRequestsReceivedEmpty,
+                const SectionGap(),
+              ],
+              SectionHeader(title: l10n.personasContacts),
+              if (friends.isEmpty)
+                EmptyState(
+                  icon: Icons.people_outline,
+                  title: l10n.friendsEmpty,
+                  body: l10n.friendsEmptyBody,
+                  action: l10n.personasSearch,
+                  onAction: () => context.push('/home/people-search'),
+                )
+              else
+                SaldaCardList(
+                  children: [
+                    for (final item in friends)
+                      _RelationshipCard(
+                        relationship: item,
+                        currentUid: currentUid,
+                      ),
+                  ],
                 ),
-                _RelationshipList(
-                  items: sent,
-                  currentUid: currentUid,
-                  emptyTitle: l10n.friendRequestsSentEmpty,
+              if (sent.isNotEmpty) ...[
+                const SectionGap(),
+                SectionHeader(title: l10n.friendsTabSent),
+                SaldaCardList(
+                  children: [
+                    for (final item in sent)
+                      _RelationshipCard(
+                        relationship: item,
+                        currentUid: currentUid,
+                      ),
+                  ],
                 ),
               ],
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -112,86 +150,17 @@ class _ProfileRequired extends StatelessWidget {
   final AppLocalizations l10n;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(TokenSpacing.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.account_circle_outlined, size: 56),
-          const SizedBox(height: TokenSpacing.md),
-          Text(l10n.friendProfileRequired, textAlign: TextAlign.center),
-          const SizedBox(height: TokenSpacing.lg),
-          FilledButton(
-            onPressed: () => context.push('/home/profile'),
-            child: Text(l10n.friendProfileRequiredAction),
-          ),
-        ],
+  Widget build(BuildContext context) => ScreenBody(
+    children: [
+      EmptyState(
+        icon: Icons.account_circle_outlined,
+        title: l10n.friendProfileRequired,
+        body: l10n.friendProfileRequiredBody,
+        action: l10n.friendProfileRequiredAction,
+        onAction: () => context.push('/home/profile'),
       ),
-    ),
+    ],
   );
-}
-
-class _RelationshipList extends StatelessWidget {
-  const _RelationshipList({
-    required this.items,
-    required this.currentUid,
-    required this.emptyTitle,
-    this.emptyBody,
-    this.showSearchAction = false,
-  });
-
-  final List<Friendship> items;
-  final String currentUid;
-  final String emptyTitle;
-  final String? emptyBody;
-  final bool showSearchAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    if (items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(TokenSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.people_outline,
-                size: 56,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-              const SizedBox(height: TokenSpacing.md),
-              Text(emptyTitle, textAlign: TextAlign.center),
-              if (emptyBody != null) ...[
-                const SizedBox(height: TokenSpacing.xs),
-                Text(
-                  emptyBody!,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-              if (showSearchAction) ...[
-                const SizedBox(height: TokenSpacing.lg),
-                OutlinedButton.icon(
-                  onPressed: () => context.push('/home/people'),
-                  icon: const Icon(Icons.person_search_outlined),
-                  label: Text(l10n.searchPeopleTitle),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(TokenSpacing.md),
-      itemCount: items.length,
-      itemBuilder: (_, index) =>
-          _RelationshipCard(relationship: items[index], currentUid: currentUid),
-    );
-  }
 }
 
 class _RelationshipCard extends ConsumerStatefulWidget {
@@ -282,7 +251,7 @@ class _RelationshipCardState extends ConsumerState<_RelationshipCard> {
                   const SizedBox(width: TokenSpacing.md),
                   Expanded(
                     child: profile.isLoading
-                        ? const LinearProgressIndicator()
+                        ? const Skeleton.line(width: 120)
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -372,19 +341,9 @@ class _ErrorState extends StatelessWidget {
   final AppLocalizations l10n;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(TokenSpacing.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.cloud_off_outlined, size: 56),
-          const SizedBox(height: TokenSpacing.md),
-          Text(l10n.friendActionError, textAlign: TextAlign.center),
-          const SizedBox(height: TokenSpacing.lg),
-          OutlinedButton(onPressed: onRetry, child: Text(l10n.commonRetry)),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => ScreenBody(
+    children: [
+      ErrorStateView(message: l10n.friendActionError, onRetry: onRetry),
+    ],
   );
 }

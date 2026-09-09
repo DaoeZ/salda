@@ -1,14 +1,16 @@
 import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
+import '../../../core/ui/action_banner.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/profile_avatar.dart';
 import '../data/spaces_repository.dart';
 import '../domain/space_models.dart';
-import 'space_avatar.dart';
+import 'space_row.dart';
 
 /// Lista de espacios (P4): invitaciones recibidas, activos y archivados.
 class SpacesScreen extends ConsumerWidget {
@@ -17,64 +19,78 @@ class SpacesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     final spaces = ref.watch(mySpacesProvider);
     final invites = ref.watch(mySpaceInvitesProvider).value ?? const [];
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.spacesTitle)),
       body: spaces.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(TokenSpacing.xl),
-            child: Text(l10n.spacesLoadError, textAlign: TextAlign.center),
-          ),
+        loading: () => const ScreenBody(children: [SkeletonList(rows: 4)]),
+        error: (error, _) => ScreenBody(
+          children: [ErrorStateView(message: l10n.spacesLoadError)],
         ),
         data: (list) {
-          final active = [for (final s in list) if (s.isActive) s];
-          final archived = [for (final s in list) if (!s.isActive) s];
+          final active = [
+            for (final s in list)
+              if (s.isActive) s,
+          ];
+          final archived = [
+            for (final s in list)
+              if (!s.isActive) s,
+          ];
           if (active.isEmpty && archived.isEmpty && invites.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(TokenSpacing.xl),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.group_work_outlined,
-                        size: 64, color: theme.colorScheme.primary),
-                    const SizedBox(height: TokenSpacing.lg),
-                    Text(l10n.spacesEmptyTitle,
-                        style: theme.textTheme.titleMedium),
-                    const SizedBox(height: TokenSpacing.xs),
-                    Text(
-                      l10n.spacesEmptyBody,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
+            return ScreenBody(
+              children: [
+                EmptyState(
+                  icon: Icons.group_work_outlined,
+                  title: l10n.spacesEmptyTitle,
+                  body: l10n.spacesEmptyBody,
                 ),
-              ),
+              ],
             );
           }
-          return ListView(
-            padding: const EdgeInsets.all(TokenSpacing.lg),
+          final relationships = active
+              .where((space) => space.isRelationship)
+              .toList();
+          final groups = active
+              .where((space) => !space.isRelationship)
+              .toList();
+          return ScreenBody(
             children: [
-              for (final invite in invites)
-                _InviteCard(invite: invite),
-              for (final space in active)
-                _SpaceTile(space: space),
-              if (archived.isNotEmpty) ...[
-                const SizedBox(height: TokenSpacing.md),
-                ExpansionTile(
-                  leading: const Icon(Icons.archive_outlined),
-                  title: Text(l10n.spacesArchivedSection(archived.length)),
+              if (invites.isNotEmpty) ...[
+                SectionHeader(title: l10n.contextInvitations),
+                for (final invite in invites) _InviteCard(invite: invite),
+                const SectionGap(),
+              ],
+              if (relationships.isNotEmpty) ...[
+                SectionHeader(title: l10n.relationshipsTitle),
+                SaldaCardList(
                   children: [
-                    for (final space in archived) _SpaceTile(space: space),
+                    for (final space in relationships) SpaceRow(space: space),
+                  ],
+                ),
+                const SectionGap(),
+              ],
+              if (groups.isNotEmpty) ...[
+                SectionHeader(title: l10n.groupsTitle),
+                SaldaCardList(
+                  children: [
+                    for (final space in groups) SpaceRow(space: space),
                   ],
                 ),
               ],
-              const SizedBox(height: 88),
+              if (archived.isNotEmpty) ...[
+                const SectionGap(),
+                SectionHeader(
+                  title: l10n.spacesArchivedSection(archived.length),
+                ),
+                SaldaCardList(
+                  children: [
+                    for (final space in archived) SpaceRow(space: space),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 72),
             ],
           );
         },
@@ -83,29 +99,6 @@ class SpacesScreen extends ConsumerWidget {
         onPressed: () => showCreateSpaceDialog(context, ref),
         icon: const Icon(Icons.add),
         label: Text(l10n.spacesCreate),
-      ),
-    );
-  }
-}
-
-class _SpaceTile extends ConsumerWidget {
-  const _SpaceTile({required this.space});
-
-  final Space space;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final isOwner =
-        space.ownerUid == ref.watch(currentUserIdFromSpacesProvider);
-    return Card(
-      margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
-      child: ListTile(
-        leading: SpaceAvatar(space: space),
-        title: Text(space.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: isOwner ? Text(l10n.spaceOwnerBadge) : null,
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => context.push('/home/spaces/${space.id}'),
       ),
     );
   }
@@ -144,60 +137,54 @@ class _InviteCardState extends ConsumerState<_InviteCard> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final from =
-        ref.watch(publicProfileProvider(widget.invite.fromUid)).value;
+    final from = ref.watch(publicProfileProvider(widget.invite.fromUid)).value;
     final repo = ref.read(spacesRepositoryProvider);
     return Card(
       color: theme.colorScheme.secondaryContainer,
       margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
-        child: Column(
+      child: ActionBanner(
+        // El avatar iba dentro de la fila del texto y le robaba ancho; como
+        // icono del aviso queda arriba y el texto dispone de la línea entera.
+        title: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                if (from != null) ...[
-                  ProfileAvatar(
-                    seed: from.uid,
-                    displayName: from.displayName,
-                    radius: 16,
-                  ),
-                  const SizedBox(width: TokenSpacing.sm),
-                ],
-                Expanded(
-                  child: Text(
-                    l10n.spaceInviteText(
-                      from?.displayName ?? '…',
-                      widget.invite.spaceName,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: TokenSpacing.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () =>
-                          _resolve(() => repo.rejectInvite(widget.invite.id)),
-                  child: Text(l10n.spaceInviteReject),
-                ),
-                const SizedBox(width: TokenSpacing.sm),
-                FilledButton(
-                  onPressed: _busy
-                      ? null
-                      : () =>
-                          _resolve(() => repo.acceptInvite(widget.invite)),
-                  child: Text(l10n.spaceInviteAccept),
-                ),
-              ],
+            if (from != null) ...[
+              ProfileAvatar(
+                seed: from.uid,
+                displayName: from.displayName,
+                radius: 16,
+              ),
+              const SizedBox(width: TokenSpacing.sm),
+            ],
+            Expanded(
+              // Una RELACIÓN no tiene nombre propio que anunciar: el
+              // contexto ES la otra persona. Nombrar aquí el espacio
+              // enseñaba la concatenación «Edgar · Pedro» (BUG-5).
+              child: Text(
+                isRelationshipSpaceId(widget.invite.spaceId)
+                    ? l10n.relationshipInviteText(from?.displayName ?? '…')
+                    : l10n.spaceInviteText(
+                        from?.displayName ?? '…',
+                        widget.invite.spaceName,
+                      ),
+              ),
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () => _resolve(() => repo.rejectInvite(widget.invite.id)),
+            child: Text(l10n.spaceInviteReject),
+          ),
+          FilledButton(
+            onPressed: _busy
+                ? null
+                : () => _resolve(() => repo.acceptInvite(widget.invite)),
+            child: Text(l10n.spaceInviteAccept),
+          ),
+        ],
       ),
     );
   }

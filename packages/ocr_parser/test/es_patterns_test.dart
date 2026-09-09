@@ -14,8 +14,10 @@ void main() {
     test('encuentra todos los importes de una línea', () {
       expect(findAmounts('2 LECHE 0,98 1,96').map((m) => m.cents), [98, 196]);
       // 1,479 (3 decimales, €/L) no es un importe.
-      expect(findAmounts('45,30 L x 1,479 €/L 67,00').map((m) => m.cents),
-          [4530, 6700]);
+      expect(findAmounts('45,30 L x 1,479 €/L 67,00').map((m) => m.cents), [
+        4530,
+        6700,
+      ]);
     });
 
     test('canonicaliza decimales de punto solo si no hay comas', () {

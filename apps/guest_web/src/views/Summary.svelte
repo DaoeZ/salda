@@ -142,19 +142,21 @@
         <span>{names.get(settlement.from) ?? '—'}</span>
         <span class="money">{formatCents(settlement.amount)}</span>
       </div>
+      <!-- Confirmar la recepción es del RECEPTOR (P2.1): tú. Que el deudor
+           haya pulsado "Ya he pagado" es un AVISO útil, nunca un requisito:
+           puede haberte pagado en mano y no abrir esto jamás (ADR-038). -->
       {#if settlement.state === 'marked'}
-        <!-- Confirmar la recepción es del RECEPTOR (P2.1): tú. -->
         <p class="state waiting">
           {names.get(settlement.from) ?? '—'} dice que ya te ha pagado.
         </p>
-        {#if guest.open}
-          <button
-            class="btn-primary paid"
-            onclick={() => guest.confirmReceived(settlement.id)}
-          >
-            He recibido el dinero
-          </button>
-        {/if}
+      {/if}
+      {#if guest.open && settlement.state !== 'confirmed'}
+        <button
+          class="btn-primary paid"
+          onclick={() => guest.confirmReceived(settlement.id)}
+        >
+          Confirmar recepción
+        </button>
       {/if}
     {/each}
   </section>

@@ -9,8 +9,11 @@ import '../application/review_draft.dart';
 /// Hoja de edición de una línea. Con `index == null` crea una nueva.
 /// Muestra el texto OCR original y las interpretaciones alternativas
 /// (un toque las aplica) para que corregir sea rapidísimo.
-Future<void> showLineEditSheet(BuildContext context, WidgetRef ref,
-    {required int? index}) {
+Future<void> showLineEditSheet(
+  BuildContext context,
+  WidgetRef ref, {
+  required int? index,
+}) {
   final draft = ref.read(reviewDraftProvider);
   final line = index == null ? null : draft?.lines[index];
   return showModalBottomSheet(
@@ -18,15 +21,19 @@ Future<void> showLineEditSheet(BuildContext context, WidgetRef ref,
     isScrollControlled: true,
     builder: (context) => Padding(
       padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: _LineEditForm(index: index, line: line, ref: ref),
     ),
   );
 }
 
 class _LineEditForm extends StatefulWidget {
-  const _LineEditForm(
-      {required this.index, required this.line, required this.ref});
+  const _LineEditForm({
+    required this.index,
+    required this.line,
+    required this.ref,
+  });
 
   final int? index;
   final DraftLine? line;
@@ -39,19 +46,22 @@ class _LineEditForm extends StatefulWidget {
 class _LineEditFormState extends State<_LineEditForm> {
   late final _name = TextEditingController(text: widget.line?.name ?? '');
   late final _quantity = TextEditingController(
-      text: widget.line == null
-          ? '1'
-          : (widget.line!.quantityMilli / 1000)
+    text: widget.line == null
+        ? '1'
+        : (widget.line!.quantityMilli / 1000)
               .toStringAsFixed(widget.line!.quantityMilli % 1000 == 0 ? 0 : 3)
-              .replaceAll('.', ','));
+              .replaceAll('.', ','),
+  );
   late final _unit = TextEditingController(
-      text: widget.line?.unitPrice == null
-          ? ''
-          : formatMoney(widget.line!.unitPrice!).replaceAll(' €', ''));
+    text: widget.line?.unitPrice == null
+        ? ''
+        : formatMoney(widget.line!.unitPrice!).replaceAll(' €', ''),
+  );
   late final _total = TextEditingController(
-      text: widget.line == null
-          ? ''
-          : formatMoney(widget.line!.totalPrice).replaceAll(' €', ''));
+    text: widget.line == null
+        ? ''
+        : formatMoney(widget.line!.totalPrice).replaceAll(' €', ''),
+  );
 
   @override
   void dispose() {
@@ -65,10 +75,16 @@ class _LineEditFormState extends State<_LineEditForm> {
     final total = parseUserMoney(_total.text);
     if (_name.text.trim().isEmpty || total == null) return;
     final quantity = double.tryParse(_quantity.text.replaceAll(',', '.'));
+    final quantityMilli = quantity == null ? 1000 : (quantity * 1000).round();
     final line = DraftLine(
       name: _name.text.trim(),
-      quantityMilli: quantity == null ? 1000 : (quantity * 1000).round(),
-      unitPrice: parseUserMoney(_unit.text),
+      quantityMilli: quantityMilli,
+      unitPrice: unitPriceAfterEdit(
+        widget.line,
+        quantityMilli: quantityMilli,
+        total: total,
+        typed: parseUserMoney(_unit.text),
+      ),
       totalPrice: total,
       sourceText: widget.line?.sourceText ?? '',
     );
@@ -91,8 +107,10 @@ class _LineEditFormState extends State<_LineEditForm> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(l10n.lineEditTitle,
-              style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            l10n.lineEditTitle,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: TokenSpacing.lg),
           TextField(
             controller: _name,
@@ -100,44 +118,51 @@ class _LineEditFormState extends State<_LineEditForm> {
             decoration: InputDecoration(labelText: l10n.lineName),
           ),
           const SizedBox(height: TokenSpacing.md),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _quantity,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: l10n.lineQuantity),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _quantity,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: l10n.lineQuantity),
+                ),
               ),
-            ),
-            const SizedBox(width: TokenSpacing.md),
-            Expanded(
-              child: TextField(
-                controller: _unit,
-                keyboardType: TextInputType.number,
-                decoration:
-                    InputDecoration(labelText: l10n.lineUnitPrice, suffixText: '€'),
+              const SizedBox(width: TokenSpacing.md),
+              Expanded(
+                child: TextField(
+                  controller: _unit,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: l10n.lineUnitPrice,
+                    suffixText: '€',
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: TokenSpacing.md),
-            Expanded(
-              child: TextField(
-                controller: _total,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                    labelText: l10n.lineTotalPrice, suffixText: '€'),
+              const SizedBox(width: TokenSpacing.md),
+              Expanded(
+                child: TextField(
+                  controller: _total,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: l10n.lineTotalPrice,
+                    suffixText: '€',
+                  ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           if (line != null && line.alternatives.isNotEmpty) ...[
             const SizedBox(height: TokenSpacing.md),
-            Text(l10n.lineAlternatives,
-                style: Theme.of(context).textTheme.labelMedium),
+            Text(
+              l10n.lineAlternatives,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
             Wrap(
               spacing: TokenSpacing.sm,
               children: [
                 for (final alt in line.alternatives)
                   ActionChip(
-                    label: Text(
-                        '${alt.name} · ${formatMoney(alt.totalPrice)}'),
+                    label: Text('${alt.name} · ${formatMoney(alt.totalPrice)}'),
                     onPressed: () {
                       widget.ref
                           .read(reviewDraftProvider.notifier)
@@ -160,33 +185,34 @@ class _LineEditFormState extends State<_LineEditForm> {
             const SizedBox(height: TokenSpacing.sm),
             Text(
               l10n.lineSource(line.sourceText),
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.outline),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
             ),
           ],
           const SizedBox(height: TokenSpacing.lg),
-          Row(children: [
-            if (widget.index != null)
-              TextButton.icon(
-                onPressed: () {
-                  widget.ref
-                      .read(reviewDraftProvider.notifier)
-                      .removeLine(widget.index!);
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.delete_outline),
-                label: Text(l10n.lineDelete),
+          Row(
+            children: [
+              if (widget.index != null)
+                TextButton.icon(
+                  onPressed: () {
+                    widget.ref
+                        .read(reviewDraftProvider.notifier)
+                        .removeLine(widget.index!);
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(l10n.lineDelete),
+                ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l10n.commonCancel),
               ),
-            const Spacer(),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l10n.commonCancel),
-            ),
-            const SizedBox(width: TokenSpacing.sm),
-            FilledButton(onPressed: _save, child: Text(l10n.commonSave)),
-          ]),
+              const SizedBox(width: TokenSpacing.sm),
+              FilledButton(onPressed: _save, child: Text(l10n.commonSave)),
+            ],
+          ),
           const SizedBox(height: TokenSpacing.sm),
         ],
       ),

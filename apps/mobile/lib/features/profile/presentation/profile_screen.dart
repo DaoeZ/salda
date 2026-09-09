@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/profile_repository.dart';
@@ -64,8 +66,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _check = const UsernameOk(); // su propio username siempre es válido
       return;
     }
-    _name.text =
-        ref.read(currentAppUserProvider)?.displayName?.trim() ?? '';
+    _name.text = ref.read(currentAppUserProvider)?.displayName?.trim() ?? '';
     if (_name.text.isEmpty) return;
     // Propuesta automática (RF de P2): primer candidato natural libre.
     final suggested = await ref
@@ -93,10 +94,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _check = null;
     });
     _debounce = Timer(const Duration(milliseconds: 400), () async {
-      final result =
-          await ref.read(profileRepositoryProvider).checkUsername(value);
-      if (!mounted || normalizeUsername(_username.text) !=
-          normalizeUsername(value)) {
+      final result = await ref
+          .read(profileRepositoryProvider)
+          .checkUsername(value);
+      if (!mounted ||
+          normalizeUsername(_username.text) != normalizeUsername(value)) {
         return;
       }
       setState(() {
@@ -137,8 +139,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.profileSaved)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.profileSaved)));
       final navigator = Navigator.of(context);
       if (navigator.canPop()) navigator.pop();
     } on FirebaseException {
@@ -161,32 +164,34 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _initFrom(profile.value);
     }
 
-    final (Widget? statusIcon, String? statusText, bool statusIsError) =
-        switch ((_checking, _check)) {
+    final (
+      Widget? statusIcon,
+      String? statusText,
+      bool statusIsError,
+    ) = switch ((_checking, _check)) {
       (true, _) => (
-          const SizedBox.square(
-            dimension: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          l10n.usernameChecking,
-          false,
+        const SizedBox.square(
+          dimension: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
+        l10n.usernameChecking,
+        false,
+      ),
       (_, UsernameOk()) => (
-          Icon(Icons.check_circle_outline,
-              color: theme.colorScheme.primary),
-          l10n.usernameAvailable,
-          false,
-        ),
+        Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
+        l10n.usernameAvailable,
+        false,
+      ),
       (_, UsernameTaken()) => (
-          Icon(Icons.cancel_outlined, color: theme.colorScheme.error),
-          l10n.usernameTaken,
-          true,
-        ),
+        Icon(Icons.cancel_outlined, color: theme.colorScheme.error),
+        l10n.usernameTaken,
+        true,
+      ),
       (_, UsernameInvalid(:final error)) => (
-          Icon(Icons.cancel_outlined, color: theme.colorScheme.error),
-          usernameErrorText(l10n, error),
-          true,
-        ),
+        Icon(Icons.cancel_outlined, color: theme.colorScheme.error),
+        usernameErrorText(l10n, error),
+        true,
+      ),
       _ => (null, null, false),
     };
 
@@ -195,7 +200,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title: Text(_isNew ? l10n.profileCreateTitle : l10n.profileTitle),
       ),
       body: profile.isLoading && !_initialized
-          ? const Center(child: CircularProgressIndicator())
+          ? const ScreenBody(children: [SkeletonList(rows: 3)])
           : SingleChildScrollView(
               padding: const EdgeInsets.all(TokenSpacing.xl),
               child: Form(
@@ -266,11 +271,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onFieldSubmitted: (_) => _save(),
                       validator: (value) =>
                           validateUsername(value ?? '') != null
-                              ? usernameErrorText(
-                                  l10n,
-                                  validateUsername(value ?? '')!,
-                                )
-                              : null,
+                          ? usernameErrorText(
+                              l10n,
+                              validateUsername(value ?? '')!,
+                            )
+                          : null,
                       decoration: InputDecoration(
                         labelText: l10n.profileUsername,
                         helperText: l10n.profileUsernameHelp,
@@ -296,19 +301,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ],
                     const SizedBox(height: TokenSpacing.xl),
                     FilledButton(
-                      onPressed:
-                          _saving || _checking || _check is! UsernameOk
-                              ? null
-                              : _save,
+                      onPressed: _saving || _checking || _check is! UsernameOk
+                          ? null
+                          : _save,
                       child: _saving
                           ? const SizedBox.square(
                               dimension: 20,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_isNew
-                              ? l10n.profileCreateAction
-                              : l10n.commonSave),
+                          : Text(
+                              _isNew
+                                  ? l10n.profileCreateAction
+                                  : l10n.commonSave,
+                            ),
                     ),
                   ],
                 ),

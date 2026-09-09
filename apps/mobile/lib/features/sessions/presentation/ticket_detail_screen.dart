@@ -1,17 +1,32 @@
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:design_tokens/design_tokens.dart';
 import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../../core/config/app_environment.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/badges.dart';
+import '../../../core/ui/money_text.dart';
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../economy/application/ticket_payment_impact.dart';
+import '../../profile/data/profile_repository.dart';
 import '../../scan/data/receipt_storage.dart';
 import '../../spaces/data/spaces_repository.dart';
+import '../../spaces/presentation/space_title_text.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
+import '../data/ticket_links_repository.dart';
 import '../domain/session_models.dart';
+import '../domain/ticket_link_models.dart';
+import 'ticket_correction_sheets.dart';
+import 'unit_assignment_sheet.dart';
 
 /// Datos de navegación al detalle de un ticket (van como `extra` de la ruta).
 class TicketRef {
@@ -28,49 +43,278 @@ class TicketRef {
 
 /// Detalle de un ticket del historial (RF-83): foto original, líneas OCR,
 /// quién pagó, fecha e importe.
-class TicketDetailScreen extends ConsumerWidget {
+class TicketDetailScreen extends ConsumerStatefulWidget {
   const TicketDetailScreen({super.key, required this.ticket});
 
   final TicketRef ticket;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TicketDetailScreen> createState() => _TicketDetailScreenState();
+}
+
+class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
+  /// Corregir el gasto y elegir lo que consumí son cosas distintas y no
+  /// pueden compartir el mismo toque sobre la misma fila (A11c). El modo lo
+  /// deja explícito: fuera de él, la pantalla es la de siempre.
+  var _correcting = false;
+
+  /// Borrado en curso: evita el doble toque sobre una acción irreversible.
+  var _deleting = false;
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final ticket = widget.ticket;
     final t = ticket.ticket;
+    // Auditar no es intervenir (A11b): quien abre el ticket de otro lo ve
+    // entero, pero no se le ofrece ni una acción que las Rules le vayan a
+    // rechazar — compartirlo por enlace y vincularlo a un espacio son del
+    // dueño de la sesión.
+    final canEdit = ref.watch(canEditSessionProvider(ticket.sessionId));
+    // Corregir el CONTENIDO sí lo puede quien administra el grupo (A11c).
+    final canCorrect = ref.watch(
+      canCorrectTicketProvider((
+        sessionId: ticket.sessionId,
+        spaceId: t.spaceId ?? '',
+      )),
+    );
+    if (_correcting && !canCorrect) _correcting = false;
+    // A2: misma autoridad que corregir, más la frontera de sesión cerrada.
+    final canDelete = ref.watch(
+      canDeleteTicketProvider((
+        sessionId: ticket.sessionId,
+        spaceId: t.spaceId ?? '',
+      )),
+    );
+    if (canDelete) {
+      // Mantiene viva la suscripción a la economía del gasto para que el
+      // aviso del diálogo esté resuelto cuando haga falta.
+      ref.watch(
+        ticketPaymentImpactProvider((
+          sessionId: ticket.sessionId,
+          ticketId: t.id,
+        )),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(t.merchantName),
-        actions: [_SpaceLinkAction(ticket: t)],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
-        children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: Text(l10n.ticketPaidBy(ticket.payerName)),
-              subtitle: t.date == null ? null : Text(t.date!),
-              trailing: Text(
-                formatMoney(t.grandTotal),
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
+        actions: [
+          if (canDelete)
+            IconButton(
+              tooltip: l10n.ticketDeleteAction,
+              icon: const Icon(Icons.delete_outline),
+              // El impacto se OBSERVA desde aquí, no se lee al abrir el
+              // diálogo: leerlo en ese instante arrancaba la consulta con la
+              // pantalla ya encima y el aviso salía siempre vacío.
+              onPressed: _deleting
+                  ? null
+                  : () => _confirmDelete(
+                      ref.read(
+                        ticketPaymentImpactProvider((
+                          sessionId: ticket.sessionId,
+                          ticketId: t.id,
+                        )),
+                      ),
+                    ),
             ),
-          ),
-          const SizedBox(height: TokenSpacing.lg),
-          if (t.kind == 'scanned') ...[
-            _TicketPhoto(ticketPath: t.path, uploaded: t.imagePath != null),
-            const SizedBox(height: TokenSpacing.lg),
+          if (canCorrect)
+            IconButton(
+              tooltip: _correcting
+                  ? l10n.ticketCorrectDone
+                  : l10n.ticketCorrectAction,
+              icon: Icon(_correcting ? Icons.check : Icons.edit_outlined),
+              onPressed: () => setState(() => _correcting = !_correcting),
+            ),
+          if (canEdit) ...[
+            _TicketLinkAction(ticketRef: ticket),
+            _SpaceLinkAction(ticket: t),
           ],
-          Text(l10n.reviewLines, style: theme.textTheme.titleMedium),
-          const SizedBox(height: TokenSpacing.sm),
-          _TicketLines(ticketRef: ticket),
         ],
       ),
+      body: ScreenBody(
+        children: [
+          if (_correcting) ...[
+            Text(l10n.ticketCorrectBanner, style: theme.textTheme.bodySmall),
+            const SizedBox(height: TokenSpacing.md),
+          ],
+          SaldaCard(
+            padding: const EdgeInsets.all(TokenSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t.merchantName,
+                  style: theme.textTheme.titleMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: TokenSpacing.sm),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: MoneyText(t.grandTotal, size: MoneySize.large),
+                ),
+                const SizedBox(height: TokenSpacing.lg),
+                _TicketFact(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: l10n.ticketPaidBy(ticket.payerName),
+                ),
+                if (t.date != null) ...[
+                  const SizedBox(height: TokenSpacing.sm),
+                  _TicketFact(icon: Icons.event_outlined, label: t.date!),
+                ],
+                // Quién tocó este gasto por última vez. Importa sobre todo
+                // cuando NO fue quien lo subió (A11c).
+                if (t.lastEditedByUid != null) ...[
+                  const SizedBox(height: TokenSpacing.sm),
+                  _CorrectionSignature(ticket: t),
+                ],
+                if (_correcting) ...[
+                  const SizedBox(height: TokenSpacing.md),
+                  // El total y la suma de los productos son cosas distintas
+                  // —impuestos, propina y descuentos viven en la diferencia—,
+                  // así que al corregir se enseñan las dos. Que no cuadren no
+                  // es necesariamente un error, pero esconderlo sí lo sería.
+                  _LineSumCheck(ticketPath: t.path, grandTotal: t.grandTotal),
+                  const SizedBox(height: TokenSpacing.md),
+                  OutlinedButton.icon(
+                    onPressed: () => showTicketHeaderCorrection(
+                      context,
+                      ref,
+                      ticketPath: t.path,
+                      merchantName: t.merchantName,
+                      date: t.date,
+                      grandTotal: t.grandTotal,
+                    ),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: Text(l10n.ticketCorrectHeaderTitle),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (t.kind == 'scanned') ...[
+            const SectionGap(),
+            SectionHeader(title: l10n.ticketPhotoTitle),
+            _TicketPhoto(ticketPath: t.path, uploaded: t.imagePath != null),
+          ],
+          const SectionGap(),
+          SectionHeader(title: l10n.reviewLines),
+          _TicketLines(ticketRef: ticket, correcting: _correcting),
+        ],
+      ),
+    );
+  }
+
+  /// Confirmación destructiva (A2). El aviso se REFUERZA cuando existen
+  /// pagos que van a sobrevivir al gasto, y separa siempre dos cosas que no
+  /// son lo mismo: dinero ya confirmado como recibido, y una declaración que
+  /// todavía espera confirmación.
+  Future<void> _confirmDelete(TicketPaymentImpact impact) async {
+    final l10n = AppLocalizations.of(context);
+    final ticket = widget.ticket.ticket;
+
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.ticketDeleteTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.ticketDeleteBody),
+            if (impact.hasConfirmed) ...[
+              const SizedBox(height: TokenSpacing.lg),
+              Text(
+                l10n.ticketDeletePaymentsTitle,
+                style: Theme.of(dialogContext).textTheme.titleSmall,
+              ),
+              const SizedBox(height: TokenSpacing.xs),
+              Text(
+                l10n.ticketDeletePaymentsBody(
+                  impact.confirmedCount,
+                  formatMoney(impact.confirmedTotal),
+                ),
+              ),
+            ],
+            if (impact.hasPending) ...[
+              const SizedBox(height: TokenSpacing.lg),
+              Text(
+                l10n.ticketDeleteDeclarationsTitle,
+                style: Theme.of(dialogContext).textTheme.titleSmall,
+              ),
+              const SizedBox(height: TokenSpacing.xs),
+              Text(
+                l10n.ticketDeleteDeclarationsBody(
+                  impact.pendingCount,
+                  formatMoney(impact.pendingTotal),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.commonDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await ref.read(sessionRepositoryProvider).deleteTicket(ticket.path);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketDeleted)));
+      // La pantalla no puede quedarse apuntando a un documento que ya no
+      // existe: se vuelve al contexto desde el que se abrió.
+      if (navigator.canPop()) navigator.pop();
+    } on Object {
+      // Un fallo NO puede parecer un éxito: la pantalla se queda donde está
+      // y lo dice. Las Rules son la autoridad (sesión cerrada, sin permiso).
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketDeleteError)));
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+}
+
+/// Dato secundario del ticket: icono tenue y texto, en fila. Evita una
+/// tabla densa sin esconder nada detras de mas toques.
+class _TicketFact extends StatelessWidget {
+  const _TicketFact({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.salda;
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: c.textMuted),
+        const SizedBox(width: TokenSpacing.sm),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: c.textSecondary),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -106,6 +350,13 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
       return const SizedBox.shrink();
     }
     final linked = _spaceId != null && _spaceId!.isNotEmpty;
+    if (widget.ticket.isContextual) {
+      return IconButton(
+        onPressed: null,
+        tooltip: l10n.ticketContextLocked,
+        icon: const Icon(Icons.group_work),
+      );
+    }
     return PopupMenuButton<String>(
       icon: Icon(
         linked ? Icons.group_work : Icons.group_work_outlined,
@@ -119,17 +370,16 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
           if (value == 'unlink') {
             await repo.unlinkTicket(widget.ticket.path);
             setState(() => _spaceId = null);
-            messenger.showSnackBar(
-              SnackBar(content: Text(l10n.spaceUnlinked)),
-            );
+            messenger.showSnackBar(SnackBar(content: Text(l10n.spaceUnlinked)));
           } else {
             await repo.linkTicket(widget.ticket.path, value);
             setState(() => _spaceId = value);
             messenger.showSnackBar(SnackBar(content: Text(l10n.spaceLinked)));
           }
         } on Object {
-          messenger
-              .showSnackBar(SnackBar(content: Text(l10n.spaceActionError)));
+          messenger.showSnackBar(
+            SnackBar(content: Text(l10n.spaceActionError)),
+          );
         }
       },
       itemBuilder: (_) => [
@@ -137,13 +387,14 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
           if (space.isActive && space.id != _spaceId)
             PopupMenuItem(
               value: space.id,
-              child: Text(l10n.spaceLinkTo(space.name)),
+              child: SpaceTitleText(
+                spaceId: space.id,
+                storedName: space.name,
+                format: l10n.spaceLinkTo,
+              ),
             ),
         if (linked)
-          PopupMenuItem(
-            value: 'unlink',
-            child: Text(l10n.spaceUnlink),
-          ),
+          PopupMenuItem(value: 'unlink', child: Text(l10n.spaceUnlink)),
       ],
     );
   }
@@ -154,10 +405,78 @@ class _SpaceLinkActionState extends ConsumerState<_SpaceLinkAction> {
 /// líneas de una unidad, stepper de unidades en las de varias — y ve en
 /// tiempo real lo que eligen los demás. Lo no reclamado recae en el pagador
 /// (residual), así que la selección explícita nunca duplica importes.
+/// Suma de los productos frente al total del ticket, con el mismo lenguaje
+/// que la revisión previa al guardado: «cuadra» o «descuadre de X».
+///
+/// Es informativo a propósito. Un ticket con impuestos o propina descuadra
+/// por construcción y sigue siendo correcto; quien corrige necesita ver los
+/// dos números para decidir si lo que está mal es un producto o el total.
+class _LineSumCheck extends ConsumerWidget {
+  const _LineSumCheck({required this.ticketPath, required this.grandTotal});
+
+  final String ticketPath;
+  final Money grandTotal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final lines = ref.watch(ticketLinesProvider(ticketPath)).value;
+    if (lines == null) return const SizedBox.shrink();
+
+    var sum = Money.zero;
+    for (final line in lines) {
+      sum += line.totalPrice;
+    }
+    final delta = sum - grandTotal;
+    // Misma tolerancia que la revisión: el 1 % del total, mínimo 2 céntimos.
+    final tolerance = grandTotal.abs().cents ~/ 100;
+    final balanced = delta.abs().cents <= (tolerance > 2 ? tolerance : 2);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TicketFact(
+          icon: Icons.functions_outlined,
+          label: '${l10n.reviewComputedTotal}: ${formatMoney(sum)}',
+        ),
+        const SizedBox(height: TokenSpacing.sm),
+        StatusBadge(
+          balanced
+              ? l10n.reviewBalanced
+              : l10n.reviewMismatch(formatMoney(delta.abs())),
+          tone: balanced ? BadgeTone.positive : BadgeTone.warning,
+          icon: balanced ? Icons.check_rounded : Icons.error_outline_rounded,
+        ),
+      ],
+    );
+  }
+}
+
+/// Firma de la última corrección, con el nombre público de quien la hizo.
+class _CorrectionSignature extends ConsumerWidget {
+  const _CorrectionSignature({required this.ticket});
+
+  final SessionTicket ticket;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final profile = ref.watch(publicProfileProvider(ticket.lastEditedByUid!));
+    return _TicketFact(
+      icon: Icons.history_edu_outlined,
+      label: l10n.ticketCorrectedBy(
+        profile.value?.displayName ?? '…',
+        (ticket.lastEditedAt ?? DateTime.now()).toLocal(),
+      ),
+    );
+  }
+}
+
 class _TicketLines extends ConsumerWidget {
-  const _TicketLines({required this.ticketRef});
+  const _TicketLines({required this.ticketRef, required this.correcting});
 
   final TicketRef ticketRef;
+  final bool correcting;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -171,26 +490,99 @@ class _TicketLines extends ConsumerWidget {
         const <SessionParticipant>[];
 
     final lines = linesAsync.value ?? const <TicketLine>[];
-    if (linesAsync.hasValue && lines.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(TokenSpacing.lg),
-          child: Text(l10n.ticketNoLines, style: theme.textTheme.bodySmall),
-        ),
+    if (!linesAsync.hasValue) return const SkeletonList(rows: 3);
+    if (lines.isEmpty) {
+      return EmptyState(
+        icon: Icons.list_alt_outlined,
+        title: l10n.ticketNoLines,
+        body: l10n.ticketNoLinesBody,
       );
     }
 
-    final names = {for (final p in participants) p.id: p.name};
-    final ownerPid = participants
-        .where((p) => p.isOwner)
-        .map((p) => p.id)
-        .firstOrNull;
+    // A11d: quien solo conserva el derecho histórico no puede leer el censo
+    // de la sesión, así que los nombres del reparto salen del snapshot del
+    // propio ticket. Para todos los demás, nada cambia.
+    final names = ref.watch(
+      ticketParticipantNamesProvider((
+        sid: ticketRef.sessionId,
+        tid: ticket.id,
+      )),
+    );
+    // Editar el ticket y elegir MI consumo son dos autoridades distintas.
+    // La segunda no depende de ser dueño de la sesión: depende de tener un
+    // participante reclamado por mi UID, que es EXACTAMENTE lo que
+    // comprueban las Rules (`claimedBy(pid) == uid`). Un miembro del grupo
+    // que abre el ticket de otro elige lo que consumió sin tocar nada más.
+    //
+    // Repliegue por `isOwner` para las sesiones antiguas, donde el
+    // participante del anfitrión pudo quedar sin reclamar: ahí el dueño
+    // sigue eligiendo como siempre.
+    final myUid = ref.watch(currentUserIdFromSpacesProvider);
+    final canEdit = ref.watch(canEditSessionProvider(ticketRef.sessionId));
+    // A4: y solo si sigo participando. Un participante desactivado no recibe
+    // consumo —`recompute` reparte sobre los activos—, así que ofrecerle
+    // elegir sería ofrecerle una acción que las Rules rechazan y que, de
+    // colarse, no movería un céntimo.
+    final myPid =
+        (myUid.isEmpty
+            ? null
+            : participants
+                  .where((p) => p.active && p.claimedByDevice == myUid)
+                  .map((p) => p.id)
+                  .firstOrNull) ??
+        (canEdit
+            ? participants
+                  .where((p) => p.active && p.isOwner)
+                  .map((p) => p.id)
+                  .firstOrNull
+            : null);
     final mode =
         ticket.splitModeOverride ?? detail?.splitModeDefault ?? SplitMode.equal;
+    // El estado de la sesión vive en un documento que el miembro NO puede
+    // leer (shareCode). Quien sí lo lee exige `open` como siempre; para
+    // quien no, mandan las Rules: si estuviera cerrada, la escritura se
+    // rechaza y la pantalla lo dice.
+    // En modo corrección la fila sirve para arreglar el producto, no para
+    // elegir consumo: un mismo toque no puede significar dos cosas (A11c).
     final canPick =
-        ownerPid != null &&
+        !correcting &&
+        myPid != null &&
         mode == SplitMode.byItem &&
-        detail?.summary.status == SessionStatus.open;
+        (!canEdit || detail?.summary.status == SessionStatus.open);
+
+    // A10: repartir el consumo de OTRAS personas. Solo en «cada uno lo suyo»
+    // —a partes iguales el motor no mira las líneas, así que asignar
+    // productos no significaría nada— y nunca mientras se corrige el
+    // contenido: un mismo toque no puede querer decir dos cosas.
+    final canAssign =
+        !correcting &&
+        mode == SplitMode.byItem &&
+        ref.watch(
+          canAssignConsumptionProvider((
+            sessionId: ticketRef.sessionId,
+            spaceId: ticket.spaceId ?? '',
+          )),
+        );
+
+    // «A partes iguales» no mira las líneas: repartirlo es dividir el total
+    // entre quienes participan. Sin decirlo, la pantalla mentía — cada
+    // producto salía rotulado «sin reclamar (para Alba)», que es la lectura
+    // del OTRO modo, y quien audita concluía que no le tocaba nada.
+    //
+    // El importe se pide al MISMO motor que usa recompute, con el mismo
+    // universo de participantes (activos, en su orden): es el número que ya
+    // existe, no un cálculo nuevo.
+    final activePids = [
+      for (final p in participants)
+        if (p.active) p.id,
+    ];
+    final myShare = mode == SplitMode.byItem || activePids.isEmpty
+        ? null
+        : SplitEngine.splitTicket(
+            participantIds: activePids,
+            mode: SplitMode.equal,
+            ticket: SplitTicketInput(grandTotal: ticket.grandTotal),
+          )[myPid];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,21 +591,155 @@ class _TicketLines extends ConsumerWidget {
           Text(l10n.ticketPickHint, style: theme.textTheme.bodySmall),
           const SizedBox(height: TokenSpacing.sm),
         ],
-        Card(
-          child: Column(
-            children: [
-              for (final line in lines)
-                _LineTile(
-                  line: line,
-                  ownerPid: ownerPid,
-                  canPick: canPick,
-                  names: names,
-                  payerName: ticketRef.payerName,
-                ),
-            ],
+        if (mode == SplitMode.equal) ...[
+          Text(
+            l10n.ticketSplitEqualHint(activePids.length),
+            style: theme.textTheme.bodySmall,
           ),
+          if (myShare != null) ...[
+            const SizedBox(height: TokenSpacing.xs),
+            Text(
+              l10n.ticketSplitYourShare(formatMoney(myShare)),
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          const SizedBox(height: TokenSpacing.sm),
+        ],
+        // A19: quién falta por terminar, y qué significa que falte alguien.
+        // Sin esto, «no he mirado» y «no consumí nada» son indistinguibles
+        // mirando las líneas, y lo no reclamado recae en quien pagó: las
+        // cuentas salían mal a mitad de la cena.
+        if (ticket.usesPicking && mode == SplitMode.byItem) ...[
+          _PickingBanner(
+            ticketPath: ticket.path,
+            pendientes: [
+              for (final p in participants)
+                if (p.active && ticket.pickingOpen.contains(p.id)) p.id,
+            ],
+            myPid: myPid,
+            canAssign: canAssign,
+            names: names,
+          ),
+          const SizedBox(height: TokenSpacing.md),
+        ],
+        SaldaCardList(
+          children: [
+            for (final line in lines)
+              _LineTile(
+                line: line,
+                myPid: myPid,
+                canPick: canPick,
+                canEdit: canEdit,
+                canAssign: canAssign,
+                sessionId: ticketRef.sessionId,
+                correcting: correcting,
+                names: names,
+                activePids: activePids,
+                usesPicking: ticket.usesPicking,
+                pickingClosed:
+                    ticket.usesPicking &&
+                    !participants.any(
+                      (p) => p.active && ticket.pickingOpen.contains(p.id),
+                    ),
+                ticketId: ticket.id,
+                showAssignment: mode == SplitMode.byItem,
+                payerName: ticketRef.payerName,
+              ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+/// Estado del reparto (A19): a quién se está esperando y qué significa.
+///
+/// Existe porque «todavía no he mirado» y «no consumí nada» son
+/// indistinguibles mirando las líneas: hasta que alguien lo dice, lo no
+/// reclamado recae en quien pagó y las cuentas de un gasto a medio elegir
+/// serían falsas. Aquí se dice, y se ve quién falta.
+class _PickingBanner extends ConsumerWidget {
+  const _PickingBanner({
+    required this.ticketPath,
+    required this.pendientes,
+    required this.myPid,
+    required this.canAssign,
+    required this.names,
+  });
+
+  final String ticketPath;
+
+  /// pids ACTIVOS que todavía no han terminado, en el orden del reparto.
+  final List<String> pendientes;
+  final String? myPid;
+  final bool canAssign;
+  final Map<String, String> names;
+
+  Future<void> _terminar(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    String pid,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(sessionRepositoryProvider)
+          .finishPicking(ticketPath, participantId: pid);
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketPickError)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final abierto = pendientes.isNotEmpty;
+    final nombres = [for (final pid in pendientes) names[pid] ?? '?'];
+
+    return SaldaCard(
+      padding: const EdgeInsets.all(TokenSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            abierto ? l10n.pickingOpenTitle : l10n.pickingClosedTitle,
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: TokenSpacing.xs),
+          Text(
+            abierto ? l10n.pickingOpenBody : l10n.pickingClosedBody,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+          if (abierto) ...[
+            const SizedBox(height: TokenSpacing.sm),
+            Text(
+              l10n.pickingWaitingFor(nombres.join(', ')),
+              style: theme.textTheme.bodyMedium,
+            ),
+            if (myPid != null && pendientes.contains(myPid)) ...[
+              const SizedBox(height: TokenSpacing.md),
+              FilledButton(
+                onPressed: () => _terminar(context, ref, l10n, myPid!),
+                child: Text(l10n.pickingFinishAction),
+              ),
+            ],
+            // A10 cierra por quien no puede hacerlo: un MANUAL no pulsa
+            // nada, y quien se fue a casa tampoco. Sin esto, un solo
+            // ausente dejaría las cuentas bloqueadas para siempre.
+            if (canAssign)
+              for (final pid in pendientes)
+                if (pid != myPid)
+                  TextButton(
+                    onPressed: () => _terminar(context, ref, l10n, pid),
+                    child: Text(l10n.pickingFinishForOther(names[pid] ?? '?')),
+                  ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -221,35 +747,158 @@ class _TicketLines extends ConsumerWidget {
 class _LineTile extends ConsumerWidget {
   const _LineTile({
     required this.line,
-    required this.ownerPid,
+    required this.myPid,
     required this.canPick,
+    required this.canEdit,
+    required this.canAssign,
+    required this.sessionId,
+    required this.correcting,
+    required this.showAssignment,
     required this.names,
+    required this.activePids,
+    required this.usesPicking,
+    required this.pickingClosed,
+    required this.ticketId,
     required this.payerName,
   });
 
+  /// A19: el gasto sigue el protocolo de cierre, así que tocar una unidad
+  /// devuelve a esa persona a «eligiendo» en el mismo commit.
+  final bool usesPicking;
+
+  /// El reparto ya estaba cerrado: tocarlo lo REABRE, y eso hay que avisarlo
+  /// cuando ya hay dinero confirmado detrás.
+  final bool pickingClosed;
+
+  /// Id del ticket, para preguntar por los pagos que ya lo respaldan.
+  final String ticketId;
+
+  /// A10: repartir el consumo de terceros. Con esta autoridad, tocar una
+  /// unidad abre el selector de personas en vez de marcarme a mí.
+  final bool canAssign;
+  final String sessionId;
+
+  /// Modo corrección (A11c): la fila abre el arreglo del producto.
+  final bool correcting;
+
   final TicketLine line;
-  final String? ownerPid;
+  final String? myPid;
   final bool canPick;
+
+  /// Cambiar la FORMA de la línea (pasarla al modelo de unidades) es tocar
+  /// el ticket, no elegir consumo: eso sigue siendo del dueño de la sesión.
+  final bool canEdit;
+
+  /// Quién consume cada unidad solo significa algo en «cada uno lo suyo».
+  /// A partes iguales, esos rótulos describían un reparto que no se aplica.
+  final bool showAssignment;
   final Map<String, String> names;
+
+  /// Participantes que siguen en el reparto, en su orden (A4). Es el mismo
+  /// universo que usa el motor, así que pintar consumidores fuera de esta
+  /// lista sería enseñar un reparto que el dinero no reconoce.
+  final List<String> activePids;
   final String payerName;
+
+  /// Consumidores de una unidad que el motor SÍ cuenta. Lo que ya estuviera
+  /// asignado no se borra por dejar de estar activo —el documento conserva
+  /// su historia—, pero deja de mostrarse como consumo vigente.
+  List<String> _vigentes(int unit) => [
+    for (final pid in line.consumersOf(unit))
+      if (activePids.contains(pid)) pid,
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final pid = ownerPid;
+    final pid = myPid;
     final myUnits = pid == null ? 0 : line.weightOf(pid);
     final mine = myUnits > 0;
     final interactive = canPick && line.assignmentType != 'all';
+    // A10 solo escribe en el modelo por unidades: convertir una línea
+    // histórica al modelo nuevo NO es lossless (el reparto por pesos no dice
+    // qué unidad concreta se compartía), así que no se hace por la puerta de
+    // atrás. Esas líneas siguen exactamente como estaban.
+    final canAssignUnits = canAssign && line.usesUnitModel;
 
-    Future<void> toggleUnit(int unit) => ref
-        .read(sessionRepositoryProvider)
-        .setUnitConsumer(
-          line.path,
-          unit: unit,
-          participantId: pid!,
-          selected: !line.unitIsMine(unit, pid),
-        );
+    /// Cambiar un reparto ya cerrado lo REABRE y saca el gasto de la
+    /// economía firme hasta que se vuelva a cerrar. Si alguien ya confirmó
+    /// un cobro, eso no se pierde —las cuentas se quedan como están— pero
+    /// hay que decirlo antes, no después.
+    Future<bool> confirmarReapertura() async {
+      if (!pickingClosed) return true;
+      final impact = ref.read(
+        ticketPaymentImpactProvider((sessionId: sessionId, ticketId: ticketId)),
+      );
+      if (!impact.hasConfirmed) return true;
+      return await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text(l10n.pickingReopenTitle),
+              content: Text(
+                l10n.pickingReopenBody(
+                  impact.confirmedCount,
+                  formatMoney(impact.confirmedTotal),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(l10n.commonCancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(l10n.pickingReopenAction),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+    }
+
+    // La selección ya no es siempre del dueño: para un miembro del grupo la
+    // autoridad la deciden las Rules (sesión abierta, modo por líneas), y el
+    // cliente no puede saber el estado de la sesión. Si la rechazan, se dice.
+    Future<void> guard(Future<void> Function() action) async {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await action();
+      } on Object {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.ticketPickError)));
+      }
+    }
+
+    Future<void> openUnitAssignment(int unit) async {
+      if (!await confirmarReapertura()) return;
+      if (!context.mounted) return;
+      await showUnitAssignmentSheet(
+        context,
+        ref,
+        line: line,
+        unit: unit,
+        sessionId: sessionId,
+        payerName: payerName,
+        myPid: pid,
+        usesPicking: usesPicking,
+      );
+    }
+
+    Future<void> toggleUnit(int unit) async {
+      if (!await confirmarReapertura()) return;
+      await guard(
+        () => ref
+            .read(sessionRepositoryProvider)
+            .setUnitConsumer(
+              line.path,
+              unit: unit,
+              participantId: pid!,
+              selected: !line.unitIsMine(unit, pid),
+              myPid: pid,
+              usesPicking: usesPicking,
+            ),
+      );
+    }
 
     Future<void> convertToUnits() async {
       final confirmed =
@@ -285,9 +934,11 @@ class _LineTile extends ConsumerWidget {
       // Mapa completo deseado; 0 elimina la entrada (contrato del repo).
       final weights = Map<String, int>.from(line.weights);
       weights[pid!] = units;
-      return ref
-          .read(sessionRepositoryProvider)
-          .setLineAssignment(line.path, weights, editorPid: pid);
+      return guard(
+        () => ref
+            .read(sessionRepositoryProvider)
+            .setLineAssignment(line.path, weights, editorPid: pid),
+      );
     }
 
     final others = pid == null ? const <String>[] : line.othersThan(pid);
@@ -304,16 +955,15 @@ class _LineTile extends ConsumerWidget {
             for (var unit = 0; unit < line.units; unit++)
               l10n.unitAssignment(
                 unit + 1,
-                line.consumersOf(unit).isEmpty
+                _vigentes(unit).isEmpty
                     ? l10n.unitResidual(payerName)
-                    : line
-                          .consumersOf(unit)
-                          .map((p) => names[p] ?? '?')
-                          .join(', '),
+                    : _vigentes(unit).map((p) => names[p] ?? '?').join(', '),
               ),
           ]
         : const <String>[];
-    final effectiveSubtitle = line.usesUnitModel
+    final effectiveSubtitle = !showAssignment
+        ? null
+        : line.usesUnitModel
         ? (line.units <= 4
               ? unitDescriptions.join('\n')
               : l10n.unitCompactSummary(
@@ -324,13 +974,13 @@ class _LineTile extends ConsumerWidget {
                   line.units,
                   [
                     for (var unit = 0; unit < line.units; unit++)
-                      if (line.consumersOf(unit).isEmpty) unit,
+                      if (_vigentes(unit).isEmpty) unit,
                   ].length,
                 ))
         : subtitle;
 
     Widget unitChip(int unit) {
-      final consumers = line.consumersOf(unit);
+      final consumers = _vigentes(unit);
       final selected = pid != null && consumers.contains(pid);
       final detail = consumers.isEmpty
           ? l10n.unitResidual(payerName)
@@ -339,7 +989,11 @@ class _LineTile extends ConsumerWidget {
         message: l10n.unitAssignment(unit + 1, detail),
         child: FilterChip(
           selected: selected,
-          onSelected: interactive ? (_) => toggleUnit(unit) : null,
+          onSelected: canAssignUnits
+              ? (_) => openUnitAssignment(unit)
+              : interactive
+              ? (_) => toggleUnit(unit)
+              : null,
           label: Text('${unit + 1}'),
           avatar: Icon(
             consumers.length > 1 ? Icons.group_outlined : Icons.person_outline,
@@ -354,12 +1008,21 @@ class _LineTile extends ConsumerWidget {
       children: [
         ListTile(
           dense: true,
-          onTap: interactive && line.units == 1
+          onTap: correcting
+              ? () => showLineCorrection(context, ref, line: line, names: names)
+              // Con autoridad para repartir, la fila abre el selector de
+              // personas en vez de marcarme a mí: es la acción que de verdad
+              // se quiere hacer sobre el gasto de un grupo.
+              : canAssignUnits && line.units == 1
+              ? () => openUnitAssignment(0)
+              : interactive && line.units == 1
               ? line.usesUnitModel
                     ? () => toggleUnit(0)
                     : () => setUnits(mine ? 0 : 1)
               : null,
-          leading: interactive && line.units == 1
+          leading: correcting
+              ? const Icon(Icons.edit_outlined)
+              : interactive && line.units == 1
               ? Icon(
                   (line.usesUnitModel ? line.unitIsMine(0, pid!) : mine)
                       ? Icons.check_circle
@@ -409,7 +1072,12 @@ class _LineTile extends ConsumerWidget {
             ),
           ),
         ),
-        if (interactive && line.units > 1 && line.usesUnitModel)
+        // Las unidades se pintan para quien puede tocarlas: quien elige lo
+        // suyo (siempre) y, desde A10, quien reparte el de los demás aunque
+        // no sea participante del gasto.
+        if ((interactive || canAssignUnits) &&
+            line.units > 1 &&
+            line.usesUnitModel)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               TokenSpacing.lg,
@@ -437,7 +1105,9 @@ class _LineTile extends ConsumerWidget {
                     ),
                   ),
           ),
-        if (interactive && line.units > 1 && !line.usesUnitModel)
+        // Migrar la línea al modelo de unidades reescribe su asignación
+        // entera: es edición del ticket, no selección propia.
+        if (canEdit && interactive && line.units > 1 && !line.usesUnitModel)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               TokenSpacing.lg,
@@ -529,5 +1199,143 @@ class _FullscreenPhoto extends StatelessWidget {
         child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
       ),
     );
+  }
+}
+
+/// Compartir ESTE ticket por enlace (ADR-036 rev. 2).
+///
+/// Un enlace por PERSONA, no uno por ticket. El anfitrión elige a quién se
+/// lo manda y el destinatario queda grabado en el token, así que quien lo
+/// recibe solo puede identificarse como esa persona. El enlace único que
+/// publicaba la lista entera permitía reclamar a cualquiera del ticket.
+class _TicketLinkAction extends ConsumerWidget {
+  const _TicketLinkAction({required this.ticketRef});
+
+  final TicketRef ticketRef;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return IconButton(
+      tooltip: l10n.ticketLinkAction,
+      icon: const Icon(Icons.link),
+      onPressed: () => _share(context, ref),
+    );
+  }
+
+  Future<void> _share(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final manuals = await _manualsOf(ref);
+    if (!context.mounted) return;
+    if (manuals.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketLinkNoTargets)));
+      return;
+    }
+    final target = await _chooseTarget(context, manuals, l10n);
+    if (target == null || !context.mounted) return;
+    await _shareFor(context, ref, target);
+  }
+
+  /// Elegir destinatario. Con uno solo se pregunta igual: el enlace nombra a
+  /// una persona y conviene verlo antes de mandarlo.
+  Future<EligibleManual?> _chooseTarget(
+    BuildContext context,
+    List<EligibleManual> manuals,
+    AppLocalizations l10n,
+  ) => showModalBottomSheet<EligibleManual>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: Text(l10n.ticketLinkChooseTarget),
+            subtitle: Text(l10n.ticketLinkChooseTargetHelp),
+          ),
+          for (final manual in manuals)
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: Text(manual.displayName),
+              onTap: () => Navigator.pop(sheetContext, manual),
+            ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _shareFor(
+    BuildContext context,
+    WidgetRef ref,
+    EligibleManual target,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final repo = ref.read(ticketLinksRepositoryProvider);
+    final t = ticketRef.ticket;
+    // sessions/{sid}/accounts/{aid}/tickets/{tid}
+    final segments = t.path.split('/');
+    final accountId = segments.length > 3 ? segments[3] : '';
+
+    // Estado breve de preparación: crear el enlace espera a la señal
+    // autoritativa, así que puede tardar un instante tras editar el ticket.
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // Se reutiliza SOLO el enlace de esa misma persona: el de otra no vale.
+      final existing = await repo
+          .watchActiveLink(ticketRef.sessionId, t.id, manualId: target.manualId)
+          .first;
+      if (existing == null &&
+          !await repo.isProjectionReady(ticketRef.sessionId, t.id)) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.ticketLinkPreparing)),
+        );
+      }
+      final link =
+          existing ??
+          await repo.createLink(
+            sessionId: ticketRef.sessionId,
+            accountId: accountId,
+            ticketId: t.id,
+            merchantName: t.merchantName,
+            spaceId: t.spaceId ?? '',
+            target: target,
+          );
+      if (!context.mounted) return;
+      final url = TicketLinksRepository.linkUrlFor(
+        AppEnvironment.hostingDomain,
+        link.token,
+      );
+      await SharePlus.instance.share(
+        ShareParams(
+          text:
+              '${t.merchantName} · ${Brand.appName}\n'
+              '${l10n.ticketLinkFor(target.displayName)}\n$url',
+        ),
+      );
+    } on TicketLinkNotReady {
+      // Recuperable: recompute no ha terminado. Se reintenta a mano.
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketLinkNotReady)));
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.ticketLinkError)));
+    }
+  }
+
+  /// Participantes MANUAL activos de la sesión del ticket. La identidad se
+  /// toma de `manualId`, nunca del nombre: renombrar no rompe el enlace.
+  Future<List<EligibleManual>> _manualsOf(WidgetRef ref) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('sessions/${ticketRef.sessionId}/participants')
+        .get();
+    return [
+      for (final doc in snap.docs)
+        if (((doc.data()['manualId'] as String?) ?? '').isNotEmpty &&
+            (doc.data()['active'] as bool? ?? true))
+          EligibleManual(
+            pid: doc.id,
+            manualId: doc.data()['manualId'] as String,
+            displayName: (doc.data()['name'] as String?) ?? '',
+          ),
+    ];
   }
 }

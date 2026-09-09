@@ -20,9 +20,48 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- CAUSA RAIZ de los enlaces rotos (grupo Y ticket). En Android
+                 el deep linking de Flutter es OPT-IN: sin esta bandera, el
+                 intent VIEW abre la app pero su URL NUNCA llega al router,
+                 asi que /g/{token} y /t/{token} aterrizaban en Inicio y el
+                 token se perdia. Los intent-filter y assetlinks.json estaban
+                 bien; lo que faltaba era que Flutter entregase la ruta. -->
+            <meta-data
+              android:name="flutter_deeplinking_enabled"
+              android:value="true"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Enlaces de grupo (ADR-035): https://<host>/g/{token} abre la
+                 app directamente. La ruta es la MISMA que registra el router
+                 (/g/:token), así que Flutter la entrega sin traducciones.
+
+                 autoVerify exige servir /.well-known/assetlinks.json en cada
+                 host; mientras no esté publicado, Android no verifica y
+                 ofrece elegir app en vez de abrirla sola. Ambos entornos
+                 declarados porque el dominio depende del tipo de build
+                 (AppEnvironment / brand.json). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="salda-dev.web.app"
+                      android:pathPrefix="/g/"/>
+                <data android:scheme="https"
+                      android:host="salda-prod.web.app"
+                      android:pathPrefix="/g/"/>
+                <!-- Enlaces de TICKET (ADR-036). Mismo host, así que el
+                     assetlinks.json ya publicado los cubre sin cambios:
+                     Digital Asset Links verifica el DOMINIO, no la ruta. -->
+                <data android:scheme="https"
+                      android:host="salda-dev.web.app"
+                      android:pathPrefix="/t/"/>
+                <data android:scheme="https"
+                      android:host="salda-prod.web.app"
+                      android:pathPrefix="/t/"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

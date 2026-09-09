@@ -26,8 +26,10 @@ class EsReceiptParser implements CountryReceiptParser {
     RegExp(r'WWW\.|\.COM\b|\.ES\b'),
     RegExp(r'DESCRIPCI[OÓ]N|P\.? ?UNIT'),
     // Direcciones.
-    RegExp(r'^C/|\bCALLE\b|\bAVDA\b|AVENIDA|\bPLAZA\b|PASEO|CTRA|AUTOV[IÍ]A'
-        r'|POL[IÍ]GONO|^CC\b|CENTRO COMERCIAL|\bKM ?\d'),
+    RegExp(
+      r'^C/|\bCALLE\b|\bAVDA\b|AVENIDA|\bPLAZA\b|PASEO|CTRA|AUTOV[IÍ]A'
+      r'|POL[IÍ]GONO|^CC\b|CENTRO COMERCIAL|\bKM ?\d',
+    ),
   ];
 
   // ── Palabras clave de total, por fuerza descendente ───────────────────
@@ -39,10 +41,33 @@ class EsReceiptParser implements CountryReceiptParser {
   ];
 
   static final _taxZoneHeader = RegExp(r'IVA.*(BASE|CUOTA)|BASE.*CUOTA');
-  static final _taxRow =
-      RegExp('^(\\d{1,2})\\s*%\\s+($amountSrc)\\s+($amountSrc)\$');
-  static final _discountKeyword =
-      RegExp(r'DESCUENTO|\bDTO\b|CUP[OÓ]N|\bAHORRO\b');
+  static final _taxRow = RegExp(
+    '^(\\d{1,2})\\s*%\\s+($amountSrc)\\s+($amountSrc)\$',
+  );
+  static final _discountKeyword = RegExp(
+    r'DESCUENTO|\bDTO\b|CUP[OÓ]N|\bAHORRO\b',
+  );
+
+  // ── Desglose fiscal suelto (A12) ──────────────────────────────────────
+  // Un ticket puede imprimir la base y la cuota como líneas normales, ANTES
+  // del total y sin la cabecera combinada que detecta `_taxZoneHeader`. Sin
+  // este filtro caían en la regla genérica `nombre + importe` y se
+  // convertían en productos fantasma: se midió que «BASE IMPONIBLE 13,19» +
+  // «IVA 21% 2,77» + «TOTAL 15,96» daba un ticket que CUADRABA exactamente
+  // sin un solo producto real y sin ningún aviso.
+  //
+  // Deliberadamente ESTRECHO: exige el concepto fiscal completo, no una
+  // palabra suelta. «BASE PIZZA» o «CUOTA MENSUAL GIMNASIO» son productos y
+  // tienen que seguir siéndolo; solo se descarta lo que únicamente puede ser
+  // fiscalidad.
+  static final _fiscalKeyword = RegExp(
+    r'\bBASE\s+IMP(?:ONIBLE)?\b'
+    r'|\bB\.?\s?IMPONIBLE\b'
+    r'|\bI\.?V\.?A\.?\s*:?\s*\d{1,2}(?:[.,]\d+)?\s*%'
+    r'|\d{1,2}\s*%\s*(?:DE\s+)?I\.?V\.?A\b'
+    r'|\bCUOTA\s+I\.?V\.?A\b'
+    r'|\bI\.?V\.?A\.?\s+INCLUIDO\b',
+  );
 
   // ── Reglas de línea por defecto (orden = prioridad) ───────────────────
   static final List<LineRule> _defaultRules = [
@@ -58,10 +83,12 @@ class EsReceiptParser implements CountryReceiptParser {
   // Reglas de continuación: consumen el nombre pendiente de la línea previa
   // (formato Mercadona pesables y DIA multiplicador).
   static final _pendingWeight = RegExp(
-      '^(\\d+,\\d{1,3})\\s*[Kk][Gg]\\.?\\s+($amountSrc)\\s*€/[Kk][Gg]'
-      '\\s+($amountSrc)\$');
-  static final _pendingMult =
-      RegExp('^(\\d{1,3})\\s*[xX]\\s*($amountSrc)\\s+($amountSrc)\$');
+    '^(\\d+,\\d{1,3})\\s*[Kk][Gg]\\.?\\s+($amountSrc)\\s*€/[Kk][Gg]'
+    '\\s+($amountSrc)\$',
+  );
+  static final _pendingMult = RegExp(
+    '^(\\d{1,3})\\s*[xX]\\s*($amountSrc)\\s+($amountSrc)\$',
+  );
   static final _pendingQtyName = RegExp(r'^(\d{1,2})\s+(\D.*)$');
 
   @override
@@ -76,7 +103,8 @@ class EsReceiptParser implements CountryReceiptParser {
     final noise = [..._noise, ...?profile?.extraNoise];
     final rules = [...?profile?.extraRules, ..._defaultRules];
     final taxZoneStart = lines.indexWhere(
-        (l) => _taxZoneHeader.hasMatch(l.text.toUpperCase()));
+      (l) => _taxZoneHeader.hasMatch(l.text.toUpperCase()),
+    );
     final totalHit = _findGrandTotal(lines, taxZoneStart, profile);
     final taxes = _extractTaxes(lines, taxZoneStart);
 
@@ -107,34 +135,53 @@ class EsReceiptParser implements CountryReceiptParser {
       grandTotal = totalHit.total;
       if (body.lines.isNotEmpty) {
         final delta = computed - totalHit.total.value!;
-        final tolerance = _max(2, totalHit.total.value!.abs().cents ~/ 100);
-        if (delta.abs().cents > tolerance) {
-          issues.add(ReceiptIssue(
-            ReceiptIssue.sumMismatch,
-            'La suma de líneas (${computed.cents}) no cuadra con el total '
-            '(${totalHit.total.value!.cents})',
-            deltaCents: delta.cents,
-          ));
+        // A15: tolerancia FIJA de dos céntimos (ver `domain`). El 1 % de
+        // antes daba por cuadrado un ticket al que le faltaba un producto.
+        if (!receiptAmountsBalance(computed, totalHit.total.value!)) {
+          issues.add(
+            ReceiptIssue(
+              ReceiptIssue.sumMismatch,
+              'La suma de líneas (${computed.cents}) no cuadra con el total '
+              '(${totalHit.total.value!.cents})',
+              deltaCents: delta.cents,
+            ),
+          );
         }
       }
     } else if (body.lines.isNotEmpty) {
       // Sin palabra clave de total: se sugiere el calculado, a revisar.
       grandTotal = Extracted(computed, 0.4);
-      issues.add(const ReceiptIssue(
-          ReceiptIssue.missingTotal, 'No se encontró el total del ticket'));
+      issues.add(
+        const ReceiptIssue(
+          ReceiptIssue.missingTotal,
+          'No se encontró el total del ticket',
+        ),
+      );
     } else {
       grandTotal = const Extracted.missing();
-      issues.add(const ReceiptIssue(
-          ReceiptIssue.missingTotal, 'No se encontró el total del ticket'));
+      issues.add(
+        const ReceiptIssue(
+          ReceiptIssue.missingTotal,
+          'No se encontró el total del ticket',
+        ),
+      );
     }
 
     if (body.lines.isEmpty) {
-      issues.add(const ReceiptIssue(
-          ReceiptIssue.noLines, 'No se reconoció ningún producto'));
+      issues.add(
+        const ReceiptIssue(
+          ReceiptIssue.noLines,
+          'No se reconoció ningún producto',
+        ),
+      );
     }
     if (!dateTime.date.isPresent) {
-      issues.add(const ReceiptIssue(
-          ReceiptIssue.missingDate, 'No se encontró la fecha del ticket'));
+      issues.add(
+        const ReceiptIssue(
+          ReceiptIssue.missingDate,
+          'No se encontró la fecha del ticket',
+        ),
+      );
     }
 
     return ReceiptExtraction(
@@ -156,7 +203,8 @@ class EsReceiptParser implements CountryReceiptParser {
 
   // ── Fecha y hora (la hora solo se acepta en la línea de la fecha) ─────
   static ({Extracted<String> date, Extracted<String> time}) _extractDateTime(
-      List<RawLine> lines) {
+    List<RawLine> lines,
+  ) {
     for (final line in lines) {
       final date = findEsDate(line.text);
       if (date == null) continue;
@@ -205,7 +253,9 @@ class EsReceiptParser implements CountryReceiptParser {
 
   // ── IVA (tabla al pie) ────────────────────────────────────────────────
   static List<LabeledAmount> _extractTaxes(
-      List<RawLine> lines, int taxZoneStart) {
+    List<RawLine> lines,
+    int taxZoneStart,
+  ) {
     if (taxZoneStart == -1) return const [];
     final taxes = <LabeledAmount>[];
     for (var i = taxZoneStart + 1; i < lines.length; i++) {
@@ -231,7 +281,8 @@ class EsReceiptParser implements CountryReceiptParser {
     List<LabeledAmount> discounts,
     Extracted<Money> tip,
     Extracted<Money> subtotal,
-  }) _extractBody(
+  })
+  _extractBody(
     List<RawLine> lines, {
     required int end,
     required List<RegExp> noise,
@@ -256,6 +307,15 @@ class EsReceiptParser implements CountryReceiptParser {
         continue;
       }
 
+      // Desglose fiscal suelto (A12): ni producto ni descuento. El importe
+      // sigue viviendo en `grandTotal`, que es lo que se pagó; no se
+      // reconstruye el impuesto a partir de una línea suelta porque la base
+      // y la cuota no siempre son distinguibles sin la tabla del pie.
+      if (_fiscalKeyword.hasMatch(upper)) {
+        pending = null;
+        continue;
+      }
+
       if (upper.contains('SUBTOTAL') && amounts.isNotEmpty) {
         subtotal = Extracted(amounts.last, 0.9 * degraded);
         pending = null;
@@ -273,10 +333,12 @@ class EsReceiptParser implements CountryReceiptParser {
       }
       // Importe negativo suelto = descuento sin etiqueta clara.
       if (amounts.isNotEmpty && amounts.last.isNegative) {
-        discounts.add(LabeledAmount(
-          _stripAmounts(text).isEmpty ? 'Descuento' : _stripAmounts(text),
-          amounts.last.abs(),
-        ));
+        discounts.add(
+          LabeledAmount(
+            _stripAmounts(text).isEmpty ? 'Descuento' : _stripAmounts(text),
+            amounts.last.abs(),
+          ),
+        );
         pending = null;
         continue;
       }
@@ -305,23 +367,27 @@ class EsReceiptParser implements CountryReceiptParser {
           if (other.sameOutcomeAs(chosen) || alternatives.length == 2) {
             continue;
           }
-          alternatives.add(LineAlternative(
-            name: other.name,
-            quantityMilli: other.quantityMilli,
-            unitPrice: other.unitPrice,
-            totalPrice: other.totalPrice,
-            confidence: other.confidence * degraded,
-          ));
+          alternatives.add(
+            LineAlternative(
+              name: other.name,
+              quantityMilli: other.quantityMilli,
+              unitPrice: other.unitPrice,
+              totalPrice: other.totalPrice,
+              confidence: other.confidence * degraded,
+            ),
+          );
         }
-        products.add(ExtractedLine(
-          name: chosen.name,
-          quantityMilli: chosen.quantityMilli,
-          unitPrice: chosen.unitPrice,
-          totalPrice: chosen.totalPrice,
-          confidence: (chosen.confidence * degraded).clamp(0, 1),
-          sourceText: text,
-          alternatives: alternatives,
-        ));
+        products.add(
+          ExtractedLine(
+            name: chosen.name,
+            quantityMilli: chosen.quantityMilli,
+            unitPrice: chosen.unitPrice,
+            totalPrice: chosen.totalPrice,
+            confidence: (chosen.confidence * degraded).clamp(0, 1),
+            sourceText: text,
+            alternatives: alternatives,
+          ),
+        );
         pending = null;
         continue;
       }
@@ -332,7 +398,7 @@ class EsReceiptParser implements CountryReceiptParser {
         pending = qtyName != null && hasNameLetters(qtyName[2]!)
             ? (
                 name: qtyName[2]!.trim(),
-                quantityMilli: int.parse(qtyName[1]!) * 1000
+                quantityMilli: int.parse(qtyName[1]!) * 1000,
               )
             : (name: text, quantityMilli: 1000);
         continue;
@@ -345,7 +411,7 @@ class EsReceiptParser implements CountryReceiptParser {
       lines: products,
       discounts: discounts,
       tip: tip,
-      subtotal: subtotal
+      subtotal: subtotal,
     );
   }
 
@@ -392,7 +458,9 @@ class EsReceiptParser implements CountryReceiptParser {
       .trim();
 
   static Extracted<String> _fallbackMerchant(
-      List<RawLine> lines, List<RegExp> noise) {
+    List<RawLine> lines,
+    List<RegExp> noise,
+  ) {
     for (final line in lines.take(4)) {
       final upper = line.text.toUpperCase();
       if (!hasNameLetters(line.text)) continue;
@@ -404,12 +472,11 @@ class EsReceiptParser implements CountryReceiptParser {
     return const Extracted.missing();
   }
 
-  static int _max(int a, int b) => a > b ? a : b;
-
   // ── Implementación de las reglas por defecto ──────────────────────────
 
   static final _reQtyNameUnitTotal = RegExp(
-      '^(\\d{1,2})\\s+(.+?)\\s+($amountSrc)\\s+($amountSrc)\\s*[A-D]?\$');
+    '^(\\d{1,2})\\s+(.+?)\\s+($amountSrc)\\s+($amountSrc)\\s*[A-D]?\$',
+  );
 
   static LineInterpretation? _qtyNameUnitTotal(String text) {
     final m = _reQtyNameUnitTotal.firstMatch(text);
@@ -428,7 +495,8 @@ class EsReceiptParser implements CountryReceiptParser {
   }
 
   static final _reMultNameTotal = RegExp(
-      '^(\\d{1,3})\\s*[xX]\\s*($amountSrc)\\s+(.+?)\\s+($amountSrc)\\s*\$');
+    '^(\\d{1,3})\\s*[xX]\\s*($amountSrc)\\s+(.+?)\\s+($amountSrc)\\s*\$',
+  );
 
   static LineInterpretation? _multNameTotal(String text) {
     final m = _reMultNameTotal.firstMatch(text);
@@ -446,7 +514,8 @@ class EsReceiptParser implements CountryReceiptParser {
   }
 
   static final _reNameMultTotal = RegExp(
-      '^(.+?)\\s+(\\d{1,3})\\s*[xX]\\s*($amountSrc)\\s+($amountSrc)\\s*\$');
+    '^(.+?)\\s+(\\d{1,3})\\s*[xX]\\s*($amountSrc)\\s+($amountSrc)\\s*\$',
+  );
 
   static LineInterpretation? _nameMultTotal(String text) {
     final m = _reNameMultTotal.firstMatch(text);
@@ -464,8 +533,9 @@ class EsReceiptParser implements CountryReceiptParser {
   }
 
   static final _reWeightInline = RegExp(
-      '^(\\d+,\\d{1,3})\\s*[Kk][Gg]\\.?\\s+(.+?)\\s+($amountSrc)\\s*€/[Kk][Gg]'
-      '\\s+($amountSrc)\$');
+    '^(\\d+,\\d{1,3})\\s*[Kk][Gg]\\.?\\s+(.+?)\\s+($amountSrc)\\s*€/[Kk][Gg]'
+    '\\s+($amountSrc)\$',
+  );
 
   static LineInterpretation? _weightInline(String text) {
     final m = _reWeightInline.firstMatch(text);
@@ -480,8 +550,9 @@ class EsReceiptParser implements CountryReceiptParser {
   }
 
   static final _reFuel = RegExp(
-      '^(.+?)\\s+(\\d+,\\d{1,3})\\s*[Ll]\\.?\\s*[xX]?\\s*\\d+,\\d{1,3}'
-      '\\s*€/[Ll]\\s+($amountSrc)\$');
+    '^(.+?)\\s+(\\d+,\\d{1,3})\\s*[Ll]\\.?\\s*[xX]?\\s*\\d+,\\d{1,3}'
+    '\\s*€/[Ll]\\s+($amountSrc)\$',
+  );
 
   static LineInterpretation? _fuel(String text) {
     final m = _reFuel.firstMatch(text);
@@ -495,32 +566,51 @@ class EsReceiptParser implements CountryReceiptParser {
     );
   }
 
-  static final _reQtyNameTotal =
-      RegExp('^(\\d{1,2})\\s+(.+?)\\s+($amountSrc)\\s*[A-D]?\$');
+  static final _reQtyNameTotal = RegExp(
+    '^(\\d{1,2})\\s+(.+?)\\s+($amountSrc)\\s*[A-D]?\$',
+  );
 
   static LineInterpretation? _qtyNameTotal(String text) {
     final m = _reQtyNameTotal.firstMatch(text);
     if (m == null || !hasNameLetters(m[2]!)) return null;
+    final name = m[2]!.trim();
+    // Mismo criterio que en `_nameTotal`: si dentro del nombre sigue habiendo
+    // un importe sin interpretar, la lectura no está resuelta.
+    final suspicious = _nameStartsWithAmount.hasMatch(name);
     return LineInterpretation(
-      name: m[2]!.trim(),
+      name: name,
       quantityMilli: int.parse(m[1]!) * 1000,
       totalPrice: parseEsAmount(m[3]!),
-      confidence: 0.88,
+      confidence: suspicious ? 0.45 : 0.88,
     );
   }
 
-  static final _reNameTotal =
-      RegExp('^(.{3,}?)\\s+($amountSrc)\\s*[A-D]?\$');
+  static final _reNameTotal = RegExp('^(.{3,}?)\\s+($amountSrc)\\s*[A-D]?\$');
+
+  /// El «nombre» empieza por algo con forma de importe: casi siempre es el
+  /// precio unitario impreso a la IZQUIERDA que la regla no supo separar.
+  static final _nameStartsWithAmount = RegExp('^($amountSrc)(?!\\d)\\s');
 
   static LineInterpretation? _nameTotal(String text) {
     final m = _reNameTotal.firstMatch(text);
     if (m == null || !hasNameLetters(m[1]!)) return null;
     final total = parseEsAmount(m[2]!);
     if (total.isNegative) return null; // los negativos son descuentos
+    final name = m[1]!.trim();
+    // A15: `1,15 MACARRON ROMERO 1 KG   5,75` se leía como UN producto de
+    // 5,75 con el precio unitario metido en el nombre y cantidad 1. Cuadraba
+    // y no avisaba de nada, y esa cantidad equivocada es la que después
+    // decide cuántas unidades repartibles tiene la línea.
+    //
+    // No se inventa la cantidad —5,75/1,15 = 5 es una división exacta, no una
+    // prueba: podría ser peso, oferta o descuento—. Lo que se hace es dejar
+    // de afirmar que la línea es fiable: baja de confianza y la revisión la
+    // marca para que una persona la mire.
+    final suspicious = _nameStartsWithAmount.hasMatch(name);
     return LineInterpretation(
-      name: m[1]!.trim(),
+      name: name,
       totalPrice: total,
-      confidence: 0.78,
+      confidence: suspicious ? 0.45 : 0.78,
     );
   }
 }

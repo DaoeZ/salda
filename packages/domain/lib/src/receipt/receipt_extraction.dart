@@ -144,6 +144,22 @@ class ReceiptIssue {
   );
 }
 
+/// Margen con el que la suma de líneas se considera igual al total (A15).
+///
+/// FIJO y diminuto a propósito: es el redondeo de un céntimo arriba o abajo,
+/// no un colchón. Antes era el 1 % del total, y eso convertía el indicador en
+/// una mentira útil —un ticket de 15,96 € daba por bueno un descuadre de 15
+/// céntimos, que es exactamente un producto pequeño perdido—.
+///
+/// Vive aquí porque la misma pregunta se hace en tres sitios (parser OCR,
+/// borrador de revisión y validación de la respuesta de IA) y tres copias de
+/// la fórmula acaban divergiendo.
+const int receiptBalanceToleranceCents = 2;
+
+/// ¿La suma calculada cuadra con el total declarado?
+bool receiptAmountsBalance(Money computed, Money grandTotal) =>
+    (computed - grandTotal).abs().cents <= receiptBalanceToleranceCents;
+
 /// Contrato canónico de extracción de un ticket (ESPECIFICACION.md §9.1/§10):
 /// lo produce el parser OCR y también todos los proveedores de IA. La
 /// pantalla de revisión es agnóstica del origen.

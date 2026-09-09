@@ -1,0 +1,10 @@
+# Versiones con las que este proyecto esta VERIFICADO (27/07/2026). El
+# objetivo es reproducir el entorno actual, no modernizarlo: no subas ninguna
+# de estas lineas "porque hay una mas nueva".
+#
+# Formato asdf/mise. Los equivalentes por herramienta estan en .fvmrc (Flutter),
+# .nvmrc (Node) y .java-version (JDK). La tabla completa, con lo que aporta
+# cada version y por que, esta en docs/SETUP_NUEVO_ORDENADOR.md.
+flutter 3.44.8
+nodejs 22
+java temurin-17

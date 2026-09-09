@@ -1,0 +1,4 @@
+# Keep only generated design-token artifacts LF-stable on checkout.
+/packages/design_tokens/lib/src/tokens.g.dart text eol=lf
+/apps/guest_web/src/styles/tokens.g.css text eol=lf
+/apps/guest_web/src/lib/brand.g.ts text eol=lf

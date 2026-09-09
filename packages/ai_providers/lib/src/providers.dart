@@ -13,15 +13,25 @@ AiProviderException mapHttpError(Object error) {
     final status = error.response?.statusCode;
     return switch (status) {
       401 || 403 => const AiProviderException(
-          AiErrorCode.invalidKey, 'Clave inválida o sin permisos'),
+        AiErrorCode.invalidKey,
+        'Clave inválida o sin permisos',
+      ),
       402 => const AiProviderException(
-          AiErrorCode.noCredit, 'Sin crédito en el proveedor'),
+        AiErrorCode.noCredit,
+        'Sin crédito en el proveedor',
+      ),
       404 => const AiProviderException(
-          AiErrorCode.modelNotAllowed, 'Modelo no disponible'),
+        AiErrorCode.modelNotAllowed,
+        'Modelo no disponible',
+      ),
       429 => const AiProviderException(
-          AiErrorCode.rateLimited, 'Límite de peticiones alcanzado'),
+        AiErrorCode.rateLimited,
+        'Límite de peticiones alcanzado',
+      ),
       _ => AiProviderException(
-          AiErrorCode.network, 'Error de red (${status ?? error.type.name})'),
+        AiErrorCode.network,
+        'Error de red (${status ?? error.type.name})',
+      ),
     };
   }
   return AiProviderException(AiErrorCode.network, '$error');
@@ -30,7 +40,9 @@ AiProviderException mapHttpError(Object error) {
 String _userContent(AiInput input) {
   if (input.imageJpeg == null && (input.ocrText ?? '').isEmpty) {
     throw const AiProviderException(
-        AiErrorCode.unsupportedInput, 'Sin imagen ni texto OCR');
+      AiErrorCode.unsupportedInput,
+      'Sin imagen ni texto OCR',
+    );
   }
   return input.ocrText == null || input.ocrText!.isEmpty
       ? extractionPrompt
@@ -56,19 +68,23 @@ class ClaudeProvider implements AiReceiptProvider {
   @override
   bool get requiresBaseUrl => false;
   @override
-  List<String> get suggestedModels =>
-      const ['claude-haiku-4-5', 'claude-sonnet-5'];
+  List<String> get suggestedModels => const [
+    'claude-haiku-4-5',
+    'claude-sonnet-5',
+  ];
 
   Map<String, String> _headers(AiProviderConfig config) => {
-        'x-api-key': config.apiKey,
-        'anthropic-version': _version,
-      };
+    'x-api-key': config.apiKey,
+    'anthropic-version': _version,
+  };
 
   @override
   Future<void> testConnection(AiProviderConfig config) async {
     try {
-      await _dio.get<Object>('$_base/models',
-          options: Options(headers: _headers(config)));
+      await _dio.get<Object>(
+        '$_base/models',
+        options: Options(headers: _headers(config)),
+      );
     } on Object catch (error) {
       throw mapHttpError(error);
     }
@@ -76,7 +92,9 @@ class ClaudeProvider implements AiReceiptProvider {
 
   @override
   Future<ReceiptExtraction> extractReceipt(
-      AiInput input, AiProviderConfig config) async {
+    AiInput input,
+    AiProviderConfig config,
+  ) async {
     final text = _userContent(input);
     try {
       final response = await _dio.post<Map<String, dynamic>>(
@@ -131,18 +149,23 @@ class GeminiProvider implements AiReceiptProvider {
   @override
   bool get requiresBaseUrl => false;
   @override
-  List<String> get suggestedModels =>
-      const ['gemini-2.5-flash', 'gemini-2.5-pro'];
+  List<String> get suggestedModels => const [
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+  ];
 
   // La clave va en cabecera, NUNCA en la query (no acabar en logs/URLs).
-  Map<String, String> _headers(AiProviderConfig config) =>
-      {'x-goog-api-key': config.apiKey};
+  Map<String, String> _headers(AiProviderConfig config) => {
+    'x-goog-api-key': config.apiKey,
+  };
 
   @override
   Future<void> testConnection(AiProviderConfig config) async {
     try {
-      await _dio.get<Object>('$_base/models',
-          options: Options(headers: _headers(config)));
+      await _dio.get<Object>(
+        '$_base/models',
+        options: Options(headers: _headers(config)),
+      );
     } on Object catch (error) {
       throw mapHttpError(error);
     }
@@ -150,7 +173,9 @@ class GeminiProvider implements AiReceiptProvider {
 
   @override
   Future<ReceiptExtraction> extractReceipt(
-      AiInput input, AiProviderConfig config) async {
+    AiInput input,
+    AiProviderConfig config,
+  ) async {
     final text = _userContent(input);
     try {
       final response = await _dio.post<Map<String, dynamic>>(
@@ -173,10 +198,12 @@ class GeminiProvider implements AiReceiptProvider {
           ],
         },
       );
-      final content = ((((response.data!['candidates'] as List).first
-                  as Map)['content'] as Map)['parts'] as List)
-          .map((p) => (p as Map)['text'] as String? ?? '')
-          .join();
+      final content =
+          ((((response.data!['candidates'] as List).first as Map)['content']
+                      as Map)['parts']
+                  as List)
+              .map((p) => (p as Map)['text'] as String? ?? '')
+              .join();
       return parseAiResponse(content, engine: 'ai:$id');
     } on Object catch (error) {
       throw mapHttpError(error);
@@ -218,22 +245,22 @@ class OpenAiCompatibleProvider implements AiReceiptProvider {
   String _base(AiProviderConfig config) {
     final base = fixedBaseUrl ?? config.baseUrl ?? '';
     if (base.isEmpty) {
-      throw const AiProviderException(
-          AiErrorCode.network, 'Falta la base URL');
+      throw const AiProviderException(AiErrorCode.network, 'Falta la base URL');
     }
     return base.replaceAll(RegExp(r'/+$'), '');
   }
 
   Map<String, String> _headers(AiProviderConfig config) => {
-        if (config.apiKey.isNotEmpty)
-          'Authorization': 'Bearer ${config.apiKey}',
-      };
+    if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${config.apiKey}',
+  };
 
   @override
   Future<void> testConnection(AiProviderConfig config) async {
     try {
-      await _dio.get<Object>('${_base(config)}/models',
-          options: Options(headers: _headers(config)));
+      await _dio.get<Object>(
+        '${_base(config)}/models',
+        options: Options(headers: _headers(config)),
+      );
     } on Object catch (error) {
       throw mapHttpError(error);
     }
@@ -241,7 +268,9 @@ class OpenAiCompatibleProvider implements AiReceiptProvider {
 
   @override
   Future<ReceiptExtraction> extractReceipt(
-      AiInput input, AiProviderConfig config) async {
+    AiInput input,
+    AiProviderConfig config,
+  ) async {
     final text = _userContent(input);
     try {
       final response = await _dio.post<Map<String, dynamic>>(
@@ -260,7 +289,8 @@ class OpenAiCompatibleProvider implements AiReceiptProvider {
                       {
                         'type': 'image_url',
                         'image_url': {
-                          'url': 'data:image/jpeg;base64,'
+                          'url':
+                              'data:image/jpeg;base64,'
                               '${base64Encode(input.imageJpeg!)}',
                         },
                       },
@@ -269,8 +299,10 @@ class OpenAiCompatibleProvider implements AiReceiptProvider {
           ],
         },
       );
-      final content = (((response.data!['choices'] as List).first
-              as Map)['message'] as Map)['content'] as String;
+      final content =
+          (((response.data!['choices'] as List).first as Map)['message']
+                  as Map)['content']
+              as String;
       return parseAiResponse(content, engine: 'ai:$id');
     } on Object catch (error) {
       throw mapHttpError(error);

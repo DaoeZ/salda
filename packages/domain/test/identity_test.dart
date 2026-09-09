@@ -164,5 +164,15 @@ void main() {
       expect(avatarInitials('  maría   josé  '), 'MJ');
       expect(avatarInitials(''), '?');
     });
+
+    test('iniciales: un emoji no se parte por la mitad', () {
+      // Cortar por unidades UTF-16 devolvia medio par sustituto y Flutter
+      // lanzaba al pintar el avatar de un participante llamado asi.
+      expect(avatarInitials('🎸'), '🎸');
+      expect(avatarInitials('🎸 Pablo'), '🎸P');
+      expect(avatarInitials('Pablo 🎸'), 'P🎸');
+      // Secuencia con ZWJ: es UN grafema, no tres.
+      expect(avatarInitials('👨‍👩‍👧 familia'), '👨‍👩‍👧F');
+    });
   });
 }

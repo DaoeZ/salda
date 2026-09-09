@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:domain/domain.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/diagnostics/social_log.dart';
 import '../../auth/data/auth_repository.dart';
 
 /// Identidad pública (P2): perfil en `profiles/{uid}` + claim de unicidad en
@@ -131,6 +132,7 @@ class ProfileRepository {
   Future<void> createProfile({
     required String displayName,
     required String username,
+    String flow = '-',
   }) async {
     final canonical = normalizeUsername(username);
     _requireValid(canonical);
@@ -147,7 +149,17 @@ class ProfileRepository {
       'uid': uid(),
       'createdAt': FieldValue.serverTimestamp(),
     });
-    await batch.commit();
+    SocialLog.log(flow, 'createProfile', {'fase': 'commit'});
+    try {
+      await batch.commit();
+      SocialLog.log(flow, 'createProfile', {'fase': 'ok'});
+    } on Object catch (error) {
+      SocialLog.log(flow, 'createProfile', {
+        'fase': 'error',
+        ...SocialLog.errorFields(error),
+      });
+      rethrow;
+    }
   }
 
   /// Edición. Si cambia el username, el batch libera el claim anterior y

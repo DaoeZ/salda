@@ -87,6 +87,8 @@ void main() {
       await repository.register('nuevo@salda.test', 'correcta123', 'Edgar');
 
       expect(gateway.calls.first, 'linkEmail:nuevo@salda.test');
+      // Igual que en Google: el token se refresca justo tras vincular.
+      expect(gateway.calls[1], 'reload:true');
       expect(repository.currentUser?.uid, 'guest-stable-uid');
       expect(repository.currentUser?.isAnonymous, isFalse);
       expect(repository.currentUser?.needsEmailVerification, isTrue);
@@ -104,10 +106,39 @@ void main() {
 
       await repository.signInWithGoogle();
 
-      expect(gateway.calls, ['googleLink']);
+      // El refresco del token es OBLIGATORIO tras convertir: sin él, el ID
+      // token conserva `sign_in_provider: 'anonymous'` y las Rules deniegan
+      // toda escritura social aunque la app se crea con cuenta completa.
+      expect(gateway.calls, ['googleLink', 'reload:true']);
       expect(repository.currentUser?.uid, 'guest-stable-uid');
       expect(repository.currentUser?.isFullAccount, isTrue);
     });
+
+    test(
+      'un fallo al refrescar tras vincular Google conserva su etapa Firebase',
+      () async {
+        const refreshFailure = AuthFailure(
+          AuthFailureCode.temporary,
+          provider: AuthFailureProvider.firebase,
+          stage: AuthFailureStage.tokenRefresh,
+          technicalCode: 'internal-error',
+        );
+        final gateway = _FakeAuthGateway(
+          user: const AppUser(
+            uid: 'guest-stable-uid',
+            isAnonymous: true,
+            emailVerified: false,
+          ),
+        )..reloadFailure = refreshFailure;
+        final repository = DefaultAuthRepository(gateway);
+
+        await expectLater(
+          repository.signInWithGoogle(),
+          throwsA(same(refreshFailure)),
+        );
+        expect(gateway.calls, ['googleLink', 'reload:true']);
+      },
+    );
 
     test('envía recuperación de contraseña', () async {
       final gateway = _FakeAuthGateway();
@@ -149,6 +180,51 @@ void main() {
       await subscription.cancel();
     });
   });
+
+  group('AppUser', () {
+    // Regresión del bug de amistades: reloadUser re-emite un AppUser nuevo
+    // en cada escritura social; sin igualdad de valor, authStateProvider
+    // notificaba, el router se recreaba y la pantalla activa se cerraba.
+    test('dos instancias con los mismos datos son iguales', () {
+      const first = AppUser(
+        uid: 'uid-a',
+        email: 'a@salda.test',
+        displayName: 'Alba',
+        providerIds: {'password', 'google.com'},
+      );
+      const second = AppUser(
+        uid: 'uid-a',
+        email: 'a@salda.test',
+        displayName: 'Alba',
+        providerIds: {'google.com', 'password'},
+      );
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+    });
+
+    test('cambiar cualquier campo relevante rompe la igualdad', () {
+      const base = AppUser(uid: 'uid-a', email: 'a@salda.test');
+      expect(base, isNot(const AppUser(uid: 'uid-b', email: 'a@salda.test')));
+      expect(base, isNot(const AppUser(uid: 'uid-a', email: 'b@salda.test')));
+      expect(
+        base,
+        isNot(
+          const AppUser(uid: 'uid-a', email: 'a@salda.test', isAnonymous: true),
+        ),
+      );
+      expect(
+        base,
+        isNot(
+          const AppUser(
+            uid: 'uid-a',
+            email: 'a@salda.test',
+            emailVerified: false,
+          ),
+        ),
+      );
+    });
+  });
 }
 
 class _FakeAuthGateway implements AuthGateway {
@@ -157,6 +233,7 @@ class _FakeAuthGateway implements AuthGateway {
   AppUser? user;
   bool verifiedOnReload = false;
   AuthFailure? resetFailure;
+  AuthFailure? reloadFailure;
   final calls = <String>[];
   final _changes = StreamController<AppUser?>.broadcast();
 
@@ -254,6 +331,7 @@ class _FakeAuthGateway implements AuthGateway {
   @override
   Future<AppUser?> reloadUser({required bool refreshToken}) async {
     calls.add('reload:$refreshToken');
+    if (reloadFailure case final failure?) throw failure;
     if (user != null && verifiedOnReload) {
       user = AppUser(
         uid: user!.uid,

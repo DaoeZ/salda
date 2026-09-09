@@ -111,9 +111,44 @@
   </p>
 </header>
 
+<!-- A5: un rechazo de las reglas tiene que verse. Antes la casilla revertía
+     sola y nadie explicaba por qué. -->
+{#if guest.error}
+  <p class="write-error" role="alert">{guest.error}</p>
+{/if}
+
 {#each guest.tickets.filter((t) => t.pickable) as ticket (ticket.id)}
   <section>
     <h2>{ticket.merchantName}</h2>
+    <!-- A19: hasta que todo el mundo termine, este gasto no entra en las
+         cuentas. Sin decirlo, lo no reclamado recae en quien pagó y el
+         reparto a medias parecía definitivo. -->
+    {#if ticket.pickingModelVersion === 1}
+      {@const pendientes = ticket.pickingOpen
+        .map((pid) => names.get(pid))
+        .filter((n): n is string => Boolean(n))}
+      <div class="picking" class:cerrado={pendientes.length === 0}>
+        {#if pendientes.length === 0}
+          <strong>Reparto cerrado.</strong>
+          <span>Las cuentas de este gasto ya son firmes.</span>
+        {:else}
+          <strong>Aún estáis eligiendo.</strong>
+          <span>
+            Falta {shareNames(pendientes)}. Hasta que todos terminéis, este
+            gasto no entra en las cuentas.
+          </span>
+          {#if guest.myPid && ticket.pickingOpen.includes(guest.myPid)}
+            <button
+              class="btn"
+              disabled={!guest.open}
+              onclick={() => guest.finishPicking(ticket)}
+            >
+              He terminado
+            </button>
+          {/if}
+        {/if}
+      </div>
+    {/if}
     <div class="lines">
       {#each ticket.lines as line (line.id)}
         {@const units = unitsForQuantity(line.quantityMilli)}
@@ -246,6 +281,33 @@
     color: var(--on-surface-variant);
     font-weight: 500;
     margin: var(--space-lg) 0 var(--space-sm);
+  }
+  .picking {
+    display: grid;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
+    padding: var(--space-md);
+    border-radius: var(--radius-card);
+    background: var(--color-warning-muted, var(--color-surface));
+    border: 1px solid var(--outline-variant, transparent);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .picking.cerrado {
+    background: var(--color-surface);
+  }
+  .picking .btn {
+    justify-self: start;
+    margin-top: var(--space-xs);
+  }
+  .write-error {
+    margin: 0 0 var(--space-md);
+    padding: var(--space-md);
+    border-radius: var(--radius-card);
+    background: var(--color-negative-muted);
+    color: var(--color-negative);
+    font-size: 14px;
+    line-height: 1.4;
   }
   .lines {
     display: grid;

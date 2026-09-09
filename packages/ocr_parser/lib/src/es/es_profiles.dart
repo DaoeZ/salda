@@ -123,8 +123,9 @@ abstract final class EsMerchantProfiles {
   /// Categoría por palabras clave cuando no hay perfil (RF-26).
   static String fallbackCategory(List<RawLine> lines) {
     final head = lines.take(6).map((l) => l.text.toUpperCase()).join(' ');
-    if (RegExp(r'RESTAURANT|MESÓN|MESON|\bBAR\b|CAFETER|TABERNA|PIZZER')
-        .hasMatch(head)) {
+    if (RegExp(
+      r'RESTAURANT|MESÓN|MESON|\bBAR\b|CAFETER|TABERNA|PIZZER',
+    ).hasMatch(head)) {
       return 'restaurante';
     }
     if (RegExp('FARMACIA').hasMatch(head)) return 'farmacia';

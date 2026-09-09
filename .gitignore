@@ -43,6 +43,12 @@ storage-debug.log
 *-debug.log
 emulator-data/
 
+# --- Claude Code ---
+# Estado local de sesion (marcador de validacion pendiente del Stop hook)
+# y worktrees que Claude prepare para subagentes: no son codigo del proyecto.
+.claude/.validation-pending
+.claude/worktrees/
+
 # --- IDE / OS ---
 .idea/
 .vscode/
@@ -61,3 +67,15 @@ GoogleService-Info.plist
 serviceAccount*.json
 # firebase_options.dart SÍ se commitea: es config pública de cliente
 # (la seguridad la dan las reglas + App Check).
+
+# Firma de desarrollo compartida (BUG-1): nunca en Git.
+dev-keystore.properties
+# Almacenes de claves en cualquier formato, por si alguno cae aquí dentro.
+*.p12
+*.pfx
+*.pem
+*.der
+# Respaldo privado de traslado (keystore + secretos locales). Vive FUERA del
+# repositorio a propósito; esta línea es un cinturón por si se copia dentro.
+salda-private-backup/
+*.private-backup.zip

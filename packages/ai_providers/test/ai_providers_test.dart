@@ -13,8 +13,11 @@ class _FakeAdapter implements HttpClientAdapter {
   RequestOptions? lastRequest;
 
   @override
-  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? _,
-      Future<void>? cancelFuture) async {
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? _,
+    Future<void>? cancelFuture,
+  ) async {
     lastRequest = options;
     return handler(options);
   }
@@ -25,10 +28,13 @@ class _FakeAdapter implements HttpClientAdapter {
 
 Dio _dio(_FakeAdapter adapter) => Dio()..httpClientAdapter = adapter;
 
-ResponseBody _json(Object body, [int status = 200]) =>
-    ResponseBody.fromString(jsonEncode(body), status, headers: {
-      Headers.contentTypeHeader: ['application/json'],
-    });
+ResponseBody _json(Object body, [int status = 200]) => ResponseBody.fromString(
+  jsonEncode(body),
+  status,
+  headers: {
+    Headers.contentTypeHeader: ['application/json'],
+  },
+);
 
 const _receiptJson = {
   'merchantName': 'Mercadona',
@@ -36,8 +42,18 @@ const _receiptJson = {
   'time': null,
   'category': 'supermercado',
   'lines': [
-    {'name': 'GAZPACHO', 'quantityMilli': 1000, 'unitPrice': null, 'totalPrice': 180},
-    {'name': 'LECHE', 'quantityMilli': 2000, 'unitPrice': 98, 'totalPrice': 196},
+    {
+      'name': 'GAZPACHO',
+      'quantityMilli': 1000,
+      'unitPrice': null,
+      'totalPrice': 180,
+    },
+    {
+      'name': 'LECHE',
+      'quantityMilli': 2000,
+      'unitPrice': 98,
+      'totalPrice': 196,
+    },
   ],
   'taxes': [
     {'label': 'IVA 4%', 'amount': 12},
@@ -65,8 +81,7 @@ void main() {
     });
 
     test('descuadre → issue sumMismatch (revisión manual)', () {
-      final bad = Map<String, Object?>.from(_receiptJson)
-        ..['grandTotal'] = 999;
+      final bad = Map<String, Object?>.from(_receiptJson)..['grandTotal'] = 999;
       final r = parseAiResponse(jsonEncode(bad), engine: 'ai:test');
       expect(r.issues.single.code, 'sumMismatch');
       expect(r.needsReview, isTrue);
@@ -75,19 +90,26 @@ void main() {
     test('basura → badResponse', () {
       expect(
         () => parseAiResponse('no hay json aquí', engine: 'ai:test'),
-        throwsA(isA<AiProviderException>()
-            .having((e) => e.code, 'code', AiErrorCode.badResponse)),
+        throwsA(
+          isA<AiProviderException>().having(
+            (e) => e.code,
+            'code',
+            AiErrorCode.badResponse,
+          ),
+        ),
       );
     });
   });
 
   group('ClaudeProvider', () {
     test('petición correcta (cabeceras, modelo, imagen) y parseo', () async {
-      final adapter = _FakeAdapter((options) => _json({
-            'content': [
-              {'type': 'text', 'text': jsonEncode(_receiptJson)},
-            ],
-          }));
+      final adapter = _FakeAdapter(
+        (options) => _json({
+          'content': [
+            {'type': 'text', 'text': jsonEncode(_receiptJson)},
+          ],
+        }),
+      );
       final provider = ClaudeProvider(_dio(adapter));
       final result = await provider.extractReceipt(
         AiInput(imageJpeg: Uint8List.fromList([1, 2, 3])),
@@ -100,7 +122,8 @@ void main() {
       expect(request.headers['anthropic-version'], isNotNull);
       final body = request.data as Map;
       expect(body['model'], 'claude-haiku-4-5');
-      final content = ((body['messages'] as List).first as Map)['content'] as List;
+      final content =
+          ((body['messages'] as List).first as Map)['content'] as List;
       expect((content.first as Map)['type'], 'image');
       expect(result.engine, 'ai:claude');
       expect(result.grandTotal.value?.cents, 376);
@@ -108,20 +131,29 @@ void main() {
 
     test('401 → invalidKey', () async {
       final provider = ClaudeProvider(
-          _dio(_FakeAdapter((options) => _json({'error': 'no'}, 401))));
+        _dio(_FakeAdapter((options) => _json({'error': 'no'}, 401))),
+      );
       expect(
         () => provider.testConnection(
-            const AiProviderConfig(apiKey: 'mala', model: 'x')),
-        throwsA(isA<AiProviderException>()
-            .having((e) => e.code, 'code', AiErrorCode.invalidKey)),
+          const AiProviderConfig(apiKey: 'mala', model: 'x'),
+        ),
+        throwsA(
+          isA<AiProviderException>().having(
+            (e) => e.code,
+            'code',
+            AiErrorCode.invalidKey,
+          ),
+        ),
       );
     });
   });
 
   group('GeminiProvider', () {
-    test('clave en cabecera (nunca en la URL) y parseo de candidates',
-        () async {
-      final adapter = _FakeAdapter((options) => _json({
+    test(
+      'clave en cabecera (nunca en la URL) y parseo de candidates',
+      () async {
+        final adapter = _FakeAdapter(
+          (options) => _json({
             'candidates': [
               {
                 'content': {
@@ -131,51 +163,59 @@ void main() {
                 },
               },
             ],
-          }));
-      final provider = GeminiProvider(_dio(adapter));
-      final result = await provider.extractReceipt(
-        const AiInput(ocrText: 'TOTAL 3,76'),
-        const AiProviderConfig(apiKey: 'g-key', model: 'gemini-2.5-flash'),
-      );
-      final request = adapter.lastRequest!;
-      expect(request.headers['x-goog-api-key'], 'g-key');
-      expect(request.uri.query, isNot(contains('g-key')));
-      expect(result.merchantName.value, 'Mercadona');
-    });
+          }),
+        );
+        final provider = GeminiProvider(_dio(adapter));
+        final result = await provider.extractReceipt(
+          const AiInput(ocrText: 'TOTAL 3,76'),
+          const AiProviderConfig(apiKey: 'g-key', model: 'gemini-2.5-flash'),
+        );
+        final request = adapter.lastRequest!;
+        expect(request.headers['x-goog-api-key'], 'g-key');
+        expect(request.uri.query, isNot(contains('g-key')));
+        expect(result.merchantName.value, 'Mercadona');
+      },
+    );
   });
 
   group('OpenAiCompatibleProvider', () {
     ResponseBody chatResponse(RequestOptions options) => _json({
-          'choices': [
-            {
-              'message': {'content': jsonEncode(_receiptJson)},
-            },
-          ],
-        });
-
-    test('genérico: base URL propia, sin clave (Ollama), barra final',
-        () async {
-      final adapter = _FakeAdapter(chatResponse);
-      final provider = OpenAiCompatibleProvider(_dio(adapter));
-      expect(provider.requiresBaseUrl, isTrue);
-      await provider.extractReceipt(
-        const AiInput(ocrText: 'TOTAL 3,76'),
-        const AiProviderConfig(
-            baseUrl: 'http://localhost:11434/v1/', model: 'llama3.2'),
-      );
-      final request = adapter.lastRequest!;
-      expect(request.path, 'http://localhost:11434/v1/chat/completions');
-      expect(request.headers.containsKey('Authorization'), isFalse);
+      'choices': [
+        {
+          'message': {'content': jsonEncode(_receiptJson)},
+        },
+      ],
     });
+
+    test(
+      'genérico: base URL propia, sin clave (Ollama), barra final',
+      () async {
+        final adapter = _FakeAdapter(chatResponse);
+        final provider = OpenAiCompatibleProvider(_dio(adapter));
+        expect(provider.requiresBaseUrl, isTrue);
+        await provider.extractReceipt(
+          const AiInput(ocrText: 'TOTAL 3,76'),
+          const AiProviderConfig(
+            baseUrl: 'http://localhost:11434/v1/',
+            model: 'llama3.2',
+          ),
+        );
+        final request = adapter.lastRequest!;
+        expect(request.path, 'http://localhost:11434/v1/chat/completions');
+        expect(request.headers.containsKey('Authorization'), isFalse);
+      },
+    );
 
     test('preset (DeepSeek): base fija y Bearer', () async {
       final adapter = _FakeAdapter(chatResponse);
       final provider = AiProviderRegistry([
-        OpenAiCompatibleProvider(_dio(adapter),
-            id: 'deepseek',
-            displayName: 'DeepSeek',
-            fixedBaseUrl: 'https://api.deepseek.com/v1',
-            requiresApiKey: true),
+        OpenAiCompatibleProvider(
+          _dio(adapter),
+          id: 'deepseek',
+          displayName: 'DeepSeek',
+          fixedBaseUrl: 'https://api.deepseek.com/v1',
+          requiresApiKey: true,
+        ),
       ]).byId('deepseek')!;
       await provider.extractReceipt(
         const AiInput(ocrText: 'x'),
@@ -189,10 +229,17 @@ void main() {
     test('sin imagen ni texto → unsupportedInput', () {
       final provider = OpenAiCompatibleProvider(_dio(_FakeAdapter(_json)));
       expect(
-        () => provider.extractReceipt(const AiInput(),
-            const AiProviderConfig(baseUrl: 'http://x', model: 'm')),
-        throwsA(isA<AiProviderException>()
-            .having((e) => e.code, 'code', AiErrorCode.unsupportedInput)),
+        () => provider.extractReceipt(
+          const AiInput(),
+          const AiProviderConfig(baseUrl: 'http://x', model: 'm'),
+        ),
+        throwsA(
+          isA<AiProviderException>().having(
+            (e) => e.code,
+            'code',
+            AiErrorCode.unsupportedInput,
+          ),
+        ),
       );
     });
   });
@@ -202,7 +249,12 @@ void main() {
     expect(
       registry.all.map((p) => p.id),
       containsAll([
-        'claude', 'gemini', 'openai', 'deepseek', 'glm', 'openrouter',
+        'claude',
+        'gemini',
+        'openai',
+        'deepseek',
+        'glm',
+        'openrouter',
         'openai_compatible',
       ]),
     );

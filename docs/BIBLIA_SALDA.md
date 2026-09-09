@@ -1,6 +1,26 @@
 # BIBLIA DEL PROYECTO SALDA
 
-**Versión:** 1.8 · **Fecha:** 2026-07-19 · **Changelog:** v1.8 — P5 relaciones
+**Versión:** 1.17 · **Fecha:** 2026-07-26 · **Changelog:** v1.17 — vinculación
+MANUAL↔cuenta/invitado por ALIAS y con aprobación del anfitrión, sin migración
+ni cambio de actor (ADR-037). Anterior:
+**Versión:** 1.16 · **Fecha:** 2026-07-25 · **Changelog:** v1.16 — enlaces de
+ticket con identificación TEMPORAL de participantes MANUAL, sin vinculación ni
+cambio de actor económico (ADR-036). Versión anterior:
+**Versión:** 1.15 · **Fecha:** 2026-07-25 · **Changelog:** v1.15 — el enlace
+de grupo entra SOLO a quien ya tiene identidad, conserva el enlace mientras
+uno se identifica y admite caducidad opcional (ADR-035). v1.14 — enlaces de
+grupo: token opaco no enumerable con prueba de conocimiento en batch, y el
+invitado por fin llega a sus contextos (ADR-035). v1.13 — modo
+invitado: participante sin cuenta con identidad persistente de dispositivo y
+gastos bajo permiso del anfitrión (ADR-034). v1.12 —
+participantes manuales como actores económicos sin cuenta ni migración
+(ADR-033). v1.11 — P7 chat
+contextual privado por membresía y fecha de alta, separado de actividad y
+economía (ADR-032). v1.10 — P6 actividad
+como proyección de auditoría con IDs deterministas y audiencia congelada
+(ADR-031). v1.9 — Relaciones y grupos pasan a ser la raíz visible; tickets
+nuevos siempre contextuales y compatibilidad histórica no destructiva
+(ADR-030). v1.8 — P5 relaciones
 económicas explicables, neteo bilateral y pagos confirmados (ADR-029). v1.7 — P4 espacios
 compartidos: contenedor social único con propietario en un solo campo,
 invitaciones deterministas y tickets vinculables (ADR-028). v1.6 — P3 amistades
@@ -654,7 +674,14 @@ alertas de métricas recomendadas en spec §12.4.
 <a name="parte-vi"></a>
 # PARTE VI — CALIDAD, RENDIMIENTO Y SEGURIDAD
 
-## §36. Estrategia de testing [HECHO: 251 tests]
+## §36. Estrategia de testing [HECHO: ~1.551 tests — medidos el 2026-09-04]
+
+> **Recuento real** (la cifra anterior, «251», databa de M5 e inducía a error):
+> `packages/domain` **130** · `packages/ocr_parser` **33** · `apps/mobile`
+> **650** (5 skip) · `backend/functions` **203** · Rules contra emulador **472**
+> (11 ficheros en `backend/firestore/test/`) · `apps/guest_web` **63** (vitest,
+> 9 ficheros). Los cinco primeros bloques y la web se ejecutaron en verde
+> durante la auditoría del 2026-09-04; los de Rules se contaron por inspección.
 
 | Capa | Tipo | Qué cubre | Dónde |
 |---|---|---|---|
@@ -781,7 +808,10 @@ el embrión del timeline.
   firmada) → API abierta a scripts con la config pública.
 
 **Media**:
-- **DT-4** El feed `activity/` se escribe pero no se muestra (timeline UI).
+- ~~**DT-4** El feed `activity/` se escribe pero no se muestra (timeline UI).~~
+  **RESUELTA por P6 (ADR-031)**: hay pantalla global `/home/activity`, sección y
+  cronología por espacio, tiempo real y paginación. Contrato en
+  `docs/ACTIVIDAD.md`. *(Corregido el 2026-09-04.)*
 - **DT-5** Agregado te-deben/debes calculado sobre la página cargada del historial.
 - **DT-6** Microinteracciones spec §3.6 sin implementar (escaneo, container
   transform, haptics).
@@ -843,6 +873,8 @@ por celda, y dinero entero con una única primitiva de redondeo.
 | E6 | Mojibake de acentos en CI yaml (commit `984c728`) | `-replace` de PowerShell 5.1 leyó UTF-8 como ANSI | Editar archivos con tildes SOLO con herramientas de edición, nunca con sustituciones de shell |
 | E7 | Hora "18.32" convertida en importe por el canonicalizador | orden de fases del parser | El orden de normalizaciones es parte del contrato; test de regresión en corpus |
 | E8 | `flutterfire configure` colgado en prompt oculto | CLI interactiva en entorno no interactivo | Preferir comandos deterministas (apps:create + sdkconfig) en automatización |
+| E9 (A12/A15) | Un ticket con `BASE IMPONIBLE 13,19` + `IVA 21% 2,77` + `TOTAL 15,96` se leía como DOS productos fantasma —la base y la cuota— que sumaban exactamente el total: cuadraba al céntimo, sin issues y sin ningún aviso, con cero productos reales | el desglose fiscal impreso ANTES del total y sin la cabecera combinada que buscaba `_taxZoneHeader` caía en la regla genérica «nombre + importe» (confianza 0,78, por encima del umbral de aviso), y `_noise` no contemplaba conceptos fiscales | Un indicador que solo mira la aritmética acaba certificando lo que no ha mirado. Corregido con un filtro fiscal ESTRECHO (no basta la palabra `BASE`: existe «BASE PIZZA») + fixtures en las dos direcciones |
+| E10 (A15) | El precio unitario impreso a la izquierda (`1,15 MACARRON ROMERO 1 KG   5,75`) se tragaba dentro del nombre y la cantidad se perdía: 1 unidad de 5,75 € en vez de 5 de 1,15 €. Cuadraba y no avisaba | ninguna regla cubre ese orden de columnas y la genérica lo aceptaba con confianza suficiente | No se inventa la cantidad (5,75/1,15 = 5 es una división exacta, no una prueba): se deja de afirmar que la línea es fiable y se marca para revisión. Una cantidad equivocada aquí decide después cuántas unidades repartibles tiene el gasto |
 
 ---
 
@@ -883,8 +915,8 @@ a TODAS.
 3. **App Check** (DT-3) · dep: firma release + Play Integrity · M · riesgo:
    bloquear clientes legítimos → modo monitor 1 semana antes de enforce ·
    CA: métricas de verificación >99 % antes de enforce.
-4. **Timeline de actividad en el detalle** (DT-4) · S · CA: eventos existentes
-   listados en vivo; escritura de eventos faltantes (confirmaciones).
+4. ~~**Timeline de actividad en el detalle** (DT-4)~~ — **HECHO en P6**
+   (ADR-031, `docs/ACTIVIDAD.md`). *(Corregido el 2026-09-04.)*
 5. **Chip offline + cola visible** · S · CA: modo avión → chip + edición sigue
    funcionando → reconexión sincroniza.
 6. **Pulido spec §3.6**: línea de escaneo, container transform, haptics (DT-6) · M.
@@ -909,8 +941,9 @@ a TODAS.
 18. Perfil de usuario + avatar · S · **HECHO P2**. 19. Amistades canónicas por
     UID, independientes de personas frecuentes y de relaciones económicas · M ·
     **HECHO P3** (ADR-027).
-20. [Evaluar tras uso real] chat ligero por grupo (Firestore está hecho para
-    esto; decidir con el principio de simplicidad en la mano).
+20. ~~[Evaluar tras uso real] chat ligero por grupo~~ — **HECHO en P7**
+    (ADR-032, `docs/CHAT.md`): `spaces/{spaceId}/messages`, acotado a
+    `createdAt >= members/{uid}.joinedAt`. *(Corregido el 2026-09-04.)*
 
 ### Fase R4 — 1.0 pública
 21. Página de producto + dominio definitivo + rebranding si procede (cambiar
@@ -922,6 +955,15 @@ a TODAS.
 R3 puede solaparse con R2 salvo el punto 16 que conviene tras la beta inicial.
 
 ## §54. Estrategia de migración al modelo centrado en grupos
+
+> **⚠️ SECCIÓN HISTÓRICA — derogada por ADR-030 (2026-09-04).** La tabla de abajo
+> describe el modelo ANTERIOR a la reestructuración Relaciones/Grupos. Hoy la
+> raíz visible del producto es **`spaces`** —`relationship` reserva una pareja
+> canónica de UID y `group` representa contextos de tres o más miembros—, los
+> miembros son UID en `spaces/{id}/members`, el timeline es P6 (ADR-031) y el
+> chat es P7 (ADR-032). Se conserva porque explica de dónde viene el modelo
+> actual y por qué no hubo migración de datos. **Fuente vigente:
+> `docs/ESPACIOS.md` y ADR-030.**
 
 **Conclusión de la auditoría: NO hay migración de datos — hay evolución de
 superficie.** El modelo actual YA es grupos:
@@ -1035,6 +1077,7 @@ Incremental por construcción; térmico ilegible ≠ marca perdida; corpus como 
 **Decisión:** las líneas sin consumidores se atribuyen al **pagador del ticket** (neto cero para él en esa parte: la pagó y la "consume"); a medida que la gente reclama, la parte del pagador se reduce hasta quedar solo lo suyo. La conversión vive en `recompute.sanitizeLine` (que conoce al pagador); el motor puro NO cambia (paridad y vectores dorados intactos) y se le pasa `unassignedPolicy: 'error'` como red de seguridad. `splitAmongAll` sigue siendo una capacidad pura del motor (tested) reservada al futuro "finalizar y repartir sobrantes con confirmación" (RF-46), pero NUNCA se usa en el cálculo continuo.
 **Consecuencias:** + fin de la media previa; Σ==grandTotal siempre; redondeo único preservado (ADR-007); + tests de regresión que blindan el caso exacto reportado y los límites (compartir 2/3/4, dejar de compartir, IVA/descuentos, tickets grandes, múltiples grupos). − el pagador ve una parte alta mientras el grupo no ha reclamado sus productos (correcto y transitorio; la UI puede indicarlo).
 **Revisión futura:** si se implementa el "finalizar ticket" explícito (RF-46), decidir allí si los sobrantes se dejan al pagador o se reparten con confirmación.
+**Tensión abierta con A9 (2026-09-04, auditoría):** el contrato de **A9** —reparto inteligente en relaciones de EXACTAMENTE dos personas— propone que, con solo dos participantes, lo no reclamado se infiera como consumo de la contraparte en vez de recaer en el pagador, con confirmación explícita antes de hacerlo firme. **ADR-021 NO queda superada: sigue siendo la regla vigente e implementada** (`recompute.ts`, `sanitizeLine`). A9 sería una **excepción futura acotada al caso bilateral** y requiere ADR propio antes de tocar código. Ver `docs/BACKLOG_SALDA.md` § A9.
 
 ### ADR-022: Progreso sobre obligaciones y separación histórico/actual
 **Estado:** Aceptada · **Fecha:** 2026-07-15 (P0.3)
@@ -1216,6 +1259,16 @@ consolidados por espacio serán un cambio de recompute en su propia fase.
 Contrato en `docs/ESPACIOS.md`.
 **Revisión:** al llegar los balances consolidados, decidir si el espacio
 referencia sesiones completas además de tickets sueltos.
+**⚠️ SUPERADA EN UN PUNTO — «archivar es la única baja» (2026-09-04):** el
+contrato de **A4** distingue expresamente **Archivado ≠ Eliminado** y es una
+decisión de producto **cerrada**. Eliminar un grupo pasa a existir como estado
+propio: solo el owner, posible incluso con saldos pendientes bajo confirmación
+reforzada, congela la economía activa, aparece en «Eliminados», avisa
+individualmente a cada miembro, es restaurable durante 7 días y después queda
+como historial readonly que no afecta a balances activos. **El resto de ADR-028
+sigue íntegramente vigente** (propietario en un solo campo, membresías por UID,
+invitaciones deterministas, tickets vinculables): lo único superado es la
+afirmación de que archivar es la única baja. Ver `docs/BACKLOG_SALDA.md` § A4.
 
 ### ADR-029: Obligaciones derivadas y pagos bilaterales autoritativos
 **Estado:** Aceptada · **Fecha:** 2026-07-19 (P5)
@@ -1243,6 +1296,615 @@ Contrato detallado en `docs/RELACIONES_ECONOMICAS.md`.
 **Revisión:** medir coste/latencia antes de añadir índices o materializar un
 documento de saldo por usuario; P5 calcula esa vista en el cliente.
 
+### ADR-030: Relaciones y grupos como raíz visible del producto
+**Estado:** Aceptada · **Fecha:** 2026-07-22
+**Contexto:** la navegación centrada en sesiones/tickets obligaba a crear el
+gasto antes de declarar con quién se compartía. P4 ya aporta un contenedor por
+UID y P5 deriva dinero por ticket, por lo que crear otro modelo duplicaría
+estado social y económico.
+**Decisión:** [HECHO] `spaces` se reutiliza como contexto único. `kind` distingue
+`relationship` (pareja canónica e inmutable de UID) de `group`; los P4 sin campo
+se leen como grupo. Inicio muestra ambos e invitaciones, y el escaneo solo nace
+dentro de su detalle. Sesión y ticket nuevos comparten `spaceId` y
+`contextModelVersion: 1`; sus miembros registrados reclaman los participantes
+por UID. Las sesiones anteriores no se clasifican ni migran automáticamente:
+quedan en «Histórico sin organizar» con vinculación manual explícita.
+**Consecuencias:** una relación no admite tercer miembro; un grupo necesita tres
+miembros para crear gastos; un ticket contextual no se desvincula. P5 conserva
+fuente de verdad, neteo, liquidaciones, permisos y trazabilidad sin cambios. La
+amistad continúa siendo independiente. P6/P7 no forman parte de esta decisión.
+Contrato detallado en `docs/ESPACIOS.md`.
+**ENMIENDA (2026-07-26, BUG-2):** el id derivado de DOS UID impedía un caso
+real — compartir gastos con alguien que no usa la app y que eso sea una
+relación, no un grupo. Se desdobla el esquema: `schemaVersion: 2` mantiene el
+id canónico para dos cuentas (y con él la unicidad), y `schemaVersion: 3`
+añade la relación con un participante MANUAL en la segunda plaza, con id
+generado y `relationshipManualId`. Siguen siendo exactamente dos identidades
+económicas. Ambos conviven sin migrar datos ni economía.
+**Revisión:** antes de permitir invitados no registrados dentro de un grupo,
+definir cómo se representa su identidad sin degradar el vínculo por UID.
+
+### ADR-031: Actividad como proyección de auditoría con IDs deterministas
+**Estado:** Aceptada · **Fecha:** 2026-07-20 (P6)
+**Contexto:** el usuario necesita una cronología (quién hizo qué, cuándo, y
+llegar al objeto) sin convertirla en chat, sin duplicar el modelo económico y
+sin que un cliente pueda fabricar eventos a nombre de otro.
+**Decisión:** [HECHO] colección `activityEvents/{id}` escrita SOLO por
+triggers Admin (`activity.ts`): espacios (crear/editar/archivar/reactivar/
+transferir con actor = owner, transferencia = owner anterior), membresías
+(unirse; salida vs EXPULSIÓN distinguidas por el marcador `removedBy` que el
+owner escribe antes del borrado y Rules valida), invitación enviada, tickets
+(creado/borrado/vinculado/desvinculado y edición RELEVANTE: comercio, total,
+fecha, pagador — una edición atómica = un evento; líneas y asignaciones son
+ruido técnico sin evento), settlements humanos marked/confirmed (pending es
+sugerencia del motor y jamás emite) y pagos P5 `source:user` (actor del
+stateHistory; las proyecciones legacy no emiten: el mismo hecho nunca se
+duplica entre sistemas). IDs deterministas por hecho + escritura
+`create()`-only: reintentos de trigger, offline repetido y recompute
+convergen en el mismo documento conservando su hora. Audiencia `memberUids`
+CONGELADA al momento (máx. 30): un miembro nuevo no hereda actividad, un
+expulsado conserva sus hechos, el owner no gana visibilidad económica.
+Nombres de personas SIEMPRE en vivo por UID (sin snapshots); solo se congela
+el rótulo del objeto. Queries con array-contains del propio uid (regla
+demostrable) + dos índices compuestos; paginación por fecha con primera
+página en stream. Sin retro-generación de P1–P5 (no se fabrican fechas ni
+actores no demostrables). Contrato en `docs/ACTIVIDAD.md`.
+**Consecuencias:** el feed es borrable y reconstruible parcialmente sin
+tocar la verdad; P7 (chat) podrá convivir sin reusar esta colección; si los
+espacios crecieran más allá de ~30 miembros habría que migrar a fan-out.
+**Revisión:** al implementar notificaciones push completas, decidir si se
+alimentan de estos mismos eventos.
+
+### ADR-032: Chat contextual privado por membresía y fecha de alta
+**Estado:** Aceptada · **Fecha:** 2026-07-23 (P7)
+**Contexto:** Relaciones y Grupos necesitan coordinación dentro del contexto,
+pero reutilizar actividad permitiría escrituras de cliente en una proyección
+Admin y mezclaría conversación con auditoría. Congelar la audiencia de cada
+mensaje exigiría una Function o confiar en listas aportadas por el cliente.
+**Decisión:** [HECHO] subcolección aditiva
+`spaces/{spaceId}/messages/{messageId}`, texto inmutable y autor por UID. Solo
+cuentas completas que sigan siendo miembros leen, siempre con
+`createdAt >= members/{uid}.joinedAt`: un miembro nuevo no hereda conversación
+anterior y quien sale pierde acceso. Miembros de espacios activos envían y
+borran únicamente mensajes propios; archivados quedan en solo lectura. Rules
+valida forma, autor, longitud, versión y timestamp de servidor. Primera página
+en vivo, historial bajo demanda, sin Function ni índice compuesto nuevo.
+**Consecuencias:** el owner no modera mensajes ajenos; chat no genera
+`activityEvents`, no altera P5 y no entra en `appcuentas-backup@1`. Sin
+adjuntos, edición, reacciones, recibos, no leídos, push ni invitados web.
+Contrato detallado en `docs/CHAT.md`.
+**Revisión:** si se añaden adjuntos o notificaciones, diseñarlos como extensiones
+independientes y revisar coste, retención y moderación antes de implementarlos.
+
+### ADR-033: Participantes manuales como actores económicos de primera clase
+**Estado:** Aceptada · **Fecha:** 2026-07-25
+**Contexto:** solo podían participar personas con cuenta, pero la mayoría de
+gastos reales incluye a alguien que no usa la app. Necesitábamos que pese
+económicamente igual sin inventarle una cuenta, y sin cerrar la puerta a que
+mañana reclame su identidad conservando el historial.
+**Decisión:** [HECHO] `spaces/{id}/manualParticipants/{manualId}` con nombre
+editable, `createdByUid` y `linkedUid: null` reservado; el participante de
+sesión guarda `manualId` (identidad) además del `claimedByDevice` existente.
+Toda obligación P5 pasa a expresarse entre ACTORES: el UID para una cuenta y
+`manual:{manualId}` para quien no la tiene. Como los UID de Firebase nunca
+contienen ':', el prefijo no colisiona y **no hace falta migrar ningún
+documento**: un valor sin prefijo es una cuenta por definición. `memberUids`
+sigue siendo solo UID reales (es lo que autorizan Rules y las queries
+array-contains): cuenta↔manual tiene un lector, manual↔manual no se publica
+en la economía global y se queda en el balance de su sesión. El id es opaco
+y estable, nunca el nombre: renombrar no toca obligaciones y retirar a la
+persona no borra su historial.
+**Consecuencias:** el reparto, los balances y las liquidaciones de sesión
+funcionan igual para ambos tipos; los pagos P5 siguen exigiendo dos cuentas
+(saldar con un manual se hace por el flujo de sesión, que ya admite
+participantes sin dispositivo). Invitados, enlaces y reclamación de identidad
+siguen fuera.
+**[DECISIÓN PENDIENTE] Vinculación con una cuenta — FUERA del alcance de
+este sprint.** El actor `manual:{manualId}` debe permanecer ESTABLE: es la
+clave con la que están escritas las obligaciones ya derivadas. La futura fase
+deberá elegir explícitamente entre (a) **migración de referencias**,
+reescribiendo el actor en cada documento histórico —homogéneo pero masivo, no
+atómico entre colecciones, difícil de revertir e incompatible con los ids
+deterministas ya calculados—, o (b) **resolución mediante alias**,
+conservando el actor histórico y aplicando una equivalencia
+`manual:{manualId} → uid` al leer y consolidar —sin tocar documentos,
+reversible y demostrable—. **Opción preferente: alias**, salvo evidencia
+técnica que justifique lo contrario (coste de lectura o complejidad de
+consulta inasumibles). `linkedUid` **NO resuelve por sí solo** la
+vinculación: es solo un marcador de intención; no reescribe obligaciones, no
+las consolida al leer ni impide duplicidades.
+**Duplicidad a evitar:** ningún contexto puede tener a la misma persona
+activa a la vez como actor manual y como UID —sea el UID de una cuenta o el
+de un INVITADO (ADR-034), que también tiene el suyo—. El mecanismo deberá
+cubrir: vinculación e incorporación como miembro **atómicas**; la identidad
+manual deja de ser seleccionable en repartos nuevos una vez vinculada; Rules
+exige que un participante declare exactamente una identidad (invariante ya
+vigente); consolidación de ambas vertientes en el balance bilateral al leer;
+y decisión sobre qué hacer si la cuenta ya tenía obligaciones propias en ese
+mismo contexto (fusión frente a coexistencia histórica).
+**Revisión:** en el **Sprint 6 (vinculación de identidad)**, resolver la
+decisión anterior —cubriendo manual↔cuenta y manual↔invitado con el mismo
+mecanismo— y registrarla en un ADR propio antes de escribir código.
+
+### ADR-034: Invitado como participante sin cuenta con identidad de dispositivo
+**Estado:** Aceptada · **Fecha:** 2026-07-25
+**Contexto:** entre la cuenta completa y el participante manual faltaba quien
+USA la app pero no quiere registrarse. Necesitaba identidad propia y estable
+—para que su historial económico sea suyo— sin abrirle la puerta a gobernar
+contextos ni a tener presencia pública.
+**Decisión:** [HECHO] el invitado es la sesión ANÓNIMA de Firebase Auth (que
+el SDK persiste en el dispositivo y sobrevive a reinicios) más
+`guestIdentities/{uid}` con el nombre visible que él elige. NO es un perfil
+público: sin username, sin búsqueda y con `list` denegado en Rules; solo se
+lee conociendo el UID, y su nombre viaja además como snapshot en la
+membresía (`kind: guest`, `displayName`) porque no hay perfil del que leerlo
+en vivo. Rules separa dos predicados: `canParticipate()` = cuenta **o**
+invitado, para participar (leer el contexto y sus miembros, recibir y aceptar
+invitaciones, ver balances y cronología propios); y `canUseSocial()` = solo
+cuenta, para todo lo que crea o gobierna (crear contextos, invitar,
+administrar, transferir, archivar, perfil y amistades). Los gastos del
+invitado dependen de `spaces/{id}.guestsCanCreateExpenses`, que solo fija el
+propietario y cuya ausencia equivale a `false`. El anfitrión puede invitar a
+un invitado porque la regla acepta como destino un perfil público **o** una
+identidad de invitado.
+**Consecuencias:** el invitado **participa económicamente igual que una
+cuenta porque dispone de UID propio** — para ADR-033 es un actor de cuenta
+(sin prefijo `manual:`) y encaja en P5 sin cambios ni casos especiales. El
+**nombre visible es solo un atributo de presentación**: cambiarlo NO afecta a
+la identidad económica ni a obligaciones, balances o historial. Un anónimo
+SIN identidad de invitado no participa en nada (sigue siendo el invitado web
+de sesión de P1, mecanismo intacto).
+**[FUERA DE ALCANCE] Incorporación mediante enlaces.** Hoy el anfitrión solo
+invita a un invitado si conoce su UID, porque por diseño no es buscable. **El
+flujo de invitación actual NO es el definitivo**: es el mínimo para validar
+el modelo. **El Sprint 4 (Enlaces) resolverá la incorporación** y decidirá el
+canal por el que el anfitrión alcanza a un invitado sin exponer identidades
+ni hacerlo buscable.
+**[DECISIÓN PENDIENTE — Sprint 6] Consolidación con MANUAL.** Nada impide
+todavía que la misma persona esté en un contexto a la vez como participante
+manual y como invitado con UID: serían dos actores y el saldo aparecería
+partido. Se resolverá en el Sprint 6 (vinculación de identidad) con el MISMO
+mecanismo que la vinculación manual↔cuenta de ADR-033, porque es el mismo
+problema. Este ADR **no prejuzga** la elección entre migración de referencias
+y resolución mediante alias, que sigue abierta en ADR-033.
+**Revisión:** al cerrar el Sprint 4, comprobar que el canal de incorporación
+elegido no convierte la identidad de invitado en buscable.
+
+### ADR-035: Enlace de grupo como token opaco con prueba de conocimiento
+**Estado:** Aceptada · **Fecha:** 2026-07-25 (Sprint 4)
+**Contexto:** incorporar gente exigía conocer su UID y buscarla, y a un
+INVITADO (ADR-034) sencillamente no se le podía alcanzar: por diseño no es
+buscable. ADR-034 dejó abierto el canal y pidió que, al resolverlo, no
+convirtiera la identidad de invitado en buscable ni expusiera identidades.
+**Alternativas descartadas:** (a) **reutilizar `spaceInvites`** — imposible:
+su ID determinista `{spaceId}_{toUid}` exige saber a quién invitas, que es
+justo lo que falta. (b) **Solicitud de acceso con aprobación del propietario**
+— convierte "unirse" en un trámite asíncrono que contradice el principio
+rector y deja al que llega esperando. (c) **Cloud Function `redeemGroupLink`
+callable** — resolvería el canje en servidor, pero añade una función nueva
+contra el techo de coste (§62), rompe la norma de que las functions solo se
+disparan por triggers de Firestore (CLAUDE.md §7) y no aporta nada que Rules
+no pueda demostrar: la checklist §58 obliga a preguntarse antes si basta con
+cliente + reglas. Aquí basta.
+**Decisión:** [HECHO] colección `spaceLinks/{token}` en la que el
+IDENTIFICADOR del documento ES el secreto (128 bits vía `ShareCode`, la misma
+primitiva del enlace de invitados). Conocerlo es la autorización, igual que
+ADR-012. `get` queda abierto a cualquier sesión que acierte el token —para
+previsualizar el nombre del grupo sin ser miembro— y `list` reservado al
+propietario ACTUAL: un enlace nunca es enumerable. El documento **no contiene
+identidades**: solo a qué grupo abre y cómo se llama.
+El canje escribe en UN batch la prueba de conocimiento
+`spaces/{id}/joinGrants/{uid}` (con el token) y la membresía, y Rules valida
+la segunda contra la primera con `existsAfter`, el mismo patrón que aceptar
+una invitación. La prueba es de **solo escritura** —no la lee nadie, ni el
+propietario— para que el token no se filtre a los demás miembros: si viviera
+en la membresía, cualquier miembro podría reenviar el enlace y saltarse la
+política de que solo el propietario incorpora gente. La membresía
+**revalida el enlace en cada canje**, así que revocar cierra la puerta al
+instante aunque quede una prueba antigua.
+Solo GRUPOS activos (una relación reserva una pareja inmutable de UID y no
+admite un tercero) y solo el propietario crea, rota o revoca; rotar emite un
+token nuevo y deja el viejo demostrablemente muerto. Cuenta e invitado entran
+por el mismo camino; MANUAL no aplica (no tiene dispositivo).
+**Caducidad OPCIONAL** (`expiresAt`): un enlace es un secreto portador, así
+que poder acotarle la vida limita el daño de una filtración. Ausente = sin
+caducidad, que es el valor por defecto. No puede nacer caducado (enmascararía
+un reloj mal puesto en cliente) y es INMUTABLE: alargarla resucitaría un
+enlace que ya circula, así que para cambiarla se rota. Caducado ≠ revocado,
+pero cierran igual porque ambas se comprueban en cada canje.
+**A quien ya tiene identidad NO se le pregunta quién es.** Con cuenta —o con
+identidad de invitado, que persiste en el dispositivo— el enlace entra solo y
+aterriza en el grupo: sin pantalla intermedia ni botón de confirmar, porque
+la identidad ya se conoce y preguntar sería fricción pura. El selector de
+identidad queda reservado a los participantes MANUAL de los enlaces de TICKET
+(Sprint 5), donde sí hay algo que elegir. Solo se pide algo a quien no tiene
+identidad: continuar como invitado (que únicamente necesita un nombre
+visible), entrar con su cuenta o crear una. El token pendiente vive en
+`pendingGroupLinkProvider` y lo consume el router, de modo que identificarse
+—incluido verificar el correo tras registrarse— **nunca pierde el enlace**;
+por eso la pantalla del enlace se mantiene en pie para cualquier sesión, aun
+sin verificar. Volver a pulsar un enlace del que ya se es miembro lleva al
+grupo en vez de dar error.
+**Consecuencias:** entrar por enlace es la vía natural del invitado, y por
+eso este ADR **corrige un vacío de ADR-034**: la app pintaba
+`_AccountRequiredHome` a todo el que no tuviera cuenta y la query de "mis
+contextos" exigía `canUseSocial()`, de modo que un invitado podía ser miembro
+en datos pero no tenía pantalla desde la que llegar al grupo. Ahora participa
+de verdad: ve sus contextos y sus invitaciones, y también a los participantes
+MANUAL con los que reparte. Crear contextos sigue siendo exclusivo de una
+cuenta. Quien conserve un enlace vivo puede volver a entrar tras ser
+expulsado —igual que en cualquier grupo de mensajería—: para cerrar de verdad
+hay que rotar o revocar, y así está documentado en la UI.
+`AndroidManifest.xml` declara el intent-filter `autoVerify` de
+`https://{salda-dev|salda-prod}.web.app/g/` y el Hosting de `salda-dev` sirve
+`/.well-known/assetlinks.json` con el paquete `dev.salda.salda_mobile` y el
+SHA-256 del certificado (comprobado con la API de Digital Asset Links de
+Google, que es lo que consulta Android). Dos ajustes de `firebase.json` lo
+sostienen: `ignore` ya no excluye `**/.*` —ese patrón dejaba fuera del
+despliegue la carpeta `.well-known` entera— y `appAssociation: "NONE"` impide
+que Hosting genere el archivo por su cuenta. Mientras `buildTypes.release`
+siga firmando con la config de debug, un único fingerprint cubre las tres
+variantes; **al crear una clave de release habrá que añadir su SHA-256**.
+**Pendiente (no es código de app):** servir `/g/{token}` como página de
+aterrizaje para quien no tenga la app. Contrato en `docs/ESPACIOS.md`.
+**Revisión:** al implementar los enlaces de TICKET (Sprint 5), reutilizar
+este mecanismo en vez de inventar otro; y en el Sprint 6 tener presente que
+un MANUAL y un INVITADO que sean la misma persona siguen siendo dos actores
+distintos — entrar por enlace no lo empeora, pero tampoco lo resuelve.
+**Tensión con el alcance futuro de A5 (2026-09-04, auditoría), sin resolver:**
+el contrato de **A5** quiere que este mismo enlace sirva también a las personas
+**MANUAL** y que la web ofrezca elegir identidad. Este ADR lo excluye
+expresamente («MANUAL no aplica: no tiene dispositivo») y reserva el selector a
+los enlaces de TICKET, que a su vez lo retiraron por vulnerabilidad en ADR-036
+rev. 2. Además sigue **pendiente la página de aterrizaje de `/g/{token}`**: hoy
+la web muestra «ábrelo en la app» (`OpenInAppView.svelte`), así que el requisito
+de A5 «sin app/cuenta → web» está sin cubrir. No se da por resuelta ninguna de
+las dos cosas. Ver `docs/BACKLOG_SALDA.md` § A5.
+
+### ADR-036: Enlace de ticket con identificación temporal, no vinculación
+**Estado:** Aceptada · **Fecha:** 2026-07-25 (Sprint 5)
+**Contexto:** faltaba compartir UN gasto con quien no tiene por qué entrar en
+el grupo — típicamente alguien sin cuenta anotado como participante MANUAL
+(ADR-033). Hacerle elegir quién es toca de lleno el problema que el Sprint 6
+tiene que decidir, así que había que dar acceso sin prejuzgarlo.
+**Decisión:** [HECHO] colección PROPIA `ticketLinks/{token}`, no `spaceLinks`:
+el alcance y las amenazas son distintos y compartirlas habría convertido una
+fuga de enlace de ticket en acceso al grupo entero. Se reutiliza de ADR-035
+lo que sí es igual (token de 128 bits como id, `list` restringido al dueño de
+la sesión, revocación y caducidad opcional e inmutable). El enlace publica
+únicamente el comercio y los nombres de los MANUAL de ESE ticket,
+denormalizados porque quien no se ha identificado todavía no puede leer los
+participantes — y para leerlos necesitaría el acceso que intenta obtener.
+El acceso tiene DOS grados separables: lectura del ticket sin decir ser nadie
+(`sessions/{sid}/ticketAccess/{uid}`), e identificación como un MANUAL
+concreto, que además exige el cerrojo determinista
+`ticketClaims/{ticketId}_{manualId}` escrito en el MISMO batch. `create` solo
+prospera si el cerrojo no existe: el primero que llega gana y el segundo
+recibe permission-denied. `hasTicketAccess` revalida el enlace en CADA
+lectura, así que revocar o dejar caducar corta al instante.
+**La identificación es TEMPORAL, no vinculación:** no escribe `linkedUid`, no
+cambia el actor económico —`manual:{manualId}` sigue intacto— y `recompute`
+no la lee jamás; borrarla no mueve un céntimo.
+**Por qué NO se usó `claimedByDevice`:** habría sido más corto y catastrófico.
+`recompute.ts` da PRECEDENCIA a esa vía sobre `manualId`, así que el actor
+habría migrado a un UID por la puerta de atrás — justo la vinculación
+definitiva que el Sprint 6 debe decidir con su propio ADR.
+**Consecuencias:** P5 no cambia ni una línea (con pruebas que lo demuestran).
+Poseer el enlace no da acceso a la sesión, a otros tickets, a las
+liquidaciones ni al espacio. Con un único MANUAL elegible se confirma igual,
+porque autoseleccionar convertiría un enlace reenviado por error en una
+suplantación silenciosa. Contrato en `docs/ENLACES_TICKET.md`.
+**Revisión:** en el Sprint 6, sustituir o invalidar estas pruebas al vincular
+—un MANUAL con `linkedUid` ya deja de ser elegible en Rules— sin tocar el
+historial económico, del que nunca formaron parte.
+**⚠️ CONFLICTO ABIERTO con el contrato de A5 (2026-09-04, auditoría):** A5 pide
+**un único enlace de grupo** en el que la web muestre las identidades
+guest/manual disponibles y quien lo abra elija «Soy Tete». Eso es exactamente el
+**esquema 1 retirado por esta rev. 2**, cuya vulnerabilidad está documentada
+arriba: un enlace generado para Pedro servía para quedarse con la identidad
+económica de Ana y, vía ADR-037, para pedir la vinculación de su historial.
+**ADR-036 rev. 2 NO queda superada: sigue vigente.** A5 no puede implementarse
+sin un ADR que explique cómo ofrece ese selector sin reabrir la suplantación.
+Ver `docs/BACKLOG_SALDA.md` § A5.
+
+### ADR-037: Vinculación por ALIAS, con aprobación del anfitrión
+**Estado:** Aceptada · **Fecha:** 2026-07-26 (Sprint 6)
+**Contexto:** ADR-033 dejó abierta la vinculación de un MANUAL con una cuenta
+y declaró preferente el alias; ADR-034 y ADR-036 heredaron la decisión. Había
+que permitir que quien fue anotado a mano se convierta en invitado o en
+cuenta SIN perder historial, y sin abrir la puerta a que alguien se apropie
+del historial de otro.
+**Decisión:** [HECHO] **alias, no migración**. El actor económico NO cambia
+nunca: sigue siendo `manual:{manualId}`, la clave con la que están escritas
+todas las obligaciones, y el `participantId` tampoco cambia. Vincular solo
+AÑADE identidad: `manualParticipants/{manualId}.linkedUid` pasa de null a un
+UID, y `recompute` usa ese alias exclusivamente para AUDIENCIA —
+`accountUidsOf` resuelve un actor manual vinculado a su UID, de modo que la
+persona pasa a poder LEER lo suyo. Mismos ids de documento, mismos actores,
+mismos importes, mismos balances, mismas liquidaciones. **No hay migración**:
+es justo la propiedad por la que se eligió el alias.
+**Seguridad:** vincular requiere DOS partes. La persona crea
+`manualLinkRequests/{manualId}_{uid}` para sí misma (Rules exige
+`uid == auth.uid`); solo el ANFITRIÓN la acepta o rechaza, y aceptar escribe
+el `linkedUid` en el MISMO batch, validado con getAfter. Sin ese
+emparejamiento no existe forma de escribir un vínculo. Invariantes: nadie
+nace vinculado; vincular es IRREVERSIBLE (revincular o desvincular
+reescribiría a quién pertenece un historial ya escrito); no se solicita sobre
+un manual ya vinculado; las solicitudes no son enumerables salvo por el
+anfitrión y no se borran, porque son el rastro de la aprobación.
+**Consecuencias:** los documentos anteriores siguen válidos sin tocarlos
+(`linkedUid` nulo se comporta como siempre). Queda fuera consolidar en una
+sola fila los saldos de quien tuviera obligaciones propias Y heredadas en el
+mismo contexto; `resolveActorIdentity` queda escrita para ese día. Interfaz:
+«Soy yo» en el ticket abierto por enlace y bandeja «Solicitudes de identidad»
+en el detalle del grupo, con aceptar y rechazar. Contrato en
+`docs/VINCULACION.md`.
+**Propagación ASÍNCRONA:** `accepted` no equivale a acceso. El vínculo nace
+`processing` y solo pasa a `active` cuando `propagateOnManualLink` reproyecta
+todas las sesiones afectadas —localizadas por `collectionGroup('participants')
+.where('manualId')`, no por `session.spaceId`, que omitía casos—. Una sesión
+afectada sin contexto estable deja el vínculo en `failed` con motivo, nunca
+`active` a medias. `retryManualLinkPropagation` recibe solo `spaceId` y
+`manualId`, autoriza al propietario actual o al `linkedUid` exacto y reintenta
+con claims/leases y timestamps escritos por Admin. `active` es no-op, un lease
+fresco sigue en curso, un lease expirado se puede recuperar y un `processing`
+sin metadata de lease no se adivina como obsoleto. El `linkedUid` exacto puede
+reintentar sin aportar ningún UID al callable; la solicitud original sigue
+exigiendo una cuenta completa, como ya imponía ADR-037. La bandeja global del
+anfitrión se apoya en `spaceOwnerUid` denormalizado y validado por Rules.
+La traza mínima es `linkRetryCount`, `linkRetryRequestedAt`,
+`linkRetryRequestedBy`, `linkProcessingAt` y `linkClaimId`; ningún cliente puede
+escribir esos campos.
+**Revisión:** decidir si la actividad (P6) debe registrar la vinculación como
+un hecho más de la cronología.
+
+### ADR-038: Autoridad económica por obligación y representación de manuales (A17/A18)
+**Estado:** Aceptada · **Fecha:** 2026-08-18 (`8d5ffba`, `5cc4007`, docs `edc43ab`)
+> *Registrada en este índice el 2026-09-04: la auditoría A1–A20 detectó que
+> ADR-038 existía en los contratos (`docs/RELACIONES_ECONOMICAS.md` §«Permisos y
+> liquidación por obligación», `docs/ESPACIOS.md`) pero **faltaba aquí**, entre
+> ADR-037 y ADR-039. Es justo el ADR que fija quién puede confirmar un cobro.*
+
+**Contexto:** «Confirmar recepción» aparecía en Economía global pero no en la
+portada de la relación ni en «Balance con X», y una parte de la deuda no era
+confirmable por nadie porque el deudor nunca la había declarado. Hacía falta
+decidir quién tiene autoridad sobre el dinero y sobre qué unidad se liquida.
+**Decisión:** [HECHO] **el receptor del dinero es quien confirma que lo ha
+recibido.** Ser propietario o administrador de un espacio NO da acceso al saldo
+de una cuenta ajena; solo permite **representar** a un participante MANUAL, que
+por definición no puede confirmar nada. Vincular ese manual (ADR-037) termina la
+representación sin revocar nada.
+- `economicActingRole` / `canConfirmReceipt` en `packages/domain` con espejo TS
+  (`backend/functions/src/domain/economicAuthority.ts`): un único predicado para
+  interfaz, Functions y —en su forma de lectura— Rules.
+- `settleEconomicEntries` liquida obligaciones **concretas** y escribe UN pago
+  por cada una (`allocations` + `economicEntryId`), así que un saldo agregado
+  nunca se convierte en una obligación nueva ni pierde su ticket. Importe por
+  defecto = lo pendiente de esa deuda; el parcial es la excepción. **Dos techos
+  obligatorios**: lo vivo en la obligación y lo vivo en el saldo bilateral (este
+  último impide cobrar dos veces una deuda ya saldada por una liquidación de
+  sesión, que no deja asignación por ticket). Idempotente por id determinista.
+- Si el actor obra por el lado acreedor la liquidación nace `confirmed`; por el
+  deudor, `pending`: **«Ya he pagado» es un aviso, nunca una precondición.**
+- `resolveEconomicPayment` acepta representación y solo consulta el espacio
+  cuando hay una identidad sin cuenta implicada (entre dos cuentas, coste cero).
+- Rules: `members/{uid}.role` como **única** delegación (solo la concede el
+  propietario, nadie nace admin, un INVITADO no puede serlo); lectura extra de
+  obligaciones con parte manual para quien administra su espacio, filtrada por
+  `hasManualParty` (derivado e inmutable) para que la consulta sea demostrable.
+- **Administrar un gasto ≠ administrar pagos**: un admin puede corregir el
+  ticket que originó una deuda (A11c) sin adquirir autoridad para confirmar que
+  un usuario registrado ha recibido dinero.
+
+**Consecuencias:** cierra A17 (autoridad) y A18 (liquidación por obligación), y
+es la base sobre la que A20 lleva «Confirmar recepción» a las cinco superficies
+de balance con su desglose real. Un pago legado no lo resuelve la callable de
+P5 por diseño: la app escribe en su `settlements/{id}`.
+**Tests:** 32 de planificación y validación en functions, 8 de Rules sobre
+permisos económicos, 9 de dominio y 16 de app.
+**Nota (2026-09-04):** el destinatario de `notifyOnSettlement` sigue siendo
+`session.ownerUid`, que desde este ADR **no es necesariamente el receptor
+económico**. Ver `docs/BACKLOG_SALDA.md` § N1 (hallazgo H1) antes de cablear
+notificaciones.
+
+### ADR-039: Expulsión con evidencia por CICLO y bloqueo separado (A11d)
+**Estado:** Aceptada · **Fecha:** 2026-08-26 (A11d)
+**Contexto:** faltaba la expulsión real de un grupo. Dos problemas de fondo.
+(1) El protocolo existente —`update {removedBy}` y luego `delete`— admitía
+estados parciales, y agruparlo en un batch NO era la solución: se midió en el
+emulador y Firestore entrega al trigger el cambio NETO del commit, así que
+`removedBy` no llega a verse y **toda expulsión se registraba como abandono
+voluntario**. (2) Borrar la membresía cortaba también `auditableByGroup`
+(A11b), es decir, le arrancaba al expulsado el ticket que explica su propia
+deuda.
+**Decisión:** [HECHO] la expulsión es **un solo `WriteBatch` de tres
+escrituras** y deja **DOS documentos con vidas distintas**, más una tercera
+proyección que resuelve el acceso histórico:
+
+- `spaces/{id}/removals/{uid}_{joinedAtMillis}` — evidencia **HISTÓRICA**,
+  append-only e inmutable (`update, delete: if false`).
+- `spaces/{id}/entryBlocks/{uid}` — bloqueo **VIGENTE** del enlace general.
+  Nace con la expulsión, muere con la readmisión explícita.
+- `sessions/{sid}/ticketEntitlements/{tid}_{uid}` — derecho **MONOTÓNICO**
+  por ticket, escrito por `recompute` y jamás retirado.
+
+**Por qué las dos primeras NO pueden fusionarse.** Es la pregunta que va a
+volver: parecen redundantes. No lo son, y fusionarlas reintroduce una carrera
+REAL. Cloud Functions entrega los eventos de Firestore **at-least-once y sin
+orden garantizado**, y un trigger puede ejecutarse con horas de retraso o
+reintentarse. Con una única lápida mutable por UID, el evento del borrado del
+ciclo A —procesado cuando el grupo ya pasó por el ciclo B— encontraría la
+lápida de B, no coincidiría con `before.joinedAt`, y clasificaría una
+expulsión real como `member_left`. Y como `persistEvents` usa `create()` («el
+primero gana»), esa falsificación sería **permanente**. La evidencia tiene
+que ser inmutable y estar indexada por ciclo; el bloqueo tiene que ser
+mutable y estar indexado por persona. Dos preguntas, dos vidas, dos
+documentos. El guardián ejecutable es el test «un evento retrasado del ciclo
+A no lo falsifica un ciclo B posterior» (`activity.test.ts`).
+**Clasificación en P6:** el trigger deriva `{uid}_{before.joinedAt.toMillis()}`
+del payload **inmutable** del evento y lee esa ruta. Evidencia presente →
+`member_removed`, con `actorUid = removedBy` y `at = removedAt` (la hora del
+hecho, no la del proceso). Ausente → `member_left`, y es una respuesta
+DEFINITIVA porque Rules exige la evidencia en el mismo commit que el borrado:
+«no hay» significa «no la habrá». Los ids no cambian de formato: ya llevaban
+el ciclo dentro.
+**Autoridad:** solo GRUPOS (`managesGroupOf`). El propietario expulsa a
+miembros y a administradores; un administrador solo a miembros normales;
+nadie al propietario ni a sí mismo. Una **relación** deja de tener expulsión
+administrativa —cerrando el agujero por el que su propietario podía retirar a
+la otra mitad y dejar un contexto de una sola identidad—. Salir sigue siendo
+un acto propio y su alcance no se toca (A3).
+**Reentrada:** una expulsión cierra el enlace general para esa persona.
+Vuelve solo con una invitación **posterior al bloqueo**, demostrable porque
+`spaceInvites.createdAt` pasa a estar anclado a `request.time` y reenviar lo
+renueva. Aceptarla crea la membresía y levanta el bloqueo en el MISMO commit:
+ni readmitido-y-bloqueado, ni bloqueo levantado sin volver. Vuelve como
+miembro NUEVO (`joinedAt` fresco, sin `role`), así que un antiguo
+administrador no recupera nada y el chat no le devuelve el intervalo en el
+que estuvo fuera. Si después sale por su pie, el enlace vuelve a servirle; si
+lo vuelven a expulsar, se bloquea otra vez.
+**Acceso histórico:** el expulsado conserva EXACTAMENTE los tickets en los
+que participó económicamente —el ticket, sus líneas y su foto— y nada más:
+ni la sesión (ahí vive el `shareCode`), ni otros tickets, ni el listado, ni
+miembros, ni chat, ni administración. La proyección es monotónica **a
+propósito**: `ticketParticipants` es la foto del reparto vivo y se retira,
+esta constata que alguien participó alguna vez. Sin esa diferencia, una
+corrección A11c posterior le quitaría el ticket que explica la deuda que ya
+pagó. `recompute` no tiene bucle de borrado para ella, y su creación se
+comprueba ANTES del atajo `unchanged` —si no, faltaría justo en los tickets
+que llevan tiempo quietos—. El derecho lleva `accountId` (para llegar al
+ticket con un GET, sin listar cuentas) y los nombres de ESE reparto (un `pid`
+sin nombre no explica ninguna deuda; el censo entero de la sesión sería de
+más). Esos nombres se indexan por `pid` **y por ACTOR económico** cuando el
+participante es MANUAL: la deuda de P5 nombra a `manual:{id}`, nunca a un
+`pid`, y el nombre de un manual lo custodia el espacio, que el expulsado ya
+no lee —sin ese alias su propio saldo se leía «Persona sin nombre»—. No abre
+`manualParticipants` (ni la colección ni un documento suelto) y no crea
+ninguna agenda histórica: solo viajan los manuales de los tickets que ya
+están en SU economía. Storage aplica la misma frontera sobre
+`receipts/{sid}/{tid}/`.
+**Consecuencias:** expulsar no borra ni cancela nada económico —`recompute`
+nunca leyó la membresía y las callables de pago tampoco—, así que deudas,
+pagos y liquidaciones sobreviven. Lo que sí se pierde de inmediato es la
+autoridad derivada de pertenecer: A11b general, A11c y la representación
+de identidades manuales de ese grupo. Sin backfill: los grupos existentes no
+tienen evidencias ni bloqueos, y quien fue expulsado antes de A11d puede
+volver por el enlace. Ventana de rollout: con las Rules nuevas publicadas, un
+cliente anterior no puede expulsar (su protocolo ya no se acepta).
+**Revisión:** la audiencia de los eventos se sigue calculando en el momento
+del trigger (limitación preexistente de P6, acotada a 30 UIDs); si algún día
+importa la composición exacta del instante del hecho, habrá que congelarla.
+
+### ADR-040: Eliminar un gasto — borrado real con evidencia del actor (A2)
+**Estado:** Aceptada · **Fecha:** 2026-08-27 (A2)
+**Contexto:** no había forma de eliminar un ticket. Las Rules lo permitían al
+dueño de la sesión, pero ninguna pantalla lo ofrecía, y hacerlo «a pelo»
+dejaba tres problemas: las `lines` son una subcolección y sobreviven al
+borrado del padre —con un «documento fantasma» que sigue apareciendo en
+`listDocuments()`—; la foto no la puede borrar ningún cliente (la regla de
+Storage exige `request.resource`, que en un delete no existe); y P6 atribuía
+el hecho al dueño de la sesión, que desde A11c ya no es necesariamente quien
+actúa.
+**Decisión:** [HECHO] **hard delete**, sin `deleted: true` ni papelera: un
+gasto equivocado deja de existir. Tres piezas:
+
+- **Commit atómico del cliente**: `sessions/{sid}/ticketRemovals/{tid}` +
+  borrado del ticket, en un único `WriteBatch`. Rules validan cruzado con
+  `exists/existsAfter/getAfter`: no hay borrado sin evidencia ni evidencia sin
+  borrado, el actor es `request.auth.uid`, la hora es `request.time`, y el
+  resumen (`merchantName`, `grandTotal`) se compara con el ticket real.
+  Inmutable: `update, delete: if false`.
+- **`cleanupOnTicketDelete`** (Admin, `retry`): `recursiveDelete` de líneas y
+  fantasma, `ticketAccess`/`ticketClaims`/`ticketEntitlements`/`ticketLinks`
+  de ESE ticket, la cuenta contenedora si queda vacía, la foto de Storage, y
+  un `recompute` final.
+- **`recompute` sin cambios**: ya podaba `economicEntries`,
+  `ticketParticipants` y `ticketParticipantProjections`, y regeneraba
+  liquidaciones y agregados. Se midió su convergencia en vez de reescribirlo.
+
+**Por qué la evidencia y no una firma en el ticket.** Es el mismo hallazgo de
+ADR-039: Firestore entrega al trigger el cambio NETO del commit, así que
+`update {lastEditedByUid}` + `delete` en el mismo batch no deja ver la firma
+(`after` viene vacío) y el actor se perdería. El único documento del commit
+que sobrevive al borrado puede llevarlo.
+**Economía:** desaparece la obligación del ticket; **NO** desaparece ningún
+pago. Un pago confirmado que se queda sin deuda detrás se convierte en
+crédito del pagador y **el saldo puede invertirse** —es correcto: el dinero se
+movió de verdad—. Una declaración `pending` sobrevive sin cancelarse y sigue
+siendo confirmable por su receptor. Las `allocations` que nombran obligaciones
+ya borradas se conservan tal cual: son el contexto histórico del pago y
+reasignarlas sería inventar a qué se pagó.
+**Autoridad:** el creador del gasto —que en este modelo ES el dueño de la
+sesión, porque nadie más puede crear tickets— y quien administra el GRUPO
+(`managesGroupOf`, que excluye relaciones: la contraparte no borra el gasto de
+la otra). Sesión cerrada = solo lectura, igual que A11c.
+**`ticketEntitlements` terminan aquí.** A11d los hizo monotónicos frente a
+*correcciones*, no frente a la desaparición del recurso: sin ticket no
+protegen nada, y borrarlos evita que un derecho viejo abra un futuro id
+reutilizado. La evidencia constata que el gasto existió; no da lectura de él.
+**Consecuencias:** la sesión NO se borra aunque se quede sin gastos (otro
+lifecycle, y quien borra puede no ser su dueño). La vista legacy de la sesión
+converge a 0 € mientras la relación P5 conserva la inversión: son preguntas
+distintas —«qué costó este gasto» y «cuánto nos debemos»— y el saldo
+autoritativo es el de P5. La copia local de la foto en el dispositivo no se
+retira: `ReceiptImageStore` no tiene API de borrado (misma deuda que el
+borrado de grupos).
+**Revisión:** durante la convergencia aparece brevemente una liquidación
+invertida en la sesión legacy. Se comprobó que no habilita ninguna acción
+económica irreversible (solo la puede confirmar su receptor, y ese mismo
+receptor puede deshacerla; su espejo en `economicPayments` es derivado y
+recompute lo retira). Si algún día molesta visualmente, se aborda como
+problema de recompute, no de A2.
+
+### ADR-041: El reparto no cuenta hasta que todo el mundo termina (A19)
+
+**Contexto.** Elegir consumo se escribía y se publicaba a la vez: cada toque
+disparaba un recompute que creaba liquidaciones y obligaciones P5 firmes desde
+un reparto a medio hacer. Con ADR-021 (lo no reclamado es de quien pagó), esos
+estados intermedios no eran aproximados sino falsos, y además **cobrables**.
+La investigación descartó la hipótesis inicial: las escrituras punteadas por
+par (unidad, persona) ya eran correctas bajo concurrencia —medido: dos
+personas, dos dispositivos del mismo uid, ráfagas y offline conservan todo—.
+La causa raíz es una ambigüedad: «no he mirado» y «no consumí nada» son
+indistinguibles mirando las líneas. Falta un bit.
+
+**Decisión.** Dos campos en el documento del ticket (`pickingModelVersion` y
+`picking`). Un gasto `byItem` es económicamente firme cuando ningún
+participante ACTIVO sigue en `picking.open` y la topología no ha cambiado
+desde el cierre. Toda escritura de reparto debe dejar abierto al pid afectado
+—lo exigen las Rules con un único `getAfter`—, así que un «he terminado»
+obsoleto es imposible, no improbable. Un ticket reabierto **congela** su
+última economía firme (`picking.firmContribution`) en vez de retirarla, y el
+universo del LIBRO (`ledgerIds`) se separa del universo del REPARTO
+(`activeIds`). Contrato: `docs/CIERRE_DE_CONSUMO.md`.
+
+**Alternativas descartadas.** `schemaVersion: 3` con `pending` por unidad,
+generaciones, `unitIds` generacionales y mapas invertidos: resolvían un
+problema de concurrencia que no existía, a cambio de migración y doble
+esquema. Debounce del recompute: reduce la frecuencia de los estados falsos,
+no los elimina, y un temporizador no explica a nadie cuándo cuenta su
+selección. Segunda proyección económica provisional: rompía la invariante de
+un solo motor —`settlements` es la simplificación de `balances`, no un dato
+paralelo—. Retirar la economía del ticket reabierto: medido, fabrica una
+liquidación inversa por el importe entero, nueva y cobrable, solo por estar
+editando.
+
+**Consecuencias.** Ni Functions nuevas (`recomputeOnTicket` ya cubría la ruta,
+y por eso `picking` es un campo y no una subcolección) ni motor nuevo:
+`frozenContribution` produce la entrada de siempre. `assignment`, los motores
+y los vectores dorados quedan intactos. Se arreglan de paso dos fallos
+latentes ajenos a A19: desactivar a alguien con una liquidación confirmada
+lanzaba `unknownParticipant` y dejaba la sesión sin recalcular, y un commit de
+recompute abortado se perdía porque los triggers no llevan `retry`. Sin
+migración de datos históricos. Ventana de rollout: un cliente antiguo puede
+seguir editando mientras el pid esté abierto, y se le deniega en cuanto esté
+cerrado — degrada denegando, nunca corrompiendo.
+
+**Restricción que no se puede romper.** La rama de reparto admite UN acceso de
+documento adicional, y `validUnitWrite` se evalúa una sola vez, izada a la
+rama. Con la duplicación anterior, añadir la comprobación de reapertura
+agotaba las 1000 expresiones en el camino de A10 sobre un MANUAL.
+
 ---
 
 <a name="parte-x"></a>
@@ -1250,7 +1912,8 @@ documento de saldo por usuario; P5 calcula esa vista en el cliente.
 
 ## §56. Glosario
 
-**Grupo/Sesión** raíz de compartición (código: `Session`) · **Cuenta** agrupador
+**Relación/Grupo** contexto social raíz (código: `Space`) · **Sesión** contenedor
+económico interno de uno o varios tickets · **Cuenta** agrupador
 de tickets dentro del grupo · **Ticket** gasto escaneado o manual con pagador ·
 **Línea** producto con asignación · **Asignación** unassigned|one|shared|all con
 pesos · **quantityMilli** cantidad ×1000 (0,466 kg → 466) · **Balance** neto por
@@ -1279,6 +1942,9 @@ con prefijo (`M5:`, `fix(mvp):`, `docs:`) y coautoría de Claude; feature-first
 | Motor de reparto | spec §8, Biblia §26, `docs/REPARTO_POR_UNIDADES.md` | 006, 007, 025, 026 | `packages/domain/.../split_engine.dart` + espejo `backend/functions/src/domain/splitEngine.ts` | golden `split_engine.json`, propiedades en `split_engine_test.dart`, recompute y Rules |
 | BalanceEngine | spec §8, Biblia §27 | 004, 013, 019 | `.../balance_engine.dart` + `balanceEngine.ts` | golden `balance_engine.json` (10), `balance_engine_test.dart`, `recompute.test.ts` (regresión E1) |
 | Relaciones económicas | `docs/RELACIONES_ECONOMICAS.md` | 029 | `economic_ledger.dart` + `economicLedger.ts`, `economicPayments.ts`, `features/economy/**` | golden `economic_ledger.json`, tests de dominio/Functions/Flutter/Rules |
+| Relaciones y grupos | `docs/ESPACIOS.md` | 028, 030 | `features/spaces/**`, `features/home/**`, contexto en `features/sessions/**` | `spaces_repository_test.dart`, `session_repository_test.dart`, `app_smoke_test.dart`, Rules |
+| Enlaces de ticket | `docs/ENLACES_TICKET.md` | 036 (sobre 033, 035) | `ticket_links_repository.dart`, `join_ticket_screen.dart`, `linked_ticket_screen.dart`, `firestore.rules` (ticketLinks + ticketAccess + ticketClaims) | `ticket_links_test.dart` (12), Rules «enlaces de ticket» (17) |
+| Enlaces de grupo | `docs/ESPACIOS.md` | 035 (sobre 012, 033, 034) | `spaces_repository.dart`, `space_link_screen.dart`, `join_space_screen.dart`, `router.dart`, `AndroidManifest.xml`, `firestore.rules` (spaceLinks + joinGrants) | `space_links_test.dart` (18), `join_space_screen_test.dart` (5), `join_route_test.dart` (2), Rules «enlaces de grupo» (20) |
 | recompute | spec §12.2, Biblia §31 | 004, 013, 015 | `backend/functions/src/recompute.ts` | `recompute.test.ts` (11) |
 | OCR | spec §10, Biblia §28 | 009, 010 | `packages/ocr_parser/**` | corpus (13) + unit (9) |
 | Contrato IA | spec §9, Biblia §29 | 011 | `packages/ai_providers/**` + `features/ai/**` | `ai_providers_test.dart` (10) + `ai_feature_test.dart` (6) |
@@ -1466,6 +2132,7 @@ actualizada si toca un componente trazado.
 | I6 | spec RF-95/96 y aiPolicy descritos como v1; no implementados | Deuda DT-1/DT-10/DT-11 con hueco en roadmap R1/R2 |
 | I9 (RESUELTA) | recompute repartía las líneas huérfanas entre todos EN VIVO; la spec RF-46 solo lo preveía al finalizar y con confirmación | Corregido en ADR-021: huérfanas → pagador en el cálculo continuo. Ya no divergen |
 | I7 | Formato de backup `appcuentas-backup` con marca provisional "Salda" | Valor CONGELADO de la spec §14 (compatibilidad); no renombrar |
+| I10 (RESUELTA) | `brand.json` declaraba `androidApplicationId: dev.salda.app` mientras Gradle compilaba `dev.salda.salda_mobile`; la documentación citaba el primero como oficial. Detectada al publicar `assetlinks.json` en el cierre del Sprint 4 | El campo de `brand.json` era **código muerto** (no lo emitía el codegen ni lo leía nadie: regenerar los tokens tras quitarlo no cambia un byte). Oficial = **`dev.salda.salda_mobile`**, con fuente de verdad ÚNICA en `android/app/build.gradle.kts`; cambiarlo convertiría la app en otra distinta y los invitados perderían su identidad local (ADR-034). Campo eliminado, docs corregidas y `android_identity_test.dart` vigila que Gradle, manifest y `assetlinks.json` no vuelvan a separarse |
 | I8 | CLAUDE.md §12 dice "smoke test usa Brand.tagline"; el test actual valida login/estado vacío | Detalle obsoleto de CLAUDE.md; corregir en su próxima edición |
 
 *Fin de la Biblia. Cualquier modelo o ingeniero que llegue hasta aquí tiene todo

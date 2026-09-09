@@ -57,15 +57,40 @@ Forzarlo antes rompería la web de invitados.
 
 ## Firebase y Google
 
-- El APK existente usa `dev.salda.salda_mobile`; no se cambia porque Android lo
-  trataría como otra app y un invitado podría perder su identidad local. `salda-dev`
-  tiene una app Firebase específica para ese paquete
-  (`1:923355592259:android:024e3c6d1eab95bfbac6f6`).
+- **`dev.salda.salda_mobile` es el identificador OFICIAL** y su única fuente de
+  verdad es `apps/mobile/android/app/build.gradle.kts`. No se cambia porque Android
+  lo trataría como otra app y un invitado perdería su identidad local (ADR-034).
+  `salda-dev` tiene una app Firebase específica para ese paquete
+  (`1:923355592259:android:024e3c6d1eab95bfbac6f6`). Existe además una app
+  registrada para `dev.salda.app` (`…:7e525bf8fd1252b9bac6f6`), resto de un
+  identificador provisional que nunca llegó a compilar: **no la usa nadie** y no
+  debe tomarse como referencia.
+- Huellas SHA-1 registradas hoy en `salda-dev` para `dev.salda.salda_mobile`:
+  `4be8fe7f…` y `716725783d…`. **El certificado de depuración de una máquina nueva
+  NO está entre ellas**: Google Sign-In fallará desde esa máquina hasta registrar su
+  SHA-1, y los App Links solo verifican si `assetlinks.json` incluye el SHA-256 del
+  certificado con el que se firmó el APK instalado. Obtener el propio:
+  `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey
+  -storepass android`.
 - El cliente OAuth público de desarrollo es el valor por defecto de
   `GOOGLE_SERVER_CLIENT_ID`; producción debe pasarlo por `--dart-define` al añadir
   flavors.
-- Las huellas SHA-1 y SHA-256 debug están registradas para el paquete existente. Las
-  firmas release/Play se registrarán antes de publicar.
+- Las firmas release/Play se registrarán antes de publicar.
+- **Firma de release: hoy NO existe clave propia.** `buildTypes.release` firma con la
+  clave de DEPURACIÓN, lo que sirve para `flutter run --release` y APK de prueba pero
+  produce un artefacto no publicable. Gradle lo protege: si no hay
+  `android/key.properties`, **el AAB de release falla** (es el formato con el que se
+  sube a Play) y el APK avisa por consola pero se genera. Para forzar un AAB de
+  prueba: `-PallowDebugSigning=true`.
+- **Qué hará falta para Play App Signing**: (1) generar una clave de subida
+  (`keytool -genkeypair -v -keystore upload.jks -keyalg RSA -keysize 2048
+  -validity 10000 -alias upload`); (2) crear `apps/mobile/android/key.properties`
+  con `storeFile/storePassword/keyAlias/keyPassword` — ya gitignorado, junto a
+  `*.jks` y `*.keystore`, y **nunca** en el repositorio ni en CI sin secret manager;
+  (3) subir el AAB, con lo que Play genera el certificado de **firma de app**, que es
+  distinto del de subida; (4) añadir a `assetlinks.json` el SHA-256 de la firma de app
+  que muestra Play Console, o los App Links dejarán de verificarse en producción;
+  (5) registrar en Firebase el SHA-1 de ambos certificados para Google Sign-In.
 - En `salda-dev` están habilitados y verificados Email/Password, Anonymous y Google.
   Producción deberá repetir esta configuración antes de publicar.
 

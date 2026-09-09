@@ -1,9 +1,13 @@
 import 'package:ocr_parser/ocr_parser.dart';
 import 'package:test/test.dart';
 
-OcrElement el(String text, double left, double top,
-        {double width = 100, double height = 20}) =>
-    OcrElement(text, OcrRect(left, top, left + width, top + height));
+OcrElement el(
+  String text,
+  double left,
+  double top, {
+  double width = 100,
+  double height = 20,
+}) => OcrElement(text, OcrRect(left, top, left + width, top + height));
 
 void main() {
   group('LineBuilder', () {
