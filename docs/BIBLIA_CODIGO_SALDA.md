@@ -153,9 +153,161 @@ Corolario de coste: la comprobación de futuro va **después** de la barata, par
 que el camino frecuente corte en corto y no gaste un acceso de documento (ver
 C5, el presupuesto es finito).
 
+### C14. Escribir bien en el backend no demuestra que se lea ni se pinte
+
+**Corolario práctico de C2, y el punto ciego más caro que tiene este proyecto.**
+
+El checkpoint en dispositivo (2026-09-09) sacó **dos fallos P1/P2 distintos con
+la misma forma**: el dato se escribe correctamente, las Rules lo validan, hay
+tests que lo comprueban… y **nadie verifica el camino de vuelta**.
+
+- **BUG-CP-05**: `finishPicking` persiste bien, pero la pantalla se alimenta de
+  `historicTicketProvider`, un `FutureProvider` con `.get()` en vez de
+  `.snapshots()`, al que `sessionTicketProvider` da **precedencia sobre el
+  stream vivo**. El estado no se refresca nunca — comprobado esperando 7
+  minutos.
+- **BUG-CP-07**: la corrección escribe `lastEditedByUid`/`lastEditedAt` y P6
+  emite su evento, pero `_ticketFrom` —el **único** mapper del ticket— no lee
+  esos campos. `_CorrectionSignature` es **código muerto**: no puede
+  renderizarse jamás. `ticket_correction_test.dart` afirma **seis veces** que el
+  documento se escribió; ninguna que alguien lo lea.
+
+La regla que sale de aquí: **un test que hace `expect(doc['campo'], …)` no
+cubre la funcionalidad**, solo la escritura. Si un campo existe para que un
+humano lo vea, hace falta además un test de que el modelo lo mapea y la pantalla
+lo muestra. Lo mismo para «esto se actualiza en vivo»: hay que probar que el
+provider es un stream, no un `Future`.
+
+Aviso adicional: un smoke manual **en la web** no valida el mismo contrato **en
+la app**. A19 se dio por realtime tras un smoke en navegador; el camino de la app
+nunca se ejercitó y era justo el roto.
+
 ---
 
 # Entradas cronológicas
+
+## CHECKPOINT EN DISPOSITIVO REAL — 2026-09-09
+
+**Rama:** `codex/relations-groups-navigation` · **HEAD:** `d627c55`
+**Tipo de sesión:** validación pura. **Cero código funcional tocado**, sin
+deploy, sin merge. `main` y `salda-prod` intactos.
+
+Contrato y resultados completos en `docs/BACKLOG_SALDA.md` § «Checkpoint en
+dispositivo real». Aquí queda **solo lo que no se deduce leyendo el código**.
+
+### Qué se pidió
+
+Ejecutar en un Android real lo que figura RESUELTO y comprobar que funciona
+**integrado**, no solo en tests: A2, A3, A10, A11, A12, A15, A17, A18, A19, A20.
+Observar, reproducir y registrar — **prohibido arreglar**.
+
+### Un obstáculo de entorno que costó el arranque: un BOM
+
+`flutter build apk --debug` falló con «Firma de desarrollo COMPARTIDA no
+configurada», pero `scripts/verify-signing-key.ps1` pasaba **entero**. La
+contradicción tenía una causa concreta:
+
+`dev-keystore.properties` estaba guardado como **UTF-8 con BOM**. `Get-Content`
+de PowerShell detecta el BOM y lo descarta al decodificar; `Properties.load()`
+de Java lee ISO-8859-1 y **lo conserva**, convirtiendo la primera clave en
+`﻿storeFile`. Por eso `getProperty("storeFile")` devolvía `null` y el
+guardián caía en la rama «no hay configuración» en vez de en las de keystore
+ausente o contraseñas incompletas.
+
+Se corrigió retirando **exclusivamente los 3 bytes** del BOM (122 → 119 bytes,
+0 bytes no-ASCII restantes: todos los valores eran ASCII puro). No se tocó
+ningún valor, alias ni contraseña, y el certificado siguió dando el mismo
+SHA-256.
+
+**Lección operativa:** cuando una herramienta lee bien un `.properties` y otra
+no, sospechar de la **codificación antes que del contenido**. Es la misma
+familia de fallo que el mojibake de PowerShell ya documentado en `CLAUDE.md` §9.
+
+Segundo obstáculo, menor: el móvil tenía un build del 17 de agosto con
+`versionCode 2001` frente al `1` de HEAD, así que `adb install -r` daba
+`INSTALL_FAILED_VERSION_DOWNGRADE`. Se resolvió con `-d`, que **conserva los
+datos locales** — importante, porque desinstalar habría borrado la identidad
+local de invitado (ADR-034).
+
+### Lo que el checkpoint demostró y los tests no podían
+
+Que el núcleo económico aguanta **encadenado**: repartir por unidades entre tres
+identidades (una con cuenta, dos MANUAL), cerrar el reparto por quien no puede
+pulsar, derivar obligaciones, confirmarlas como receptor, reabrir el reparto con
+un pago confirmado encima y comprobar **en hardware** que la economía firme se
+**congela y no se retira** (C9). Eso es una cadena de siete sistemas que ningún
+test unitario recorre entera.
+
+También validó A3 por su camino más delicado: un grupo cuyos únicos otros
+miembros son MANUAL **bloquea la salida del propietario** con explicación propia
+y sin ofrecerlos como sucesores.
+
+### Los dos P1, y por qué comparten culpa
+
+Ver **C14**, que nació de esta sesión. `BUG-CP-05` y `BUG-CP-07` son el mismo
+punto ciego: escritura verificada, lectura sin cubrir.
+
+### BUG-CP-03: lo que queda por discriminar
+
+La foto del ticket no sube: `403 Permission denied` sobre
+`receipts/{sid}/{tid}/original.jpg`, con el reintento transparente de P0.2
+girando en vacío. **Descartado por lectura:** `contentType` correcto
+(`image/jpeg`), ruta correcta, App Check irrelevante (solo emite un placeholder
+token), y `canUseCore()` improbable (Google Sign-In con email verificado).
+
+**Hipótesis principal — Rules cross-service.** `storage.rules` hace
+`firestore.get(/…/sessions/$(sid))`, que es una llamada **entre servicios**: el
+agente de servicio de Storage necesita permiso de lectura sobre Firestore. Si
+falta el binding IAM, `firestore.get()` **no devuelve false: falla la
+evaluación**, y la regla deniega. Explica lo que la otra hipótesis no explica:
+que falle aunque la cláusula `allow write` **no haya cambiado desde P1**
+(`5ad6781`). Y explica por qué CI no lo ve: **el emulador no aplica IAM**, así
+que los 13 casos de `storage_receipt_access.test.mjs` seguirán en verde para
+siempre. C2 de manual.
+
+**Hipótesis secundaria:** `storage.rules` desplegadas anteriores a P1. A11b
+(`dd8c1bc`) y A11d (`6607fd5`) las modificaron y `git branch --contains`
+confirma que **solo existen en esta rama**; el deploy de A19 fue únicamente
+*functions* + *firestore:rules*.
+
+**Cómo cerrarlo en la sesión de arreglo:** mirar en la consola de `salda-dev` el
+ruleset de Storage realmente desplegado y el IAM del agente de servicio; o abrir
+la foto desde una **segunda cuenta** que nunca haya tenido la copia local — si
+tampoco carga, la lectura remota también está denegada y confirma el
+diagnóstico. **No se desplegó nada durante el checkpoint.**
+
+### Una auditoría que terminó en «no tocar nada»
+
+Un reparto produjo 2,00 € donde la aritmética de líneas decía 1,99 €. Se auditó
+`SplitEngine` a fondo antes de clasificarlo, y la conclusión fue **conservarlo**:
+la política la fijan **DC-11/RF-43** (congeladas) y **ADR-007**, que ya nombra y
+rechaza por escrito la alternativa. El céntimo **es C4 funcionando**. Cambiarlo
+duplicaría el redondeo, obligaría a versionar la política para siempre y
+re-derivaría importes bajo pagos confirmados — es decir, abriría **N3**.
+
+Queda registrado porque el impulso de «arreglar» ese céntimo volverá: **la
+respuesta ya está investigada y es no.** Lo que sí es real es la queja de fondo
+—no se puede reconstruir de dónde sale el importe—, y eso se resuelve en
+**presentación**, sin tocar el motor.
+
+### Falsos positivos que conviene no volver a investigar
+
+- `Default FirebaseApp failed to initialize … google-services was not applied`:
+  **esperado**. El plugin nativo no se aplica a propósito; la configuración va en
+  `firebase_options.dart` y Dart inicializa después.
+- Dos eventos de Actividad por una corrección: **no es un fallo de
+  idempotencia**. El id es determinista (`hash12(uid + instante)`), pero hay tres
+  puntos de escritura que estampan `_correctionSignature`, y corregir cabecera y
+  línea son **dos operaciones**. Un reintento sí converge al mismo id.
+
+### Qué debe anticipar la siguiente sesión
+
+- **Una sesión fresca por bug.** Orden recomendado en el backlog.
+- Tres comprobaciones siguen **imposibles sin una segunda cuenta registrada**
+  (CP2 roles, CP3 casos A y B, CP6 realtime entre dos clientes). Se cubren juntas.
+- **La web desplegada en `salda-dev` es anterior a A19** y no sirve como segundo
+  cliente: Hosting nunca se desplegó.
+- Ningún A# cambia de estado por el checkpoint.
 
 ## A3 — ABANDONAR UN GRUPO Y SUCESIÓN DEL PROPIETARIO — 2026-09-07
 

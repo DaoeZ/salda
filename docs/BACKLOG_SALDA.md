@@ -68,6 +68,13 @@ sirven para distinguir «no existe» de «falta un camino»— y **no** son cont
 | N2 | Web completa | PARCIAL | 25% |
 | N3 | Reconciliación / reembolso | EN DISCUSIÓN + contención parcial | 15% |
 
+> **Los estados de arriba se validaron en hardware el 2026-09-09.** Ver
+> **«Checkpoint en dispositivo real»**, al final de este archivo: resultado
+> CHECKPOINT PASS CON HALLAZGOS, seis BUG-CP abiertos (dos P1), cinco
+> observaciones de auditabilidad y tres casos que siguen sin probar por faltar
+> una segunda cuenta registrada. Ningún hallazgo afecta a la corrección del
+> dinero, y **ningún A# cambia de estado por el checkpoint**.
+
 ---
 
 # A1 — Home más visual + fotos
@@ -1188,6 +1195,143 @@ económico —sin crear un segundo motor— antes de implementar.
 ## Dependencias
 
 **Debe resolverse antes de considerar definitiva la economía dinámica de N2.**
+
+---
+
+# CHECKPOINT EN DISPOSITIVO REAL — 2026-09-09
+
+**Resultado: CHECKPOINT PASS CON HALLAZGOS.** Primera validación integrada en
+hardware de lo que figuraba RESUELTO. Ninguna de las incidencias afecta a la
+corrección del dinero.
+
+## Cómo se ejecutó
+
+| | |
+|---|---|
+| HEAD | `d627c55` · rama `codex/relations-groups-navigation` |
+| Build | `flutter build apk --debug` + `adb install -r -d` |
+| Firma | keystore compartida, SHA-256 esperado, APK verificado con `scripts/verify-signing-key.ps1` |
+| Firebase | **`salda-dev`** (`firebase_options.dart`), emuladores OFF, `salda-prod` inalcanzable desde debug |
+| Dispositivo | Xiaomi 2412DPC0AG (`rodin_eea`), **Android 16 / SDK 36** |
+
+Sin cambios funcionales locales en la build: solo `.claude/*`, `.gitignore` y
+`CLAUDE.md` estaban modificados.
+
+## CP1–CP8
+
+| CP | Alcance | Estado |
+|---|---|---|
+| CP1 | Arranque, auth, Home, espacios, navegación | **PASS** |
+| CP2 | Roles y permisos de grupo (A11) | **PARCIAL** — falta 2ª cuenta |
+| CP3 | Abandonar grupo (A3) | **PASS (Caso C)** — A y B faltan 2ª cuenta |
+| CP4 | Ticket real (A12/A15) | **PASS con salvedad** |
+| CP5 | Asignación administrativa (A10) | **PASS** |
+| CP6 | Cierre de consumo (A19) | **PARCIAL** — falta realtime con 2 clientes |
+| CP7 | Economía (A17/A18/A20) | **PASS** |
+| CP8 | Corrección posterior (A11c) | **PASS con hallazgo** |
+
+**Salvedad de CP4:** A12 no se reprodujo, pero se comprobó **vía IA**. El fix de
+A12 vive en el **parser local**, que NO quedó observado aisladamente antes de
+invocar la IA. No se sobreafirma PASS del parser local.
+
+**Evidencia positiva fuerte en dispositivo:** A3 (bloqueo limpio sin sucesor, sin
+proponer manuales), A10 (matriz completa, compartir entre varios, cerrar por
+otro), A11a (a un MANUAL no se le ofrece rol), A15 (edición manual que sobrevive
+al guardado y a la reapertura), A17/A18/A20 (receptor confirma sin declaración
+previa, liquidación por obligación concreta, parcial aceptado, agregado que no
+funde deudas) y A19 en su parte crítica: **un pago confirmado no se retira ni se
+recalcula mientras el reparto está reabierto** (C9 verificado en hardware).
+
+## Hallazgos
+
+| ID | Qué | Sev. | Causa raíz |
+|---|---|---|---|
+| **BUG-CP-03** | La foto del ticket no sube a Storage (403 `Permission denied` en `receipts/{sid}/{tid}/original.jpg`, con reintentos en bucle) | **P1** | **Por discriminar.** Principal: Rules cross-service Storage→Firestore sin permiso en `salda-dev`. Ver Biblia de Código |
+| **BUG-CP-05** | El estado del reparto no se refresca en vivo; hay que salir y reentrar | **P1** | `historicTicketProvider` es `FutureProvider` con `.get()`, y `sessionTicketProvider` le da precedencia sobre el stream vivo |
+| **BUG-CP-02** | El scroll del detalle de ticket queda atrapado hacia abajo | **P2** | Sin investigar |
+| **BUG-CP-04** | El balance neto bilateral no explica ambas direcciones en su desglose | **P2** | El libro netea antes de la pantalla: `withUser()` devuelve un único balance y `openObligations()` solo trae esa dirección |
+| **BUG-CP-07** | El detalle del ticket no muestra «Corregido por … · fecha» | **P2** | `_ticketFrom` no lee `lastEditedByUid`/`lastEditedAt` → `_CorrectionSignature` es código muerto |
+| **BUG-CP-01** | Overflow visual al editar un producto | **P3** | Sin investigar |
+| ~~BUG-CP-06~~ | ~~Pago parcial rechazado~~ | — | **DESCARTADO** |
+
+**BUG-CP-06 descartado, y por qué importa:** el rechazo de 3,00 € sobre una
+obligación de 7,98 € estaba explicado por una **reserva pendiente de 6,75 €**
+(`available = 798 − 675 = 123`, y `300 > 123`). El techo bilateral de
+`planEntrySettlements` funcionaba **exactamente** como está documentado. Con un
+ticket nuevo el pago parcial funciona. **No es regresión de A18.**
+
+**BUG-CP-04 es P2 y no P1 porque el dinero está protegido**: intentar liquidar
+por encima del neto se rechaza en backend con `PAYMENT_EXCEEDS_BALANCE`. El
+defecto es de explicación, no de cálculo.
+
+## Observaciones de producto (no son bugs)
+
+| ID | Qué |
+|---|---|
+| **OBS-CP-A14** | «Ver balances» de un grupo solo muestra los del usuario actual. Primera señal de uso real para reconsiderar A14, hoy fuera del roadmap |
+| **OBS-CP-UX** | No se muestra el precio unitario (`5 × 1,15 €`); solo cantidad y total |
+| **OBS-CP-LEGACY** | Una obligación puede llevar una reserva pendiente cuya procedencia no es visible desde la UI, y el error no orienta a «Pagos por confirmar» |
+| **OBS-CP-AUDIT-DIFF** | Una corrección deja actor + ticket + fecha, pero **no un diff** de qué cambió |
+| **OBS-CP-ACT-GROUP** | Una sesión de corrección con varios cambios emite un evento por escritura, no uno por sesión. El id es determinista, así que **no es fallo de idempotencia** |
+
+**Los cuatro primeros, más BUG-CP-04 y BUG-CP-07, son el mismo problema de
+fondo: el usuario ve importes correctos que no puede reconstruir.** Forman un
+bloque coherente de auditabilidad y conviene tratarlos en una sola sesión.
+
+## Decisión de producto: `SplitEngine` se conserva
+
+Durante el checkpoint se observó que una diferencia de línea de 3,98 € repartida
+a medias producía 2,00 € en vez de 1,99 €. Se auditó el motor y **se decidió
+conservarlo tal cual**:
+
+- La política es **deliberada**: **DC-11** y **RF-43** (congeladas en la spec)
+  exigen prorrateo proporcional, y **ADR-007** fija repartir el `grandTotal` por
+  pesos de consumo, **nombrando y rechazando por escrito** la alternativa
+  (prorratear cada ajuste acumulaba error).
+- El céntimo **es la invariante funcionando** (`Σ partes == grandTotal`, C4), no
+  un fallo. La alternativa no elimina el redondeo: lo duplica y lo hace visible.
+- Cambiarla obligaría a versionar la política para siempre y re-derivaría
+  importes bajo pagos ya confirmados — justo el caso abierto de **N3**.
+
+**No registrar ese céntimo como bug. No reabrir ADR-007** salvo que se cumpla su
+condición de revisión declarada: «si un caso legal exigiera desglose exacto por
+ajuste».
+
+## No probado — requiere una segunda cuenta registrada
+
+Las tres se cubren en **una sola sesión** en cuanto exista:
+
+1. **CP2** — owner → miembro registrado → «Nombrar administrador»; y que un
+   admin no pueda otorgarse autoridad que no le corresponde.
+2. **CP3 Caso A** (hereda el administrador) y **Caso B** (hereda el miembro
+   registrado más antiguo).
+3. **CP6** — realtime del reparto entre dos clientes.
+
+**La web desplegada en `salda-dev` NO sirve como segundo cliente**: el despliegue
+de A19 fue solo *functions* + *firestore:rules*, así que Hosting sigue sirviendo
+web **anterior a A19**, sin `finishPicking` ni `PickItems`. Probar contra ella
+mediría código viejo.
+
+## Pendientes conocidos observados, NO contados como bugs
+
+A1 (la segunda línea sigue diciendo «Espacios» en todas las filas; fotos al 0 %),
+App Check (`No AppCheckProvider installed`, es el paso 3 de la hoja de ruta), y
+la deuda inversa de ~2,00 € tras corregir un reparto con pago confirmado, que es
+**N3 conocido** con la contención de C9 funcionando.
+
+El aviso `Default FirebaseApp failed to initialize … google-services` es
+**esperado y no es un fallo**: la configuración viaja en `firebase_options.dart`
+y el plugin nativo no se aplica.
+
+## Orden de arreglo recomendado
+
+1. **BUG-CP-03** (P1) — silencioso, rompe durabilidad y auditoría de la evidencia
+   del gasto, y no se sabe aún si es código o entorno. Diagnóstico barato.
+2. **BUG-CP-05** (P1) — causa raíz localizada; toca el camino del derecho
+   histórico, así que merece test de lectura propio.
+3. **BUG-CP-02** (P2) — dificulta navegar un workflow ya resuelto.
+4. **Bloque de auditabilidad**: BUG-CP-04 + BUG-CP-07 + OBS-CP-UX + OBS-CP-LEGACY.
+5. **BUG-CP-01** (P3).
 
 ---
 
