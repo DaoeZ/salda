@@ -168,3 +168,49 @@ otro**: hay que desinstalar antes.
 `dev-keystore.properties`, `key.properties`, `*.jks`, `*.keystore`,
 `google-services.json` y cualquier contraseña. Todos están en `.gitignore`;
 el repositorio solo contiene las **plantillas** `.example`.
+
+---
+
+## Permiso IAM cross-service de Storage (BUG-CP-03)
+
+**Parte del alta de CUALQUIER proyecto Firebase de Salda, igual que desplegar
+las reglas.** `backend/firestore/storage.rules` consulta Firestore
+(`firestore.get` / `firestore.exists`) para decidir quién puede subir o leer la
+foto de un ticket. Esa llamada **entre servicios** exige un permiso que no viaja
+en el repositorio:
+
+| | |
+|---|---|
+| Principal | `serviceAccount:service-{PROJECT_NUMBER}@gcp-sa-firebasestorage.iam.gserviceaccount.com` |
+| Rol | `roles/firebaserules.firestoreServiceAgent` |
+
+Sin él, `firestore.get()` **aborta la evaluación** en vez de devolver null, y
+Rules deniega: el cliente recibe un `403 Permission denied` indistinguible del
+de una regla mal escrita. En `salda-dev` faltó desde el principio y las fotos de
+ticket **nunca** llegaron a subirse (BUG-CP-03, resuelto el 2026-09-15).
+
+**Comprobarlo** (no basta con mirar la consola: en la página de IAM hay que
+marcar **«Include Google-provided role grants»** o el agente ni aparece):
+
+```
+gcloud projects get-iam-policy <PROYECTO> \
+  --flatten="bindings[].members" \
+  --filter="bindings.role=roles/firebaserules.firestoreServiceAgent"
+```
+
+**Concederlo:**
+
+```
+gcloud projects add-iam-policy-binding <PROYECTO> \
+  --member="serviceAccount:service-{PROJECT_NUMBER}@gcp-sa-firebasestorage.iam.gserviceaccount.com" \
+  --role="roles/firebaserules.firestoreServiceAgent"
+```
+
+**No confíes en el deploy para esto.** `firebase deploy --only storage` solo
+comprueba el permiso si el ruleset **cambia** y la sesión es **interactiva**; con
+reglas ya idénticas o en CI, lo salta en silencio. Y **ningún test lo detecta**:
+el emulador no tiene capa IAM. Ver **C15** en `docs/BIBLIA_CODIGO_SALDA.md`.
+
+**En `salda-prod` está sin verificar** — no se consultó, por la frontera de
+producción. Comprobarlo (y concederlo si falta) es un paso obligatorio de la
+ventana de promoción, antes de dar por buena la primera subida de foto.

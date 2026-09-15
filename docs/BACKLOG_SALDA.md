@@ -74,6 +74,11 @@ sirven para distinguir «no existe» de «falta un camino»— y **no** son cont
 > observaciones de auditabilidad y tres casos que siguen sin probar por faltar
 > una segunda cuenta registrada. Ningún hallazgo afecta a la corrección del
 > dinero, y **ningún A# cambia de estado por el checkpoint**.
+>
+> **Actualización 2026-09-15: BUG-CP-03 RESUELTO.** Quedan **cinco** BUG-CP
+> abiertos (**un** P1, BUG-CP-05). La causa fue de **entorno, no de código**:
+> faltaba un binding IAM en `salda-dev`. No se tocó ni una línea de código ni
+> de Rules.
 
 ---
 
@@ -1246,7 +1251,7 @@ recalcula mientras el reparto está reabierto** (C9 verificado en hardware).
 
 | ID | Qué | Sev. | Causa raíz |
 |---|---|---|---|
-| **BUG-CP-03** | La foto del ticket no sube a Storage (403 `Permission denied` en `receipts/{sid}/{tid}/original.jpg`, con reintentos en bucle) | **P1** | **Por discriminar.** Principal: Rules cross-service Storage→Firestore sin permiso en `salda-dev`. Ver Biblia de Código |
+| ~~BUG-CP-03~~ | ~~La foto del ticket no sube a Storage (403 `Permission denied` en `receipts/{sid}/{tid}/original.jpg`)~~ | — | **RESUELTO 2026-09-15.** Faltaba el binding IAM `roles/firebaserules.firestoreServiceAgent` en `salda-dev`. Solo entorno: sin cambios de código ni de Rules. Ver abajo y la Biblia de Código |
 | **BUG-CP-05** | El estado del reparto no se refresca en vivo; hay que salir y reentrar | **P1** | `historicTicketProvider` es `FutureProvider` con `.get()`, y `sessionTicketProvider` le da precedencia sobre el stream vivo |
 | **BUG-CP-02** | El scroll del detalle de ticket queda atrapado hacia abajo | **P2** | Sin investigar |
 | **BUG-CP-04** | El balance neto bilateral no explica ambas direcciones en su desglose | **P2** | El libro netea antes de la pantalla: `withUser()` devuelve un único balance y `openObligations()` solo trae esa dirección |
@@ -1259,6 +1264,45 @@ obligación de 7,98 € estaba explicado por una **reserva pendiente de 6,75 €
 (`available = 798 − 675 = 123`, y `300 > 123`). El techo bilateral de
 `planEntrySettlements` funcionaba **exactamente** como está documentado. Con un
 ticket nuevo el pago parcial funciona. **No es regresión de A18.**
+
+**BUG-CP-03 RESUELTO (2026-09-15) — causa de entorno, no de código.** Las dos
+hipótesis registradas en el checkpoint se discriminaron con evidencia:
+
+- **Ruleset desfasado: FALSO.** El `storage.rules` desplegado en `salda-dev` se
+  leyó con `firebase_get_security_rules` (MCP del propio CLI, read-only) y es
+  **byte a byte idéntico** al de la rama (3798 bytes ambos), A11b y A11d
+  incluidos.
+- **IAM cross-service: CONFIRMADO.** La política IAM real de `salda-dev`
+  (`cloudresourcemanager:getIamPolicy`) **no tenía el binding**
+  `roles/firebaserules.firestoreServiceAgent`: no existía ni el rol, y el agente
+  `service-923355592259@gcp-sa-firebasestorage.iam.gserviceaccount.com` tenía un
+  único rol, `roles/firebasestorage.serviceAgent`.
+
+Sin ese rol, el `firestore.get(/sessions/$(sid))` de la cláusula `allow write`
+**no devuelve null: aborta la evaluación**, y Rules falla cerrado → 403. Explica
+lo que la hipótesis del ruleset no explicaba: que fallara pese a que la cláusula
+`write` no se toca desde M3 (`84726bd`).
+
+**Prueba de que nunca funcionó, no de que se rompiera:** ningún ticket de
+`salda-dev` tenía `imagePath` — ni el del checkpoint (2026-09-09) ni los de
+2026-07-13 y 2026-07-17. `setTicketImage` solo corre tras un `putFile` con
+éxito, así que la subida **jamás** había funcionado en ese proyecto.
+
+**Arreglo:** un único binding IAM en `salda-dev` (21 → 22 bindings, ninguno
+eliminado, un solo miembro). **Cero cambios de código, cero cambios de Rules,
+cero deploys.** `salda-prod` intacto.
+
+**Validación real contra `salda-dev`:** subida completa con credenciales de
+usuario final por el mismo camino de cliente (anónimo = `canUseCore()`, sesión
+propia, `receipts/{sid}/{tid}/original.jpg`, `image/jpeg`) → **HTTP 200**, y
+lectura remota posterior → **200**. Antes del binding, ese mismo camino daba
+403. Los artefactos de prueba se eliminaron (el objeto lo barrió la propia
+function `cleanup` al borrar la sesión; `receipts/` quedó vacío).
+
+**Por qué la CI no podía verlo:** `storage_receipt_access.test.mjs` corre contra
+el emulador, que resuelve `firestore.*` en proceso y **no tiene capa IAM**. Sus
+13 casos seguirán en verde con el binding ausente. Ver **C15** en la Biblia de
+Código.
 
 **BUG-CP-04 es P2 y no P1 porque el dinero está protegido**: intentar liquidar
 por encima del neto se rechaza en backend con `PAYMENT_EXCEEDS_BALANCE`. El
@@ -1325,8 +1369,8 @@ y el plugin nativo no se aplica.
 
 ## Orden de arreglo recomendado
 
-1. **BUG-CP-03** (P1) — silencioso, rompe durabilidad y auditoría de la evidencia
-   del gasto, y no se sabe aún si es código o entorno. Diagnóstico barato.
+1. ~~**BUG-CP-03** (P1)~~ — **RESUELTO 2026-09-15**: era entorno (binding IAM
+   ausente en `salda-dev`), no código.
 2. **BUG-CP-05** (P1) — causa raíz localizada; toca el camino del derecho
    histórico, así que merece test de lectura propio.
 3. **BUG-CP-02** (P2) — dificulta navegar un workflow ya resuelto.

@@ -182,9 +182,154 @@ Aviso adicional: un smoke manual **en la web** no valida el mismo contrato **en
 la app**. A19 se dio por realtime tras un smoke en navegador; el camino de la app
 nunca se ejercitó y era justo el roto.
 
+### C15. Una Rule correcta y desplegada puede denegar: el emulador no aplica IAM
+
+`storage.rules` llama a `firestore.get()`/`firestore.exists()`. Eso es una
+llamada **entre servicios**, y exige un permiso que **no vive en el repositorio**:
+el agente `service-{PROJECT_NUMBER}@gcp-sa-firebasestorage.iam.gserviceaccount.com`
+necesita el rol `roles/firebaserules.firestoreServiceAgent` en el proyecto.
+
+Sin él, `firestore.get()` **no devuelve null: aborta la evaluación** y Rules
+falla cerrado. El cliente ve un `403 Permission denied` genérico, idéntico al de
+una regla mal escrita. Fue la causa de **BUG-CP-03** (ver entrada 2026-09-15).
+
+Tres trampas encadenadas, y ninguna se ve leyendo el código:
+
+1. **El emulador no tiene capa IAM.** Resuelve `firestore.*` en proceso, así que
+   `storage_receipt_access.test.mjs` (13 casos) pasa igual con el binding
+   ausente. **Ningún test del repositorio puede detectarlo, hoy ni nunca.**
+2. **`firebase deploy --only storage` casi nunca comprueba el permiso.** En
+   `firebase-tools/lib/rulesDeploy.js`, `checkStorageRulesIamPermissions()` se
+   invoca **solo si el ruleset subido difiere del desplegado**: si es idéntico,
+   loguea «already up to date, skipping upload...» y hace `continue` **antes** de
+   llegar al chequeo. Y si el deploy es `nonInteractive` (CI, scripts), la
+   función **retorna de inmediato** sin comprobar nada. Redesplegar «por si
+   acaso» no arregla esto.
+3. **La consola de GCP lo esconde por defecto.** En IAM hay que marcar
+   **«Include Google-provided role grants»** o el agente de servicio no aparece
+   y parece que el binding está bien. La API (`cloudresourcemanager:getIamPolicy`)
+   sí devuelve la política completa: es la vía fiable para auditarlo.
+
+**Regla operativa:** cuando una escritura a Storage falle con 403 y las Rules
+desplegadas coincidan con el repo, **el siguiente sitio donde mirar es IAM, no
+las Rules**. Y al crear un proyecto Firebase nuevo (o al promocionar a
+`salda-prod`), este binding es parte del alta del entorno, igual que desplegar
+las reglas. Está documentado en `docs/ENTORNOS.md`.
+
 ---
 
 # Entradas cronológicas
+
+## BUG-CP-03 — LA FOTO DEL TICKET NO SUBÍA: FALTABA UN BINDING IAM — 2026-09-15
+
+**Resultado: RESUELTO. Causa de entorno, no de código.** Cero líneas de código
+tocadas, cero cambios en Rules, cero deploys. Un único binding IAM en
+`salda-dev`. `salda-prod` no se tocó en ningún momento.
+
+### El síntoma
+
+Durante el checkpoint del 2026-09-09, `putFile` sobre
+`receipts/{sid}/{tid}/original.jpg` fallaba sistemáticamente con
+`StorageException -13021 / HTTP 403 Permission denied`. La app degradaba bien —
+la copia local durable de P0.2 seguía mostrando la foto—, así que el fallo era
+**silencioso**: el usuario veía su foto y la evidencia del gasto no quedaba
+persistida en ningún sitio.
+
+### Cómo se discriminó, en orden
+
+**1. Hipótesis «ruleset desplegado desfasado» → REFUTADA.** El checkpoint la
+daba por plausible porque A11b (`dd8c1bc`) y A11d (`6607fd5`) tocaron
+`storage.rules` y solo existen en esta rama, y el deploy de A19 fue únicamente
+*functions* + *firestore:rules*. Se leyó el ruleset **realmente desplegado** con
+el servidor MCP del propio CLI (`firebase mcp` → `firebase_get_security_rules`,
+`readOnlyHint: true`, que consulta `firebaserules.googleapis.com/.../releases`) y
+resultó **byte a byte idéntico** al archivo de la rama: 3798 bytes ambos, A11b y
+A11d incluidos. Alguien sí había desplegado Storage rules después de A11d.
+
+**2. Se descartó el bucket.** La app registra `salda-dev.firebasestorage.app`
+(`firebase apps:sdkconfig`), que es el bucket por defecto del proyecto; una
+petición a ese bucket devolvió **404 del objeto** (no 403 ni 404 de bucket), así
+que el bucket existe, está registrado en Firebase Storage y no hay desajuste
+`appspot.com` / `firebasestorage.app`.
+
+**3. Se descartó el camino de cliente.** `ReceiptImageStore.storagePathFor()`
+deriva `sid` de `parts[1]` de `sessions/{sid}/accounts/{aid}/tickets/{tid}`, y
+ese `ticketPath` es `ticketRef.path` real. El doc de sesión se escribe con un
+`set()` **awaited** antes de la copia local y de la subida, así que no hay
+carrera: cuando la Rule hace su `get()`, el documento existe. Y `ownerUid`
+coincide con el uid del dueño en los datos reales de `salda-dev`.
+
+**4. El dato que cambió el marco.** Ningún ticket de `salda-dev` tenía
+`imagePath`: ni el del checkpoint (2026-09-09) ni los de 2026-07-13 y
+2026-07-17. Como `setTicketImage` solo corre **después** de un `putFile` con
+éxito, la subida **nunca** había funcionado en ese proyecto. Eso descarta de
+golpe cualquier regresión de A11b/A11d/A19/ADR-030 y apunta a una condición
+permanente del entorno, presente desde que Storage se usó por primera vez.
+
+**5. Lectura del IAM real.** `cloudresourcemanager:getIamPolicy` sobre
+`salda-dev`: **el rol `roles/firebaserules.firestoreServiceAgent` no existía en
+absoluto** (21 bindings, ninguno era ése), y el agente
+`service-923355592259@gcp-sa-firebasestorage.iam.gserviceaccount.com` tenía un
+único rol: `roles/firebasestorage.serviceAgent`. Causa raíz confirmada.
+
+### El arreglo
+
+Un binding y nada más, aplicado con la misma rutina que usa el CLI
+(`resourceManager.addServiceAccountToRoles`, que preserva el `etag` y el resto de
+la política):
+
+| | |
+|---|---|
+| Proyecto | `salda-dev` |
+| Principal | `serviceAccount:service-923355592259@gcp-sa-firebasestorage.iam.gserviceaccount.com` |
+| Rol | `roles/firebaserules.firestoreServiceAgent` |
+
+Antes: 21 bindings, rol ausente. Después: 22 bindings, **un solo rol añadido,
+ninguno eliminado, un solo miembro**, comprobado comparando la lista completa de
+roles y el número de miembros de cada uno.
+
+### Validación real
+
+Se ejercitó el camino de cliente completo contra `salda-dev`, con credenciales
+de usuario final y evaluado por las Rules desplegadas:
+
+1. alta de usuario anónimo (`canUseCore()` lo admite);
+2. creación de una sesión propia por el camino normal de las Rules
+   (`ownerUid == request.auth.uid`, sin contexto);
+3. `POST` de un JPEG a `receipts/{sid}/{tid}/original.jpg` → **HTTP 200**;
+4. lectura remota de ese objeto → **HTTP 200** (la rama `read` también hace
+   cross-service, así que valida las dos direcciones).
+
+Antes del binding ese mismo camino devolvía 403. Todo lo de prueba se eliminó:
+la sesión, el usuario anónimo y el objeto — este último lo barrió **la propia
+function `cleanup`** al borrar la sesión, lo que de paso confirmó que la cascada
+funciona. `receipts/` quedó vacío.
+
+**Lo que esta validación no cubre:** no se ejecutó sobre la app en hardware (no
+había dispositivo conectado). El camino no probado es únicamente el plumbing del
+SDK de Flutter, que nunca estuvo en duda: ya producía una petición correcta y
+bien formada que Rules rechazaba por el motivo documentado. Queda como
+confirmación pendiente abrir un ticket antiguo en el dispositivo —el reintento
+transparente de P0.2 debería subir la foto y rellenar `imagePath` solo— o crear
+uno nuevo.
+
+### Errores de diagnóstico que conviene no repetir
+
+- **El checkpoint dio por buena la premisa «Storage rules sin desplegar».** Era
+  falsa y se sostenía en `git branch --contains`, que habla de **commits**, no
+  de **despliegues**. El repositorio no sabe qué hay publicado: hay que
+  preguntárselo al proyecto.
+- **Redesplegar no habría arreglado nada y habría parecido que sí.** Con el
+  ruleset idéntico, el CLI salta el chequeo IAM (ver **C15**, punto 2). El deploy
+  habría dicho «Deploy complete!» y el 403 habría seguido igual.
+
+### Hallazgo menor registrado y diferido
+
+La cláusula `allow write` de `receipts/` exige `request.resource.contentType` y
+`request.resource.size`, que **no existen en un borrado**: por tanto ningún
+cliente puede borrar una foto de ticket (403). En la práctica no es un problema
+—la cascada de `cleanup` las borra con Admin SDK, verificado en esta sesión— y
+no se tocó. Se anota por si algún día se quiere borrado de foto desde la app.
 
 ## CHECKPOINT EN DISPOSITIVO REAL — 2026-09-09
 
