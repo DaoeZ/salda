@@ -28,8 +28,8 @@ class ReceiptImageStore {
     required this.onUploaded,
     Future<Directory> Function()? baseDir,
     FirebaseStorage? storage,
-  })  : _baseDir = baseDir ?? getApplicationDocumentsDirectory,
-        _storageOverride = storage;
+  }) : _baseDir = baseDir ?? getApplicationDocumentsDirectory,
+       _storageOverride = storage;
 
   /// Registra la ruta de Storage en Firestore al confirmar la subida.
   final Future<void> Function(String ticketPath, String storagePath) onUploaded;
@@ -69,10 +69,9 @@ class ReceiptImageStore {
     final local = await _localFile(storagePath);
     if (!local.existsSync()) return false;
     try {
-      await _storage.ref(storagePath).putFile(
-            local,
-            SettableMetadata(contentType: 'image/jpeg'),
-          );
+      await _storage
+          .ref(storagePath)
+          .putFile(local, SettableMetadata(contentType: 'image/jpeg'));
       await onUploaded(ticketPath, storagePath);
       return true;
     } on Object catch (error) {
@@ -109,8 +108,9 @@ class ReceiptImageStore {
 
 final receiptImageStoreProvider = Provider<ReceiptImageStore>(
   (ref) => ReceiptImageStore(
-    onUploaded: (ticketPath, storagePath) =>
-        ref.read(sessionRepositoryProvider).setTicketImage(ticketPath, storagePath),
+    onUploaded: (ticketPath, storagePath) => ref
+        .read(sessionRepositoryProvider)
+        .setTicketImage(ticketPath, storagePath),
   ),
 );
 
@@ -118,7 +118,7 @@ final receiptImageStoreProvider = Provider<ReceiptImageStore>(
 /// no re-descargar en cada rebuild de la pantalla de detalle.
 final ticketImageProvider = FutureProvider.autoDispose
     .family<Uint8List?, ({String ticketPath, bool uploaded})>(
-  (ref, key) => ref
-      .watch(receiptImageStoreProvider)
-      .load(key.ticketPath, uploaded: key.uploaded),
-);
+      (ref, key) => ref
+          .watch(receiptImageStoreProvider)
+          .load(key.ticketPath, uploaded: key.uploaded),
+    );

@@ -20,13 +20,20 @@ class AddTicketTarget extends Notifier<String?> {
   void set(String? sessionId) => state = sessionId;
 }
 
-final addTicketTargetProvider =
-    NotifierProvider<AddTicketTarget, String?>(AddTicketTarget.new);
+final addTicketTargetProvider = NotifierProvider<AddTicketTarget, String?>(
+  AddTicketTarget.new,
+);
+
+class MissingTicketContextException implements Exception {
+  const MissingTicketContextException();
+}
 
 /// Mapea el draft de revisión al ticket persistible (compartido entre
 /// crear sesión y añadir a existente).
-NewTicketInput ticketInputFromDraft(ReviewDraftState draft,
-    {String? fallbackName}) {
+NewTicketInput ticketInputFromDraft(
+  ReviewDraftState draft, {
+  String? fallbackName,
+}) {
   return NewTicketInput(
     kind: draft.engine == 'manual' ? 'manual' : 'scanned',
     merchantName: draft.merchantName ?? fallbackName ?? 'Ticket',
@@ -56,17 +63,27 @@ class AddTicketController extends Notifier<AsyncValue<void>> {
   @override
   AsyncValue<void> build() => const AsyncData(null);
 
-  Future<bool> addToSession(String sessionId,
-      {required String payerPid}) async {
+  Future<bool> addToSession(
+    String sessionId, {
+    required String payerPid,
+  }) async {
     final draft = ref.read(reviewDraftProvider);
     if (draft == null) return false;
     state = const AsyncLoading();
     try {
-      final ticketPath = await ref.read(sessionRepositoryProvider).addTicket(
+      final pendingSpace = ref.read(pendingSpaceLinkProvider);
+      if (pendingSpace == null) {
+        throw const MissingTicketContextException();
+      }
+      final ticketPath = await ref
+          .read(sessionRepositoryProvider)
+          .addTicket(
             sessionId,
             ticketInputFromDraft(draft),
             payerPid: payerPid,
+            spaceId: pendingSpace.id,
           );
+      ref.read(pendingSpaceLinkProvider.notifier).clear();
       final imagePath = ref.read(lastScanImageProvider);
       if (imagePath != null && draft.engine != 'manual') {
         // Copia local durable ANTES de perder el archivo del picker; luego
@@ -76,17 +93,6 @@ class AddTicketController extends Notifier<AsyncValue<void>> {
         unawaited(store.upload(ticketPath));
       }
       // Vínculo diferido "desde el espacio" (P4), igual que al crear sesión.
-      final pendingSpace =
-          ref.read(pendingSpaceLinkProvider.notifier).consume();
-      if (pendingSpace != null) {
-        try {
-          await ref
-              .read(spacesRepositoryProvider)
-              .linkTicket(ticketPath, pendingSpace.id);
-        } on Object {
-          // Vinculable a mano desde el detalle del ticket.
-        }
-      }
       ref.read(reviewDraftProvider.notifier).discard();
       ref.invalidate(savedDraftProvider);
       ref.read(addTicketTargetProvider.notifier).set(null);
@@ -101,4 +107,5 @@ class AddTicketController extends Notifier<AsyncValue<void>> {
 
 final addTicketControllerProvider =
     NotifierProvider<AddTicketController, AsyncValue<void>>(
-        AddTicketController.new);
+      AddTicketController.new,
+    );

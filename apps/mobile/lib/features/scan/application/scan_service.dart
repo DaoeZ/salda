@@ -8,8 +8,9 @@ import '../domain/receipt_ocr.dart';
 
 final receiptOcrProvider = Provider<ReceiptOcr>((ref) => MlKitReceiptOcr());
 
-final receiptParserProvider =
-    Provider<ReceiptParser>((ref) => ReceiptParser.standard());
+final receiptParserProvider = Provider<ReceiptParser>(
+  (ref) => ReceiptParser.standard(),
+);
 
 final scanServiceProvider = Provider<ScanService>(
   (ref) => ScanService(
@@ -25,7 +26,7 @@ final scanServiceProvider = Provider<ScanService>(
 /// dispositivo; la cámara del sistema ya cubre el flujo completo.
 class ScanService {
   ScanService({required this.ocr, required this.parser, ImagePicker? picker})
-      : _picker = picker ?? ImagePicker();
+    : _picker = picker ?? ImagePicker();
 
   final ReceiptOcr ocr;
   final ReceiptParser parser;

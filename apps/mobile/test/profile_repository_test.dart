@@ -20,25 +20,27 @@ void main() {
   });
 
   group('createProfile', () {
-    test('escribe perfil + claim consistentes y normaliza el username', () async {
-      await repo.createProfile(
-        displayName: '  Édgar Cantera ',
-        username: 'Edgar',
-      );
+    test(
+      'escribe perfil + claim consistentes y normaliza el username',
+      () async {
+        await repo.createProfile(
+          displayName: '  Édgar Cantera ',
+          username: 'Edgar',
+        );
 
-      final profile = await repo.fetchProfile('uid-edgar');
-      expect(profile!.displayName, 'Édgar Cantera');
-      expect(profile.username, 'edgar');
+        final profile = await repo.fetchProfile('uid-edgar');
+        expect(profile!.displayName, 'Édgar Cantera');
+        expect(profile.username, 'edgar');
 
-      final raw =
-          (await firestore.doc('profiles/uid-edgar').get()).data()!;
-      // displayNameLower alimenta la búsqueda: sin tildes ni mayúsculas.
-      expect(raw['displayNameLower'], 'edgar cantera');
-      expect(raw['schemaVersion'], 1);
+        final raw = (await firestore.doc('profiles/uid-edgar').get()).data()!;
+        // displayNameLower alimenta la búsqueda: sin tildes ni mayúsculas.
+        expect(raw['displayNameLower'], 'edgar cantera');
+        expect(raw['schemaVersion'], 1);
 
-      final claim = (await firestore.doc('usernames/edgar').get()).data()!;
-      expect(claim['uid'], 'uid-edgar');
-    });
+        final claim = (await firestore.doc('usernames/edgar').get()).data()!;
+        expect(claim['uid'], 'uid-edgar');
+      },
+    );
 
     test('rechaza un username inválido antes de escribir nada', () async {
       await expectLater(
@@ -51,10 +53,9 @@ void main() {
 
   group('checkUsername', () {
     test('separa inválido, ocupado y disponible', () async {
-      await repoFor('uid-alba').createProfile(
-        displayName: 'Alba',
-        username: 'alba',
-      );
+      await repoFor(
+        'uid-alba',
+      ).createProfile(displayName: 'Alba', username: 'alba');
 
       expect(await repo.checkUsername('ab'), isA<UsernameInvalid>());
       expect(await repo.checkUsername('alba'), isA<UsernameTaken>());
@@ -62,18 +63,19 @@ void main() {
     });
 
     test('es insensible a mayúsculas: ALBA está ocupado', () async {
-      await repoFor('uid-alba').createProfile(
-        displayName: 'Alba',
-        username: 'alba',
-      );
+      await repoFor(
+        'uid-alba',
+      ).createProfile(displayName: 'Alba', username: 'alba');
       expect(await repo.checkUsername('ALBA'), isA<UsernameTaken>());
     });
 
-    test('el username propio cuenta como disponible (editar sin cambiarlo)',
-        () async {
-      await repo.createProfile(displayName: 'Edgar', username: 'edgar');
-      expect(await repo.checkUsername('edgar'), isA<UsernameOk>());
-    });
+    test(
+      'el username propio cuenta como disponible (editar sin cambiarlo)',
+      () async {
+        await repo.createProfile(displayName: 'Edgar', username: 'edgar');
+        expect(await repo.checkUsername('edgar'), isA<UsernameOk>());
+      },
+    );
   });
 
   group('suggestUsername', () {
@@ -82,10 +84,9 @@ void main() {
     });
 
     test('salta a la siguiente propuesta natural si está ocupada', () async {
-      await repoFor('uid-otro').createProfile(
-        displayName: 'Otro Edgar',
-        username: 'edgar',
-      );
+      await repoFor(
+        'uid-otro',
+      ).createProfile(displayName: 'Otro Edgar', username: 'edgar');
       final suggested = await repo.suggestUsername('Edgar Cantera');
       expect(suggested, isNot('edgar'));
       // Naturales: edgarNN o edgar_cantera, nunca cadenas aleatorias largas.
@@ -97,24 +98,25 @@ void main() {
   });
 
   group('updateProfile', () {
-    test('cambiar el username libera el claim anterior y reclama el nuevo',
-        () async {
-      await repo.createProfile(displayName: 'Edgar', username: 'edgar');
-      await repo.updateProfile(
-        displayName: 'Edgar C.',
-        username: 'edgar_cantera',
-      );
+    test(
+      'cambiar el username libera el claim anterior y reclama el nuevo',
+      () async {
+        await repo.createProfile(displayName: 'Edgar', username: 'edgar');
+        await repo.updateProfile(
+          displayName: 'Edgar C.',
+          username: 'edgar_cantera',
+        );
 
-      final profile = await repo.fetchProfile('uid-edgar');
-      expect(profile!.username, 'edgar_cantera');
-      expect(profile.displayName, 'Edgar C.');
-      expect((await firestore.doc('usernames/edgar').get()).exists, false);
-      expect(
-        (await firestore.doc('usernames/edgar_cantera').get())
-            .data()!['uid'],
-        'uid-edgar',
-      );
-    });
+        final profile = await repo.fetchProfile('uid-edgar');
+        expect(profile!.username, 'edgar_cantera');
+        expect(profile.displayName, 'Edgar C.');
+        expect((await firestore.doc('usernames/edgar').get()).exists, false);
+        expect(
+          (await firestore.doc('usernames/edgar_cantera').get()).data()!['uid'],
+          'uid-edgar',
+        );
+      },
+    );
 
     test('editar solo el nombre visible conserva el claim', () async {
       await repo.createProfile(displayName: 'Edgar', username: 'edgar');
@@ -129,18 +131,15 @@ void main() {
 
   group('search', () {
     setUp(() async {
-      await repoFor('uid-alba').createProfile(
-        displayName: 'Alba García',
-        username: 'alba',
-      );
-      await repoFor('uid-albert').createProfile(
-        displayName: 'Albert Pla',
-        username: 'albert_pla',
-      );
-      await repoFor('uid-paula').createProfile(
-        displayName: 'Paula Alba',
-        username: 'paula98',
-      );
+      await repoFor(
+        'uid-alba',
+      ).createProfile(displayName: 'Alba García', username: 'alba');
+      await repoFor(
+        'uid-albert',
+      ).createProfile(displayName: 'Albert Pla', username: 'albert_pla');
+      await repoFor(
+        'uid-paula',
+      ).createProfile(displayName: 'Paula Alba', username: 'paula98');
     });
 
     test('por prefijo de username', () async {
@@ -166,10 +165,7 @@ void main() {
     test('fusiona ambas queries sin duplicar perfiles', () async {
       // 'alba' aparece por username Y por displayNameLower.
       final results = await repo.search('alba');
-      expect(
-        results.where((p) => p.uid == 'uid-alba').length,
-        1,
-      );
+      expect(results.where((p) => p.uid == 'uid-alba').length, 1);
     });
 
     test('consulta vacía o solo espacios: sin resultados', () async {

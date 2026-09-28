@@ -15,7 +15,7 @@ abstract interface class CountryReceiptParser {
 /// Fachada del parser: registry por locale (extensible a otros países).
 class ReceiptParser {
   ReceiptParser(List<CountryReceiptParser> parsers)
-      : _byLocale = {for (final p in parsers) p.locale: p};
+    : _byLocale = {for (final p in parsers) p.locale: p};
 
   /// Configuración estándar de la app (v1: España).
   factory ReceiptParser.standard() => ReceiptParser([EsReceiptParser()]);
@@ -27,9 +27,10 @@ class ReceiptParser {
     return parser.parse(lines);
   }
 
-  ReceiptExtraction parseDocument(OcrDocument document,
-          {String locale = 'es'}) =>
-      parseLines(LineBuilder.build(document), locale: locale);
+  ReceiptExtraction parseDocument(
+    OcrDocument document, {
+    String locale = 'es',
+  }) => parseLines(LineBuilder.build(document), locale: locale);
 
   ReceiptExtraction parsePlainText(String text, {String locale = 'es'}) =>
       parseLines(rawLinesFromPlainText(text), locale: locale);

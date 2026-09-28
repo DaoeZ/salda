@@ -1,0 +1,14 @@
+{
+  "_comment": "A15: el filtro fiscal tiene que ser estrecho. 'BASE PIZZA' y 'CUOTA MENSUAL CLUB' son productos y siguen siéndolo; solo se descartan los conceptos que únicamente pueden ser fiscalidad ('IVA 10%', 'CUOTA IVA', 'B. IMPONIBLE'). Un filtro por la palabra suelta BASE o CUOTA habría borrado dos productos de verdad.",
+  "mustPass": true,
+  "merchantName": "SUPERMERCADO",
+  "date": "2026-08-28",
+  "grandTotal": 850,
+  "issues": [],
+  "needsReview": false,
+  "lines": [
+    { "name": "LECHE ENTERA", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 100 },
+    { "name": "BASE PIZZA", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 250 },
+    { "name": "CUOTA MENSUAL CLUB", "quantityMilli": 1000, "unitPrice": null, "totalPrice": 500 }
+  ]
+}

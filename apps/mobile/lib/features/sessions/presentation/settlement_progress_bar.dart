@@ -28,35 +28,37 @@ class SettlementProgressBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(height / 2),
           child: SizedBox(
             height: height,
-            child: LayoutBuilder(builder: (context, constraints) {
-              final confirmedWidth =
-                  constraints.maxWidth * progress.confirmedFraction;
-              final markedWidth =
-                  constraints.maxWidth * progress.markedFraction;
-              return Stack(children: [
-                Positioned.fill(
-                  child: ColoredBox(
-                    color: scheme.surfaceContainerHighest,
-                  ),
-                ),
-                if (confirmedWidth > 0)
-                  Positioned(
-                    left: 0,
-                    width: confirmedWidth,
-                    top: 0,
-                    bottom: 0,
-                    child: ColoredBox(color: scheme.settlementConfirmed),
-                  ),
-                if (markedWidth > 0)
-                  Positioned(
-                    left: confirmedWidth,
-                    width: markedWidth,
-                    top: 0,
-                    bottom: 0,
-                    child: ColoredBox(color: scheme.settlementMarked),
-                  ),
-              ]);
-            }),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final confirmedWidth =
+                    constraints.maxWidth * progress.confirmedFraction;
+                final markedWidth =
+                    constraints.maxWidth * progress.markedFraction;
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ColoredBox(color: scheme.surfaceContainerHighest),
+                    ),
+                    if (confirmedWidth > 0)
+                      Positioned(
+                        left: 0,
+                        width: confirmedWidth,
+                        top: 0,
+                        bottom: 0,
+                        child: ColoredBox(color: scheme.settlementConfirmed),
+                      ),
+                    if (markedWidth > 0)
+                      Positioned(
+                        left: confirmedWidth,
+                        width: markedWidth,
+                        top: 0,
+                        bottom: 0,
+                        child: ColoredBox(color: scheme.settlementMarked),
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),

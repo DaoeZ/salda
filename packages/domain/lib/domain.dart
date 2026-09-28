@@ -11,6 +11,8 @@ export 'src/engines/economic_ledger.dart';
 export 'src/engines/split_engine.dart';
 export 'src/errors.dart';
 export 'src/identity/avatar_identity.dart';
+export 'src/identity/economic_actor.dart';
+export 'src/identity/economic_authority.dart';
 export 'src/identity/username.dart';
 export 'src/money.dart';
 export 'src/receipt/receipt_extraction.dart';

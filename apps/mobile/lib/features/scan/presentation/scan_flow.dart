@@ -29,32 +29,35 @@ Future<void> showScanEntrySheet(
   return showModalBottomSheet<void>(
     context: context,
     builder: (sheetContext) => SafeArea(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(
-          leading: const Icon(Icons.photo_camera_outlined),
-          title: Text(l10n.scanFromCamera),
-          onTap: () {
-            Navigator.pop(sheetContext);
-            _scanToReview(context, ref, ImageSource.camera, onBusy);
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.photo_library_outlined),
-          title: Text(l10n.scanFromGallery),
-          onTap: () {
-            Navigator.pop(sheetContext);
-            _scanToReview(context, ref, ImageSource.gallery, onBusy);
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.edit_note_outlined),
-          title: Text(l10n.scanManualEntry),
-          onTap: () {
-            Navigator.pop(sheetContext);
-            _manualToReview(context, ref);
-          },
-        ),
-      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: Text(l10n.scanFromCamera),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _scanToReview(context, ref, ImageSource.camera, onBusy);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: Text(l10n.scanFromGallery),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _scanToReview(context, ref, ImageSource.gallery, onBusy);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.edit_note_outlined),
+            title: Text(l10n.scanManualEntry),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _manualToReview(context, ref);
+            },
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -72,8 +75,9 @@ Future<void> _scanToReview(
     if (!context.mounted || result == null) return;
     if (result.extraction.lines.isEmpty &&
         !result.extraction.grandTotal.isPresent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.scanNothingRecognized)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.scanNothingRecognized)));
     }
     ref.read(lastScanImageProvider.notifier).set(result.imagePath);
     ref.read(reviewDraftProvider.notifier).loadFrom(result.extraction);
@@ -91,31 +95,38 @@ Future<void> _manualToReview(BuildContext context, WidgetRef ref) async {
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text(l10n.manualTitle),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(
-          controller: concept,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(
-            labelText: l10n.manualConcept,
-            hintText: l10n.manualConceptHint,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: concept,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              labelText: l10n.manualConcept,
+              hintText: l10n.manualConceptHint,
+            ),
           ),
-        ),
-        const SizedBox(height: TokenSpacing.md),
-        TextField(
-          controller: amount,
-          keyboardType: TextInputType.number,
-          decoration:
-              InputDecoration(labelText: l10n.manualAmount, suffixText: '€'),
-        ),
-      ]),
+          const SizedBox(height: TokenSpacing.md),
+          TextField(
+            controller: amount,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: l10n.manualAmount,
+              suffixText: '€',
+            ),
+          ),
+        ],
+      ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.commonCancel)),
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: Text(l10n.commonCancel),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.commonContinue)),
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text(l10n.commonContinue),
+        ),
       ],
     ),
   );
@@ -125,10 +136,14 @@ Future<void> _manualToReview(BuildContext context, WidgetRef ref) async {
   }
   if (!context.mounted) return;
   ref.read(lastScanImageProvider.notifier).set(null); // no hay foto
-  ref.read(reviewDraftProvider.notifier).loadFrom(manualExpenseExtraction(
-        concept: concept.text.trim(),
-        amount: money,
-        date: DateTime.now(),
-      ));
+  ref
+      .read(reviewDraftProvider.notifier)
+      .loadFrom(
+        manualExpenseExtraction(
+          concept: concept.text.trim(),
+          amount: money,
+          date: DateTime.now(),
+        ),
+      );
   context.push('/home/review');
 }

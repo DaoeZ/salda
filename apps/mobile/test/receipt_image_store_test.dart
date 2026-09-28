@@ -25,13 +25,15 @@ void main() {
 
     const ticketPath = 'sessions/S1/accounts/a0/tickets/T9';
 
-    test('storagePathFor es determinista: receipts/{sid}/{tid}/original.jpg',
-        () {
-      expect(
-        ReceiptImageStore.storagePathFor(ticketPath),
-        'receipts/S1/T9/original.jpg',
-      );
-    });
+    test(
+      'storagePathFor es determinista: receipts/{sid}/{tid}/original.jpg',
+      () {
+        expect(
+          ReceiptImageStore.storagePathFor(ticketPath),
+          'receipts/S1/T9/original.jpg',
+        );
+      },
+    );
 
     test('cacheLocalOriginal + load muestra la copia local al instante '
         '(vale para cámara y galería: es una copia de archivo)', () async {
@@ -46,26 +48,30 @@ void main() {
       expect(bytes, [1, 2, 3, 4, 5]);
     });
 
-    test('sin copia local y sin subir → null (no rompe, muestra "sin foto")',
-        () async {
-      final bytes = await store.load(ticketPath, uploaded: false);
-      expect(bytes, isNull);
-    });
+    test(
+      'sin copia local y sin subir → null (no rompe, muestra "sin foto")',
+      () async {
+        final bytes = await store.load(ticketPath, uploaded: false);
+        expect(bytes, isNull);
+      },
+    );
 
-    test('la copia local sobrevive a recrear el store (misma carpeta base)',
-        () async {
-      final source = File('${tempDir.path}/picker_tmp.jpg');
-      await source.writeAsBytes([9, 9, 9]);
-      await store.cacheLocalOriginal(ticketPath, source.path);
+    test(
+      'la copia local sobrevive a recrear el store (misma carpeta base)',
+      () async {
+        final source = File('${tempDir.path}/picker_tmp.jpg');
+        await source.writeAsBytes([9, 9, 9]);
+        await store.cacheLocalOriginal(ticketPath, source.path);
 
-      // Nuevo store apuntando a la misma base (simula reinicio de la app).
-      final store2 = ReceiptImageStore(
-        onUploaded: (_, _) async {},
-        baseDir: () async => tempDir,
-      );
-      final bytes = await store2.load(ticketPath, uploaded: true);
-      expect(bytes, [9, 9, 9]);
-    });
+        // Nuevo store apuntando a la misma base (simula reinicio de la app).
+        final store2 = ReceiptImageStore(
+          onUploaded: (_, _) async {},
+          baseDir: () async => tempDir,
+        );
+        final bytes = await store2.load(ticketPath, uploaded: true);
+        expect(bytes, [9, 9, 9]);
+      },
+    );
 
     test('cada ticket tiene su propia copia (no se pisan)', () async {
       final source = File('${tempDir.path}/picker_tmp.jpg');

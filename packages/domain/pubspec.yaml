@@ -10,6 +10,10 @@ environment:
   sdk: ^3.8.0
 
 dependencies:
+  # Dart puro (no es Flutter): recorta nombres por grafemas en vez de por
+  # unidades UTF-16, que con un emoji parte el par sustituto y revienta al
+  # pintar.
+  characters: ^1.3.0
   meta: ^1.15.0
 
 dev_dependencies:

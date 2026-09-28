@@ -10,12 +10,16 @@ import '../../review/application/review_draft.dart';
 import '../data/ai_config_store.dart';
 
 final aiRegistryProvider = Provider<AiProviderRegistry>(
-  (ref) => AiProviderRegistry.standard(Dio(BaseOptions(
-    // Sin timeouts, una red caída dejaba el botón de IA colgado para siempre.
-    connectTimeout: const Duration(seconds: 15),
-    sendTimeout: const Duration(seconds: 60),
-    receiveTimeout: const Duration(seconds: 120),
-  ))),
+  (ref) => AiProviderRegistry.standard(
+    Dio(
+      BaseOptions(
+        // Sin timeouts, una red caída dejaba el botón de IA colgado para siempre.
+        connectTimeout: const Duration(seconds: 15),
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 120),
+      ),
+    ),
+  ),
 );
 
 /// Ruta de la última imagen escaneada: la IA la necesita como entrada.
@@ -26,8 +30,9 @@ class LastScanImage extends Notifier<String?> {
   void set(String? path) => state = path;
 }
 
-final lastScanImageProvider =
-    NotifierProvider<LastScanImage, String?>(LastScanImage.new);
+final lastScanImageProvider = NotifierProvider<LastScanImage, String?>(
+  LastScanImage.new,
+);
 
 /// ¿Hay algún proveedor configurado? Habilita el botón de la revisión.
 /// autoDispose + invalidación al guardar (bug del MVP: sin esto, un `false`
@@ -97,7 +102,7 @@ class AiAnalysisController extends Notifier<AsyncValue<String?>> {
       return (
         ok: false,
         error: AiErrorCode.network,
-        provider: provider.displayName
+        provider: provider.displayName,
       );
     }
   }
@@ -105,4 +110,5 @@ class AiAnalysisController extends Notifier<AsyncValue<String?>> {
 
 final aiAnalysisControllerProvider =
     NotifierProvider<AiAnalysisController, AsyncValue<String?>>(
-        AiAnalysisController.new);
+      AiAnalysisController.new,
+    );

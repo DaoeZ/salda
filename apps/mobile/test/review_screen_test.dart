@@ -68,12 +68,16 @@ void main() {
     expect(find.text('GAZPACHO'), findsOneWidget);
     expect(find.text('LECHE'), findsOneWidget);
     expect(find.text('Mercadona'), findsOneWidget);
-    expect(find.text('El ticket cuadra'), findsOneWidget);
-    // Sin banner de atención cuando todo cuadra y la confianza es alta.
-    expect(find.text('Analizar con IA'), findsNothing);
+    // A15: el estado verde habla SOLO de aritmética. Nunca certifica que el
+    // ticket esté bien leído.
+    expect(find.text('El total cuadra'), findsOneWidget);
+    expect(find.text('El ticket cuadra'), findsNothing);
+    expect(find.textContaining('Revisa el establecimiento'), findsOneWidget);
+    // Y revisar con IA sigue ofreciéndose: cuadrar no es estar bien leído.
+    expect(find.text('Analizar con IA'), findsOneWidget);
   });
 
-  testWidgets('descuadre: banner con las 3 opciones en orden (IA la última)', (
+  testWidgets('descuadre: banner con repetir foto y editar a mano', (
     tester,
   ) async {
     await _pump(tester, _extraction(grandTotal: 600)); // suma 500 ≠ 600
@@ -86,7 +90,8 @@ void main() {
         matching: find.byType(FilledButton),
       ),
     );
-    expect(aiButton.onPressed, isNull); // deshabilitada hasta M6
+    // Sin proveedor configurado sigue deshabilitada (DC-13).
+    expect(aiButton.onPressed, isNull);
   });
 
   testWidgets('editar una línea recalcula el cuadre en vivo', (tester) async {
@@ -102,7 +107,7 @@ void main() {
         );
     await tester.pumpAndSettle();
 
-    expect(find.text('El ticket cuadra'), findsOneWidget);
+    expect(find.text('El total cuadra'), findsOneWidget);
     expect(find.textContaining('Descuadre'), findsNothing);
   });
 }

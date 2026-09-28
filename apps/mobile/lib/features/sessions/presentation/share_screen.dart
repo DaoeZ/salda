@@ -7,6 +7,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/config/app_environment.dart';
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../application/session_providers.dart';
 
@@ -24,7 +26,9 @@ class ShareScreen extends ConsumerWidget {
     final detail = ref.watch(sessionDetailProvider(sessionId)).value;
 
     if (detail == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: ScreenBody(children: [SkeletonList(rows: 2)]),
+      );
     }
     final url =
         'https://${AppEnvironment.hostingDomain}/s/$sessionId#k=${detail.shareCode}';
@@ -41,7 +45,7 @@ class ShareScreen extends ConsumerWidget {
                 Text(detail.summary.name, style: theme.textTheme.titleLarge),
                 const SizedBox(height: TokenSpacing.lg),
                 LayoutBuilder(
-                  builder: (_, constraints) => Card(
+                  builder: (_, constraints) => SaldaCard(
                     child: Padding(
                       padding: const EdgeInsets.all(TokenSpacing.lg),
                       child: QrImageView(

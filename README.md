@@ -20,10 +20,28 @@ backend/firestore        Reglas de seguridad, índices y sus tests
 docs/                    Especificación del proyecto
 ```
 
+## Empezar en un ordenador nuevo
+
+Guía completa: **[docs/SETUP_NUEVO_ORDENADOR.md](docs/SETUP_NUEVO_ORDENADOR.md)**.
+
+```bash
+git clone https://github.com/DaoeZ/salda.git && cd salda
+pwsh scripts/bootstrap-windows.ps1     # Windows
+./scripts/bootstrap.sh                 # Linux / macOS
+```
+
+> La **keystore de desarrollo y sus contraseñas no están en Git** y hay que
+> copiarlas aparte. Sin ellas el proyecto compila y los tests pasan, pero los
+> APK salen con otro certificado, y eso rompe Google Sign-In, los App Links y
+> la actualización sobre la app instalada.
+> `pwsh scripts/verify-signing-key.ps1` lo comprueba.
+
 ## Requisitos de desarrollo
 
-- Flutter estable (`C:\dev\flutter` en esta máquina) · Node 20+ · Firebase CLI
-- Android Studio / SDK de Android para compilar y ejecutar el APK
+Versiones fijadas en `.fvmrc`, `.nvmrc`, `.java-version` y `.tool-versions`:
+
+- Flutter 3.44.8 · JDK 17 (Temurin, apuntado por `JAVA_HOME`) · Node 22 · Firebase CLI
+- Android Studio / SDK de Android (compileSdk 36, minSdk 24) para compilar el APK
 
 ## Comandos habituales
 

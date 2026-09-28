@@ -25,15 +25,17 @@ void main() {
     splitModeDefault: SplitMode.byItem,
     balances: const {
       'p0': ParticipantBalanceView(
-          paid: Money(5190),
-          consumed: Money(3460),
-          net: Money(1730),
-          outstanding: Money(1730)),
+        paid: Money(5190),
+        consumed: Money(3460),
+        net: Money(1730),
+        outstanding: Money(1730),
+      ),
       'p1': ParticipantBalanceView(
-          paid: Money.zero,
-          consumed: Money(1730),
-          net: Money(-1730),
-          outstanding: Money(-1730)),
+        paid: Money.zero,
+        consumed: Money(1730),
+        net: Money(-1730),
+        outstanding: Money(-1730),
+      ),
     },
   );
   const participants = [
@@ -47,27 +49,32 @@ void main() {
       participants: participants,
       settlements: const [
         Settlement(
-            id: 'st1',
-            from: 'p1',
-            to: 'p0',
-            amount: Money(1730),
-            state: SettlementState.pending),
+          id: 'st1',
+          from: 'p1',
+          to: 'p0',
+          amount: Money(1730),
+          state: SettlementState.pending,
+        ),
       ],
       accounts: const [
-        AccountExport(name: 'Hotel', tickets: [
-          TicketExport(
-            merchantName: 'Hotel Sol',
-            date: '2026-07-10',
-            grandTotal: Money(5190),
-            paidBy: 'p0',
-            lines: [
-              LineExport(
+        AccountExport(
+          name: 'Hotel',
+          tickets: [
+            TicketExport(
+              merchantName: 'Hotel Sol',
+              date: '2026-07-10',
+              grandTotal: Money(5190),
+              paidBy: 'p0',
+              lines: [
+                LineExport(
                   name: 'Noche doble',
                   quantityMilli: 2000,
-                  totalPrice: Money(5190)),
-            ],
-          ),
-        ]),
+                  totalPrice: Money(5190),
+                ),
+              ],
+            ),
+          ],
+        ),
       ],
     );
     expect(bytes.length, greaterThan(1000));
@@ -76,7 +83,9 @@ void main() {
 
   test('la imagen-resumen es un PNG válido', () async {
     final bytes = await buildSummaryImage(
-        detail: detail, participants: participants);
+      detail: detail,
+      participants: participants,
+    );
     expect(bytes.length, greaterThan(1000));
     // Firma PNG: 89 50 4E 47.
     expect(bytes.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);

@@ -119,7 +119,134 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), 'correcta123');
     await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
     await tester.pump();
-    expect(find.text('Sin conexión. Inténtalo de nuevo.'), findsOneWidget);
+    expect(
+      find.text('No se pudo conectar con el servicio. Inténtalo de nuevo.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('credencial inválida de email conserva el texto de email', (
+    tester,
+  ) async {
+    final auth = _RecordingAuthRepository()
+      ..failure = const AuthFailure(
+        AuthFailureCode.invalidCredential,
+        stage: AuthFailureStage.emailAuthentication,
+      );
+    await _pump(tester, const LoginScreen(), auth);
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'edgar@salda.test',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'correcta123');
+    await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+    await tester.pump();
+
+    expect(find.text('Email o contraseña incorrectos'), findsOneWidget);
+  });
+
+  testWidgets('credencial inválida de Google usa el texto de Google', (
+    tester,
+  ) async {
+    final auth = _RecordingAuthRepository()
+      ..failure = const AuthFailure(
+        AuthFailureCode.invalidCredential,
+        stage: AuthFailureStage.firebaseAuthentication,
+      );
+    await _pump(tester, const LoginScreen(), auth);
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'No se pudo validar el acceso con Google. Vuelve a intentarlo.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Email o contraseña incorrectos'), findsNothing);
+  });
+
+  testWidgets('la configuración de email usa un mensaje neutral', (
+    tester,
+  ) async {
+    final auth = _RecordingAuthRepository()
+      ..failure = const AuthFailure(AuthFailureCode.configuration);
+    await _pump(tester, const LoginScreen(), auth);
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'edgar@salda.test',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'correcta123');
+    await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'No se pudo iniciar sesión. La aplicación necesita una revisión de configuración.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('El acceso con Google'), findsNothing);
+  });
+
+  testWidgets('cancelar Google no muestra error y permite reintentar', (
+    tester,
+  ) async {
+    final auth = _RecordingAuthRepository()
+      ..failure = const AuthFailure(AuthFailureCode.cancelled);
+    await _pump(tester, const LoginScreen(), auth);
+
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pump();
+    expect(find.byIcon(Icons.error_outline), findsNothing);
+    expect(
+      tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
+      isNotNull,
+    );
+
+    auth.failure = null;
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.pump();
+    expect(auth.calls, ['google', 'google']);
+  });
+
+  testWidgets('cada error visible restaura Google para reintentar', (
+    tester,
+  ) async {
+    final auth = _RecordingAuthRepository();
+    await _pump(tester, const LoginScreen(), auth);
+    const visibleFailures = [
+      AuthFailureCode.invalidCredential,
+      AuthFailureCode.network,
+      AuthFailureCode.configuration,
+      AuthFailureCode.googleUnavailable,
+      AuthFailureCode.accountMismatch,
+      AuthFailureCode.userDisabled,
+      AuthFailureCode.temporary,
+      AuthFailureCode.unknown,
+    ];
+    final googleButton = find.widgetWithText(
+      OutlinedButton,
+      'Continuar con Google',
+    );
+
+    for (final code in visibleFailures) {
+      auth.failure = AuthFailure(code);
+      await tester.ensureVisible(googleButton);
+      await tester.tap(googleButton);
+      await tester.pump();
+      expect(
+        tester.widget<OutlinedButton>(googleButton).onPressed,
+        isNotNull,
+        reason: 'el botón se restaura tras $code',
+      );
+    }
+
+    auth.failure = null;
+    await tester.ensureVisible(googleButton);
+    await tester.tap(googleButton);
+    await tester.pump();
+    expect(auth.calls.length, visibleFailures.length + 1);
   });
 }
 

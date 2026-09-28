@@ -19,8 +19,9 @@ Money parseEsAmount(String text) {
 }
 
 /// Todos los importes de una línea, en orden de aparición.
-List<Money> findAmounts(String text) =>
-    [for (final m in _amountRe.allMatches(text)) parseEsAmount(m[1]!)];
+List<Money> findAmounts(String text) => [
+  for (final m in _amountRe.allMatches(text)) parseEsAmount(m[1]!),
+];
 
 /// Canonicaliza importes con decimales de punto (OCR degradado) a formato
 /// español, SOLO si la línea no contiene ya importes con coma. Marca la
@@ -51,7 +52,8 @@ final _dateRe = RegExp(r'\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b');
       continue;
     }
     if (year < 2000 || year > 2099) continue;
-    final iso = '$year-${month.toString().padLeft(2, '0')}-'
+    final iso =
+        '$year-${month.toString().padLeft(2, '0')}-'
         '${day.toString().padLeft(2, '0')}';
     return (iso: iso, confidence: rawYear.length == 4 ? 0.95 : 0.85);
   }
@@ -61,7 +63,8 @@ final _dateRe = RegExp(r'\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b');
 // Con `:` el hour puede ser 1 cifra; con `.` exigimos 2 para no confundir
 // con precios degradados tipo `1.19`.
 final _timeRe = RegExp(
-    r'\b((?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]\d|2[0-3])\.[0-5]\d)\b');
+  r'\b((?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]\d|2[0-3])\.[0-5]\d)\b',
+);
 
 ({String hhmm, double confidence})? findEsTime(String text) {
   final m = _timeRe.firstMatch(text);

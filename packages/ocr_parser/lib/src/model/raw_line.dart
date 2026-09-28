@@ -10,7 +10,7 @@ class RawLine {
   final bool degradedAmounts;
 
   RawLine copyWith({String? text, bool? degradedAmounts}) => RawLine(
-        text ?? this.text,
-        degradedAmounts: degradedAmounts ?? this.degradedAmounts,
-      );
+    text ?? this.text,
+    degradedAmounts: degradedAmounts ?? this.degradedAmounts,
+  );
 }

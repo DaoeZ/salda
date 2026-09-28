@@ -6,15 +6,18 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/badges.dart';
+import '../../../core/ui/money_text.dart';
+import '../../../core/ui/states.dart';
+import '../../../core/ui/surfaces.dart';
 import '../../../core/utils/money_format.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../../scan/presentation/scan_flow.dart';
 import '../application/session_export.dart';
 import '../application/session_providers.dart';
 import '../data/session_repository.dart';
 import '../domain/session_models.dart';
+import 'ticket_navigation.dart';
 import 'settlement_progress_bar.dart';
-import 'ticket_detail_screen.dart';
 
 /// Detalle de sesión: Resumen (balances + liquidaciones) · Cuentas · Actividad.
 /// Los importes vienen de los agregados autoritativos de la function; la app
@@ -165,8 +168,6 @@ class _Menu extends ConsumerWidget {
       enabled: !deleting,
       onSelected: (action) async {
         switch (action) {
-          case 'add_ticket':
-            await showScanEntrySheet(context, ref, targetSessionId: sessionId);
           case 'share':
             context.go('/home/session/$sessionId/share');
           case 'export_pdf':
@@ -221,8 +222,6 @@ class _Menu extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
-        if (open)
-          PopupMenuItem(value: 'add_ticket', child: Text(l10n.menuAddTicket)),
         PopupMenuItem(value: 'share', child: Text(l10n.menuShare)),
         PopupMenuItem(value: 'export_pdf', child: Text(l10n.menuExportPdf)),
         PopupMenuItem(value: 'share_image', child: Text(l10n.menuShareImage)),
@@ -262,45 +261,37 @@ class _SummaryTab extends ConsumerWidget {
       return receiver != null && receiver.claimedByDevice.isEmpty;
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(TokenSpacing.lg),
+    return ScreenBody(
       children: [
-        Text(l10n.currentStateTitle, style: theme.textTheme.titleMedium),
-        const SizedBox(height: TokenSpacing.sm),
+        SectionHeader(title: l10n.currentStateTitle),
         _CurrentStateCard(progress: progress),
-        const SizedBox(height: TokenSpacing.sm),
-        Card(
-          child: Column(
-            children: [
-              for (final p in participants)
-                _CurrentBalanceRow(
-                  name: p.name,
-                  balance: detail.balances[p.id],
-                ),
-            ],
-          ),
+        const SizedBox(height: TokenSpacing.md),
+        SaldaCardList(
+          children: [
+            for (final p in participants)
+              _CurrentBalanceRow(name: p.name, balance: detail.balances[p.id]),
+          ],
         ),
-        const SizedBox(height: TokenSpacing.xl),
-        Text(l10n.settlementsTitle, style: theme.textTheme.titleMedium),
-        const SizedBox(height: TokenSpacing.sm),
+        const SectionGap(),
+        SectionHeader(title: l10n.settlementsTitle),
         // Pendientes/avisados arriba; los confirmados son HISTORIAL y van
         // aparte (bug 5 del MVP: mezclados parecían pagos duplicados).
         if (settlements
             .where((s) => s.state != SettlementState.confirmed)
             .isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(TokenSpacing.lg),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check_circle_outline,
-                    color: theme.colorScheme.settlementConfirmed,
-                  ),
-                  const SizedBox(width: TokenSpacing.sm),
-                  Expanded(child: Text(l10n.allSettled)),
-                ],
-              ),
+          SaldaCard(
+            color: context.salda.positiveMuted,
+            borderColor: context.salda.positive.withValues(alpha: 0.25),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: context.salda.positive,
+                ),
+                const SizedBox(width: TokenSpacing.md),
+                Expanded(child: Text(l10n.allSettled)),
+              ],
             ),
           )
         else
@@ -317,11 +308,15 @@ class _SummaryTab extends ConsumerWidget {
             ),
         if (settlements.any((s) => s.state == SettlementState.confirmed)) ...[
           const SizedBox(height: TokenSpacing.md),
-          Card(
+          SaldaCard(
+            padding: EdgeInsets.zero,
             child: ExpansionTile(
+              shape: const Border(),
+              collapsedShape: const Border(),
               leading: Icon(
                 Icons.history,
-                color: theme.colorScheme.settlementConfirmed,
+                size: 20,
+                color: context.salda.textMuted,
               ),
               title: Text(
                 l10n.historyConfirmedTitle(
@@ -329,6 +324,7 @@ class _SummaryTab extends ConsumerWidget {
                       .where((s) => s.state == SettlementState.confirmed)
                       .length,
                 ),
+                style: theme.textTheme.titleSmall,
               ),
               children: [
                 for (final settlement in settlements.where(
@@ -348,11 +344,10 @@ class _SummaryTab extends ConsumerWidget {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          formatMoney(settlement.amount),
-                          style: const TextStyle(
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
+                        MoneyText(
+                          settlement.amount,
+                          size: MoneySize.small,
+                          tone: MoneyTone.muted,
                         ),
                         // Deshacer una confirmación también es del receptor.
                         if (detail.summary.status == SessionStatus.open &&
@@ -375,19 +370,16 @@ class _SummaryTab extends ConsumerWidget {
             ),
           ),
         ],
-        const SizedBox(height: TokenSpacing.xl),
-        Text(l10n.economicHistoryTitle, style: theme.textTheme.titleMedium),
-        const SizedBox(height: TokenSpacing.sm),
-        Card(
-          child: Column(
-            children: [
-              for (final p in participants)
-                _HistoricalBalanceRow(
-                  name: p.name,
-                  balance: detail.balances[p.id],
-                ),
-            ],
-          ),
+        const SectionGap(),
+        SectionHeader(title: l10n.economicHistoryTitle),
+        SaldaCardList(
+          children: [
+            for (final p in participants)
+              _HistoricalBalanceRow(
+                name: p.name,
+                balance: detail.balances[p.id],
+              ),
+          ],
         ),
       ],
     );
@@ -405,12 +397,14 @@ class _CurrentStateCard extends StatelessWidget {
     final theme = Theme.of(context);
     final confirmed = formatMoney(progress.confirmed);
     final required = formatMoney(progress.required);
-    return Card(
-      color: progress.isSettled
-          ? theme.colorScheme.primaryContainer
-          : theme.colorScheme.surfaceContainerLow,
+    final c = context.salda;
+    return SaldaCard(
+      color: progress.isSettled ? c.positiveMuted : c.surface,
+      borderColor: progress.isSettled
+          ? c.positive.withValues(alpha: 0.25)
+          : c.border,
       child: Padding(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -418,11 +412,10 @@ class _CurrentStateCard extends StatelessWidget {
               children: [
                 Icon(
                   progress.isSettled
-                      ? Icons.check_circle
+                      ? Icons.check_rounded
                       : Icons.account_balance_wallet_outlined,
-                  color: progress.isSettled
-                      ? theme.colorScheme.settlementConfirmed
-                      : theme.colorScheme.primary,
+                  size: 20,
+                  color: progress.isSettled ? c.positive : c.primary,
                 ),
                 const SizedBox(width: TokenSpacing.sm),
                 Expanded(
@@ -591,30 +584,32 @@ class _SettlementCard extends ConsumerWidget {
       ),
     };
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
+    final tone = switch (settlement.state) {
+      SettlementState.pending => BadgeTone.pending,
+      SettlementState.marked => BadgeTone.warning,
+      SettlementState.confirmed => BadgeTone.positive,
+    };
+    return SaldaCard(
       child: Padding(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
+        padding: EdgeInsets.zero,
         child: Column(
           children: [
             Row(
               children: [
-                Expanded(child: Text(l10n.settlementRow(fromName, toName))),
-                Text(
-                  formatMoney(settlement.amount),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                Expanded(
+                  child: Text(
+                    l10n.settlementRow(fromName, toName),
+                    style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
+                const SizedBox(width: TokenSpacing.md),
+                MoneyText(settlement.amount, size: MoneySize.medium),
               ],
             ),
-            const SizedBox(height: TokenSpacing.sm),
-            Row(
-              children: [
-                Icon(Icons.circle, size: 10, color: color),
-                const SizedBox(width: TokenSpacing.xs),
-                Expanded(child: Text(label)),
-              ],
+            const SizedBox(height: TokenSpacing.md),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: StatusBadge(label, tone: tone),
             ),
             if (open && settlement.state != SettlementState.confirmed) ...[
               const SizedBox(height: TokenSpacing.xs),
@@ -643,7 +638,9 @@ class _SettlementCard extends ConsumerWidget {
                           settlement.id,
                           SettlementState.confirmed,
                         ),
-                        child: Text(l10n.actionConfirm),
+                        // Misma acción, mismo nombre en toda la app y en la
+                        // web de invitados: confirmar que el dinero llegó.
+                        child: Text(l10n.economyConfirmPayment),
                       )
                     else
                       // El receptor reclamó su nombre: confirma él desde la
@@ -676,13 +673,27 @@ class _AccountsTab extends ConsumerWidget {
         ref.watch(participantsProvider(sessionId)).value ?? const [];
     final names = {for (final p in participants) p.id: p.name};
     if (accounts.isEmpty) {
-      return Center(child: Text(l10n.accountsEmpty));
+      return ScreenBody(
+        children: [
+          EmptyState(
+            icon: Icons.folder_outlined,
+            title: l10n.accountsEmpty,
+            body: l10n.emptyTicketsBody,
+          ),
+        ],
+      );
     }
-    return ListView(
-      padding: const EdgeInsets.all(TokenSpacing.lg),
+    return ScreenBody(
       children: [
         for (final account in accounts)
-          _AccountCard(sessionId: sessionId, account: account, names: names),
+          Padding(
+            padding: const EdgeInsets.only(bottom: TokenSpacing.md),
+            child: _AccountCard(
+              sessionId: sessionId,
+              account: account,
+              names: names,
+            ),
+          ),
       ],
     );
   }
@@ -752,13 +763,12 @@ class _AccountCard extends ConsumerWidget {
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
-              onTap: () => context.push(
-                '/home/session/$sessionId/ticket',
-                extra: TicketRef(
-                  sessionId: sessionId,
-                  ticket: ticket,
-                  payerName: names[ticket.paidBy] ?? '—',
-                ),
+              // Misma ruta que el resto de superficies: una sola forma de
+              // abrir un ticket en toda la app.
+              onTap: () => openTicket(
+                context,
+                sessionId: sessionId,
+                ticketId: ticket.id,
               ),
             ),
         ],
