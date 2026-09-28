@@ -36,17 +36,47 @@ final accountTicketsProvider = StreamProvider.autoDispose
           ref.watch(sessionRepositoryProvider).watchTickets(key.sid, key.aid),
     );
 
-/// Ticket alcanzado por DERECHO HISTÓRICO (A11d), si lo hay.
-///
-/// Dos lecturas deterministas: el derecho —que guarda la cuenta— y el
-/// ticket. Es el ÚNICO camino que funciona para quien ya no es miembro del
-/// grupo, porque a un ex-miembro no se le permite listar las cuentas.
-final historicTicketProvider = FutureProvider.autoDispose
-    .family<HistoricTicket?, ({String sid, String tid})>(
+/// Derecho histórico de quien mira sobre un ticket (A11d), en vivo.
+final ticketEntitlementProvider = StreamProvider.autoDispose
+    .family<TicketEntitlement?, ({String sid, String tid})>(
       (ref, key) => ref
           .watch(sessionRepositoryProvider)
-          .fetchHistoricTicket(key.sid, key.tid),
+          .watchTicketEntitlement(key.sid, key.tid),
     );
+
+/// Ticket alcanzado por DERECHO HISTÓRICO (A11d), si lo hay, EN VIVO.
+///
+/// Dos documentos deterministas: el derecho —que guarda la cuenta— y el
+/// ticket. Es el ÚNICO camino que funciona para quien ya no es miembro del
+/// grupo, porque a un ex-miembro no se le permite listar las cuentas.
+///
+/// Tiene que ser un stream y no una lectura puntual (BUG-CP-05): recompute
+/// escribe el derecho de TODO participante económico, dueño incluido, y el
+/// detalle da precedencia a este camino. Con `.get()` la pantalla quedaba
+/// congelada en el ticket del momento de abrirla —`picking.open`, importe,
+/// pagador, foto— hasta salir y volver a entrar. Si cambia el derecho, se
+/// vuelve a suscribir al ticket con la cuenta y los nombres nuevos.
+final historicTicketProvider = StreamProvider.autoDispose
+    .family<HistoricTicket?, ({String sid, String tid})>((ref, key) async* {
+      final repository = ref.watch(sessionRepositoryProvider);
+      final entitlement = await ref.watch(
+        ticketEntitlementProvider(key).future,
+      );
+      if (entitlement == null) {
+        yield null;
+        return;
+      }
+      yield* repository
+          .watchTicket(key.sid, entitlement.accountId, key.tid)
+          .map(
+            (ticket) => ticket == null
+                ? null
+                : HistoricTicket(
+                    ticket: ticket,
+                    participantNames: entitlement.participantNames,
+                  ),
+          );
+    });
 
 /// Nombres del reparto de un ticket: `pid → nombre`.
 ///

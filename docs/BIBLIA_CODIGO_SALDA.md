@@ -161,11 +161,11 @@ El checkpoint en dispositivo (2026-09-09) sacó **dos fallos P1/P2 distintos con
 la misma forma**: el dato se escribe correctamente, las Rules lo validan, hay
 tests que lo comprueban… y **nadie verifica el camino de vuelta**.
 
-- **BUG-CP-05**: `finishPicking` persiste bien, pero la pantalla se alimenta de
-  `historicTicketProvider`, un `FutureProvider` con `.get()` en vez de
-  `.snapshots()`, al que `sessionTicketProvider` da **precedencia sobre el
-  stream vivo**. El estado no se refresca nunca — comprobado esperando 7
-  minutos.
+- **BUG-CP-05** (resuelto 2026-09-28): `finishPicking` persiste bien, pero la
+  pantalla se alimenta de `historicTicketProvider`, un `FutureProvider` con
+  `.get()` en vez de `.snapshots()`, al que `sessionTicketProvider` da
+  **precedencia sobre el stream vivo**. El estado no se refresca nunca —
+  comprobado esperando 7 minutos.
 - **BUG-CP-07**: la corrección escribe `lastEditedByUid`/`lastEditedAt` y P6
   emite su evento, pero `_ticketFrom` —el **único** mapper del ticket— no lee
   esos campos. `_CorrectionSignature` es **código muerto**: no puede
@@ -181,6 +181,24 @@ provider es un stream, no un `Future`.
 Aviso adicional: un smoke manual **en la web** no valida el mismo contrato **en
 la app**. A19 se dio por realtime tras un smoke en navegador; el camino de la app
 nunca se ejercitó y era justo el roto.
+
+Tres corolarios que salieron al cerrar BUG-CP-05 (entrada 2026-09-28):
+
+1. **Montar una pantalla con un modelo hecho a mano se salta el camino que
+   falla.** Los tests de A19 construían `TicketDetailScreen(ticket: …)` con un
+   `SessionTicket` literal: por construcción no pueden ver qué provider lo
+   alimenta en producción. La prueba de «esto se ve en vivo» monta la **ruta
+   real**, cambia el documento **después** y exige el **mismo** `State`
+   (`tester.state(...)` + `same(...)`): ni reapertura ni esqueleto.
+2. **Cuando dos fuentes compiten por precedencia, la preferida tiene que ser
+   al menos tan viva como la de repliegue.** Aquí la preferida era una lectura
+   puntual y el repliegue un stream: ganaba siempre la peor.
+3. **Riverpod 3 conserva el último dato tras un error** (`AsyncValue.value`
+   sigue devolviéndolo). Quien elige entre fuentes debe mirar `hasError`
+   **antes** que `value`, o un permiso perdido se pinta como un dato congelado.
+
+Y un test de reactividad solo vale si **falla con el código roto**: hay que
+comprobarlo restaurando el código anterior, no suponerlo.
 
 ### C15. Una Rule correcta y desplegada puede denegar: el emulador no aplica IAM
 
@@ -219,6 +237,130 @@ las reglas. Está documentado en `docs/ENTORNOS.md`.
 ---
 
 # Entradas cronológicas
+
+## BUG-CP-05 — EL DETALLE DEL TICKET NO SE ACTUALIZABA EN VIVO — 2026-09-28
+
+**Rama:** `codex/relations-groups-navigation` · **HEAD al empezar:** `4c90fee`
+**Resultado: RESUELTO.** Cliente Flutter puro: cero cambios de Rules,
+Functions o web, **cero deploys**. `main` y `salda-prod` intactos.
+
+### El síntoma y por qué no era latencia
+
+En el checkpoint, «He terminado» / «Terminar por X» persistían bien, las líneas
+se movían en vivo, pero el banner seguía en «Aún estáis eligiendo» durante ~7
+minutos; salir y volver a entrar mostraba «Reparto cerrado» al instante. Si
+reentrar lo arregla, el dato ya estaba escrito: no es recompute.
+
+### El grafo real (reconstruido antes de tocar nada)
+
+`/home/session/:sid/ticket/:tid` → `TicketRoute` → `sessionTicketProvider` →
+
+1. **primero** `historicTicketProvider` (derecho A11d): `FutureProvider` con
+   dos `.get()`, el derecho `ticketEntitlements/{tid}_{uid}` y el ticket;
+2. solo si eso resolvía `null`: `accountsProvider` → `accountTicketsProvider`,
+   ambos `snapshots()`.
+
+La trampa: recompute escribe el derecho para **todo** participante económico,
+**dueño incluido** (no solo para ex-miembros, que es para lo que nació). Así
+que en cuanto un ticket tenía reparto recalculado, el camino (1) ganaba y el
+`SessionTicket` se congelaba **entero** para toda la vida de la pantalla:
+`picking.open`, comercio, fecha, importe, pagador, `imagePath`,
+`splitModeOverride`, `spaceId`. Las líneas se salvaban porque
+`ticketLinesProvider` es otro stream. El diagnóstico del checkpoint era
+correcto y se afinó en un punto: `fetchHistoricTicket` **no** devolvía una
+proyección vieja, leía el ticket real; el defecto era lectura puntual frente a
+stream, no dato histórico.
+
+Consumidores de `historicTicketProvider`: `sessionTicketProvider`,
+`ticketParticipantNamesProvider` (repliegue de nombres) y
+`historicManualNamesProvider` (nombres de MANUAL para ex-miembros en
+Economía). Los tres funcionan igual con un stream.
+
+### ¿Había razón de autoridad para la lectura puntual? No
+
+El derecho es la **llave** para llegar al ticket sin listar cuentas, no una
+foto que haya que preservar. `hasTicketHistory` en Rules autoriza igual un
+`get` que un listener, y un listener que pierde el permiso recibe
+`permission-denied`, que es justo lo que el modelo necesita para dejar de
+enseñar. Nada que conservar.
+
+### El arreglo, y por qué así
+
+- Repositorio: `fetchHistoricTicket` → `watchTicketEntitlement` +
+  `watchTicket`, dos `snapshots()` sobre las mismas rutas deterministas.
+- `historicTicketProvider` → `StreamProvider` con `async*`:
+  `await ref.watch(ticketEntitlementProvider(key).future)` y `yield*` del
+  ticket. **Se compone con Riverpod en vez de escribir un `switchMap`** a mano
+  en el repositorio: Riverpod ya da la semántica «si cambia el derecho, cancela
+  y resuscribe» y no hace falta ni `rxdart` ni un helper de streams nuevo.
+- `sessionTicketProvider`: `hasError` **antes** que `value` (Riverpod 3
+  conserva el último dato tras un error) y solo la **primera** carga devuelve
+  `loading`. Lo segundo importa: un gasto recién creado se abre por las
+  cuentas porque su derecho aún no existe; cuando recompute lo escribe, el
+  provider se reconstruye, y devolver `loading` ahí pasaba por el esqueleto,
+  **desmontaba el detalle** y perdía su estado (modo corrección incluido).
+
+Descartado: quitar la precedencia del derecho y usar siempre las cuentas. Un
+ex-miembro no puede listar cuentas; el derecho es su único camino.
+
+Descartado: leer el derecho una vez y solo escuchar el ticket. Funcionaba para
+`accountId` (inmutable), pero dejaba congelados los nombres del reparto y no
+veía la limpieza del derecho. Un listener más por pantalla no justifica la
+excepción.
+
+### Lo que el test tenía que demostrar, y cómo se comprobó
+
+`test/ticket_live_detail_test.dart` (11). Para reproducir las Rules de un
+ex-miembro sin emulador, el repositorio real se subclasifica y `watchAccounts`
+emite `permission-denied`: si no, fake_cloud_firestore (que no aplica Rules)
+dejaría que el repliegue por cuentas tapara cualquier fallo del derecho.
+
+Se restauró el código exacto de HEAD (`FutureProvider` + `.get()`) conservando
+solo los métodos nuevos para que el fichero compilara: **8 fallan, 3 pasan** —
+los tres que deben pasar también antes (legacy, sin derecho, derecho que
+aparece). Una primera emulación con `.first` sobre el stream **no** era fiel
+(ni el camino legacy montaba) y se tiró: una reproducción que no reproduce
+fielmente no demuestra nada.
+
+### Trampas de test encontradas
+
+- **fake_cloud_firestore FUSIONA un mapa vacío en `update`** en vez de
+  sustituirlo: `update({'picking.open': {}})` no cambia nada. Firestore real sí
+  sustituye. Usar `FieldValue.delete()` por clave, como hace `finishPicking`.
+- **`StreamController.close()` no completa si nadie escuchó nunca.** Con el
+  código viejo el stream controlado no tenía oyente y `addTearDown(close)`
+  colgaba el runner ocho minutos. Se cierra sin esperar.
+- **`container.read(p.future)` sin oyente sobre un `StreamProvider.autoDispose`
+  falla** («disposed during loading state»): Riverpod lo desecha antes del
+  primer valor. Con el `FutureProvider` anterior daba tiempo. Los dos tests de
+  `space_member_removal_test.dart` sobre el derecho histórico hacían eso: se
+  les añadió `container.listen(...)` —como en la pantalla, que siempre lo
+  vigila— sin tocar ni un aserto. El contrato que prueban no cambió; solo su
+  mecánica. En producción no aplica: todos los consumidores usan `ref.watch`.
+- **`dart format` sobre un directorio** reformateó dos ficheros ajenos al bug
+  (`ticket_correction*.dart`) con otro estilo de línea. Se restauraron: formatear
+  solo los ficheros tocados.
+
+### Validación
+
+| Suite | Resultado |
+|---|---|
+| `dart analyze --fatal-infos` | 0 avisos |
+| `flutter test` en `apps/mobile` | **682** ✅ / 5 skip (671 antes; +11) |
+| `test/ticket_live_detail_test.dart` | 11 ✅ (8 ❌ con el código anterior) |
+
+No se ejecutaron Rules, Functions, `domain`, `ocr_parser` ni `guest_web`: el
+cambio no toca ninguna línea de esas áreas. Sin reproducción en hardware: no
+hay dispositivo en esta sesión.
+
+### Qué debe anticipar la siguiente sesión
+
+- **BUG-CP-07 está justo al lado** (`_ticketFrom` no mapea
+  `lastEditedByUid`/`lastEditedAt`) y **no** se tocó. Ahora que el ticket llega
+  en vivo, en cuanto se mapeen esos campos la firma aparecerá sin reabrir.
+- CP6 (realtime entre **dos** clientes) sigue necesitando una segunda cuenta.
+- La foto se beneficia de paso: `ticketImageProvider` va indexado por
+  `uploaded`, así que un `imagePath` que llega en vivo recarga la foto.
 
 ## BUG-CP-03 — LA FOTO DEL TICKET NO SUBÍA: FALTABA UN BINDING IAM — 2026-09-15
 

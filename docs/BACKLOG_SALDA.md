@@ -79,6 +79,11 @@ sirven para distinguir «no existe» de «falta un camino»— y **no** son cont
 > abiertos (**un** P1, BUG-CP-05). La causa fue de **entorno, no de código**:
 > faltaba un binding IAM en `salda-dev`. No se tocó ni una línea de código ni
 > de Rules.
+>
+> **Actualización 2026-09-28: BUG-CP-05 RESUELTO.** Quedan **cuatro** BUG-CP
+> abiertos y **ningún P1**. Fue cliente Flutter puro: el detalle del ticket
+> leía el ticket por derecho histórico con `.get()` y ahora lo escucha en vivo.
+> Sin cambios de Rules, Functions ni web; sin deploy.
 
 ---
 
@@ -995,6 +1000,9 @@ Contrato vivo: **`docs/CIERRE_DE_CONSUMO.md`** · **ADR-041**.
   adicional (`getAfter`), izado a la rama.
 - App: `finishPicking` + «He terminado» + «Terminar por {name}» (A10 cierra por
   quien no puede pulsar) + aviso de reapertura con impacto de pagos confirmados.
+  El banner no se refrescaba en vivo en la app cuando el ticket se abría por
+  derecho histórico: fue **BUG-CP-05** (bug nuevo, no reapertura de A19),
+  resuelto el 2026-09-28 — ver «Checkpoint en dispositivo real».
 - Web: `PickItems.svelte:126-146` + `finishPicking`.
 - `assignment` no cambió ni un byte; ningún motor económico nuevo; ninguna
   Function nueva.
@@ -1252,7 +1260,7 @@ recalcula mientras el reparto está reabierto** (C9 verificado en hardware).
 | ID | Qué | Sev. | Causa raíz |
 |---|---|---|---|
 | ~~BUG-CP-03~~ | ~~La foto del ticket no sube a Storage (403 `Permission denied` en `receipts/{sid}/{tid}/original.jpg`)~~ | — | **RESUELTO 2026-09-15.** Faltaba el binding IAM `roles/firebaserules.firestoreServiceAgent` en `salda-dev`. Solo entorno: sin cambios de código ni de Rules. Ver abajo y la Biblia de Código |
-| **BUG-CP-05** | El estado del reparto no se refresca en vivo; hay que salir y reentrar | **P1** | `historicTicketProvider` es `FutureProvider` con `.get()`, y `sessionTicketProvider` le da precedencia sobre el stream vivo |
+| ~~BUG-CP-05~~ | ~~El estado del reparto no se refresca en vivo; hay que salir y reentrar~~ | — | **RESUELTO 2026-09-28.** `historicTicketProvider` era `FutureProvider` con `.get()` y `sessionTicketProvider` le daba precedencia sobre el stream vivo. Ahora derecho y ticket son streams. Solo cliente Flutter, sin deploy. Ver abajo y la Biblia de Código |
 | **BUG-CP-02** | El scroll del detalle de ticket queda atrapado hacia abajo | **P2** | Sin investigar |
 | **BUG-CP-04** | El balance neto bilateral no explica ambas direcciones en su desglose | **P2** | El libro netea antes de la pantalla: `withUser()` devuelve un único balance y `openObligations()` solo trae esa dirección |
 | **BUG-CP-07** | El detalle del ticket no muestra «Corregido por … · fecha» | **P2** | `_ticketFrom` no lee `lastEditedByUid`/`lastEditedAt` → `_CorrectionSignature` es código muerto |
@@ -1313,6 +1321,59 @@ el emulador, que resuelve `firestore.*` en proceso y **no tiene capa IAM**. Sus
 13 casos seguirán en verde con el binding ausente. Ver **C15** en la Biblia de
 Código.
 
+**BUG-CP-05 RESUELTO (2026-09-28) — cliente Flutter, no latencia de
+recompute.** Se reconstruyó el grafo real: `/home/session/:sid/ticket/:tid` →
+`TicketRoute` → `sessionTicketProvider` → **primero** `historicTicketProvider`
+(derecho A11d) y solo si no resuelve, `accountsProvider` +
+`accountTicketsProvider` (streams). El primero era un `FutureProvider` con dos
+`.get()` —el derecho y el ticket—, y recompute escribe el derecho para **todo**
+participante económico, dueño incluido. Así que casi cualquier ticket firme se
+abría por la lectura puntual y el `SessionTicket` quedaba congelado **entero**
+mientras la pantalla viviera: `picking.open` (el síntoma), pero también
+comercio, fecha, importe, pagador, `imagePath` (la foto recién subida no
+aparecía), `splitModeOverride` y `spaceId`. Las líneas sí se movían porque
+`ticketLinesProvider` ya era un stream aparte.
+
+No había razón de autoridad para la lectura puntual: el derecho no es una
+foto histórica sino la **llave** para llegar al ticket real, y las Rules
+(`hasTicketHistory`) autorizan igual un `get` que un listener.
+
+**Arreglo** (sin dependencias ni fuentes de verdad nuevas):
+
+- `SessionRepository.fetchHistoricTicket` → `watchTicketEntitlement` +
+  `watchTicket` (dos `snapshots()` sobre las MISMAS rutas deterministas).
+- `historicTicketProvider` pasa a `StreamProvider`: escucha el derecho y, con
+  su `accountId`, el ticket. Si el derecho cambia o desaparece, se resuscribe.
+- `sessionTicketProvider` mira el **error antes que el valor** (Riverpod 3
+  conserva el último dato tras un error: con el orden antiguo, perder el
+  permiso a mitad de vida seguiría pintando el ticket congelado) y solo
+  espera en la **primera** carga, para que el derecho que recompute escribe
+  con la pantalla abierta no desmonte el detalle.
+
+Revocación según el modelo existente: el derecho es monotónico; si el gasto se
+elimina (A2) el ticket deja de existir, el camino del derecho emite `null` y se
+cae al camino normal, que para un ex-miembro es «ya no está disponible». Un
+error de permiso del listener hace lo mismo. Nadie gana acceso: el camino
+normal decide con su propio permiso, como antes.
+
+**Tests:** `apps/mobile/test/ticket_live_detail_test.dart`, 11 casos que
+recorren la **ruta real** y exigen el **mismo** `State` del detalle antes y
+después de cada cambio: «He terminado» + «Terminar por» cierran en pantalla;
+la reapertura llega; una corrección A11c cambia comercio e importe; el derecho
+que aparece con la pantalla abierta no la desmonta; legacy sin derecho ni
+protocolo sigue vivo; ex-miembro solo por derecho y en vivo; sin derecho no se
+gana nada; A2 con la pantalla abierta; pérdida de permiso a mitad de vida; y el
+provider emite cada cambio sin recrearse. **Con el código anterior fallan 8 y
+pasan 3** (los tres guardas de no-regresión), comprobado restaurando HEAD.
+Los dos tests del derecho histórico de `space_member_removal_test.dart` leían
+el provider sin oyente, lo que un stream `autoDispose` no admite: se les añadió
+el oyente sin tocar ningún aserto.
+
+**Queda sin probar:** el realtime entre **dos clientes reales** (CP6), que sigue
+necesitando una segunda cuenta registrada; y la validación en hardware, en el
+próximo checkpoint. BUG-CP-07 (firma de corrección no mapeada) está al lado y
+**no** se tocó.
+
 **BUG-CP-04 es P2 y no P1 porque el dinero está protegido**: intentar liquidar
 por encima del neto se rechaza en backend con `PAYMENT_EXCEEDS_BALANCE`. El
 defecto es de explicación, no de cálculo.
@@ -1358,7 +1419,9 @@ Las tres se cubren en **una sola sesión** en cuanto exista:
    admin no pueda otorgarse autoridad que no le corresponde.
 2. **CP3 Caso A** (hereda el administrador) y **Caso B** (hereda el miembro
    registrado más antiguo).
-3. **CP6** — realtime del reparto entre dos clientes.
+3. **CP6** — realtime del reparto entre dos clientes. Desde BUG-CP-05 el camino
+   de la **app** está cubierto por tests de lectura sobre la ruta real; lo que
+   falta es la prueba con dos dispositivos.
 
 **La web desplegada en `salda-dev` NO sirve como segundo cliente**: el despliegue
 de A19 fue solo *functions* + *firestore:rules*, así que Hosting sigue sirviendo
@@ -1399,8 +1462,9 @@ y el plugin nativo no se aplica.
 
 1. ~~**BUG-CP-03** (P1)~~ — **RESUELTO 2026-09-15**: era entorno (binding IAM
    ausente en `salda-dev`), no código.
-2. **BUG-CP-05** (P1) — causa raíz localizada; toca el camino del derecho
-   histórico, así que merece test de lectura propio.
+2. ~~**BUG-CP-05** (P1)~~ — **RESUELTO 2026-09-28**: el detalle leía el ticket
+   por derecho histórico con `.get()`; ahora es stream, con test de lectura
+   propio sobre la ruta real.
 3. **BUG-CP-02** (P2) — dificulta navegar un workflow ya resuelto.
 4. **Bloque de auditabilidad**: BUG-CP-04 + BUG-CP-07 + OBS-CP-UX + OBS-CP-LEGACY.
 5. **BUG-CP-01** (P3).

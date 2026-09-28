@@ -173,6 +173,23 @@ class HistoricTicket {
   final Map<String, String> participantNames;
 }
 
+/// Derecho histórico de quien mira sobre UN ticket (A11d), tal cual lo
+/// escribe recompute en `ticketEntitlements/{ticketId}_{uid}`.
+///
+/// Solo aporta lo que hace falta para llegar al ticket sin listar nada —la
+/// cuenta— y los nombres de ESE reparto. El ticket se lee aparte y en vivo.
+class TicketEntitlement {
+  const TicketEntitlement({
+    required this.accountId,
+    required this.participantNames,
+  });
+
+  final String accountId;
+
+  /// pid → nombre visible, congelado por recompute para este ticket.
+  final Map<String, String> participantNames;
+}
+
 class SessionTicket {
   const SessionTicket({
     required this.id,

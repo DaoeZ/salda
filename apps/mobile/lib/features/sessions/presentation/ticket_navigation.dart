@@ -76,13 +76,27 @@ bool _esFaltaDeAcceso(Object error) =>
 /// Se intenta PRIMERO el camino determinista del derecho histórico: además
 /// de ser el único que sirve a un ex-miembro, cuesta dos lecturas en vez de
 /// recorrer todas las cuentas. El repliegue por cuentas queda para lo que no
-/// tiene proyección (sesiones anteriores a A11d).
+/// tiene proyección (sesiones anteriores a A11d, o un gasto recién creado
+/// al que recompute aún no le ha escrito el derecho).
+///
+/// Los DOS caminos son streams del mismo documento (BUG-CP-05): da igual
+/// por cuál se llegue, el detalle ve cada cambio del ticket sin reabrirse.
 final sessionTicketProvider = Provider.autoDispose
     .family<AsyncValue<SessionTicket?>, ({String sid, String tid})>((ref, key) {
       final historic = ref.watch(historicTicketProvider(key));
-      if (historic.isLoading) return const AsyncValue.loading();
-      final granted = historic.value;
-      if (granted != null) return AsyncValue.data(granted.ticket);
+      // Un error del derecho no se enseña: se prueba el camino normal, que
+      // decide con su propio permiso. Se mira ANTES que el valor porque
+      // Riverpod conserva el último dato tras un error, y enseñarlo sería
+      // pintar congelado un ticket que ya no se puede leer.
+      if (!historic.hasError) {
+        final granted = historic.value;
+        if (granted != null) return AsyncValue.data(granted.ticket);
+        // Solo la PRIMERA carga espera. Si el derecho aparece con la
+        // pantalla abierta (recompute lo escribe después de crear el
+        // gasto), el camino normal sigue pintando mientras tanto: volver a
+        // un esqueleto desmontaría el detalle y perdería su estado.
+        if (!historic.hasValue) return const AsyncValue.loading();
+      }
 
       final accounts = ref.watch(accountsProvider(key.sid));
       // El error se mira ANTES que la carga: un stream denegado se queda en

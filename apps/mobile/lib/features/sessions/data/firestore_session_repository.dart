@@ -375,42 +375,51 @@ class FirestoreSessionRepository implements SessionRepository {
       .map((snap) => [for (final d in snap.docs) _ticketFrom(d)]);
 
   @override
-  Future<HistoricTicket?> fetchHistoricTicket(
+  Stream<TicketEntitlement?> watchTicketEntitlement(
     String sessionId,
     String ticketId,
-  ) async {
+  ) {
     final viewer = uid();
-    if (viewer.isEmpty) return null;
+    if (viewer.isEmpty) return Stream.value(null);
     // La ruta del derecho es determinista y la conocen tanto las Rules como
     // recompute: `{ticketId}_{uid}`. Si no existe, no hay derecho — y no se
     // intenta ninguna otra lectura.
-    final entitlement = await _sessions
+    return _sessions
         .doc(sessionId)
         .collection('ticketEntitlements')
         .doc('${ticketId}_$viewer')
-        .get();
-    final data = entitlement.data();
-    if (data == null) return null;
-    final accountId = data['accountId'] as String?;
-    if (accountId == null || accountId.isEmpty) return null;
-    final ticket = await _sessions
-        .doc(sessionId)
-        .collection('accounts')
-        .doc(accountId)
-        .collection('tickets')
-        .doc(ticketId)
-        .get();
-    if (!ticket.exists) return null;
-    return HistoricTicket(
-      ticket: _ticketFrom(ticket),
-      participantNames: {
-        for (final entry
-            in (data['participantNames'] as Map?)?.entries ??
-                const <MapEntry<Object?, Object?>>[])
-          '${entry.key}': '${entry.value}',
-      },
-    );
+        .snapshots()
+        .map((doc) {
+          final data = doc.data();
+          final accountId = data?['accountId'] as String?;
+          if (data == null || accountId == null || accountId.isEmpty) {
+            return null;
+          }
+          return TicketEntitlement(
+            accountId: accountId,
+            participantNames: {
+              for (final entry
+                  in (data['participantNames'] as Map?)?.entries ??
+                      const <MapEntry<Object?, Object?>>[])
+                '${entry.key}': '${entry.value}',
+            },
+          );
+        });
   }
+
+  @override
+  Stream<SessionTicket?> watchTicket(
+    String sessionId,
+    String accountId,
+    String ticketId,
+  ) => _sessions
+      .doc(sessionId)
+      .collection('accounts')
+      .doc(accountId)
+      .collection('tickets')
+      .doc(ticketId)
+      .snapshots()
+      .map((doc) => doc.exists ? _ticketFrom(doc) : null);
 
   @override
   Future<List<LineExport>> fetchTicketLines(String ticketPath) async {

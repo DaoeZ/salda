@@ -453,11 +453,17 @@ void main() {
       });
     });
 
-    test('abre el ticket por GET determinista, sin listar cuentas', () async {
+    test('abre el ticket por ruta determinista, sin listar cuentas', () async {
       final container = ProviderContainer(
         overrides: loggedInOverrides(firestore: firestore, uid: 'uid-jorge'),
       );
       addTearDown(container.dispose);
+      // Es un stream autoDispose (BUG-CP-05): como en la pantalla, alguien
+      // tiene que escucharlo o se desecha antes de emitir.
+      container.listen(
+        historicTicketProvider((sid: 's1', tid: 't1')),
+        (_, _) {},
+      );
 
       final historico = await container.read(
         historicTicketProvider((sid: 's1', tid: 't1')).future,
@@ -475,6 +481,10 @@ void main() {
         overrides: loggedInOverrides(firestore: firestore, uid: 'uid-ajeno'),
       );
       addTearDown(container.dispose);
+      container.listen(
+        historicTicketProvider((sid: 's1', tid: 't1')),
+        (_, _) {},
+      );
       expect(
         await container.read(
           historicTicketProvider((sid: 's1', tid: 't1')).future,
