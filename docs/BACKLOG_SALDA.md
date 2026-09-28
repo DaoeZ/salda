@@ -1299,6 +1299,15 @@ lectura remota posterior → **200**. Antes del binding, ese mismo camino daba
 403. Los artefactos de prueba se eliminaron (el objeto lo barrió la propia
 function `cleanup` al borrar la sesión; `receipts/` quedó vacío).
 
+**Deuda de validación, explícita:** esa prueba ejercita las Rules desplegadas y
+el cross-service reales, pero **no** la app en hardware. Falta cerrar el camino
+por Flutter con una foto real; se hará en el **próximo checkpoint en dispositivo**,
+cuando haya un ticket físico. **No se fabricó una prueba artificial para
+sustituirla.** Lo único sin ejercitar es el plumbing del SDK de Flutter, que
+nunca estuvo en duda: ya emitía una petición correcta que Rules rechazaba por el
+motivo ahora corregido. La causa raíz está cerrada; lo pendiente es confirmación,
+no diagnóstico.
+
 **Por qué la CI no podía verlo:** `storage_receipt_access.test.mjs` corre contra
 el emulador, que resuelve `firestore.*` en proceso y **no tiene capa IAM**. Sus
 13 casos seguirán en verde con el binding ausente. Ver **C15** en la Biblia de
@@ -1355,6 +1364,25 @@ Las tres se cubren en **una sola sesión** en cuanto exista:
 de A19 fue solo *functions* + *firestore:rules*, así que Hosting sigue sirviendo
 web **anterior a A19**, sin `finishPicking` ni `PickItems`. Probar contra ella
 mediría código viejo.
+
+## Pendiente para el próximo checkpoint en dispositivo — requiere un ticket físico
+
+**BUG-CP-03, confirmación final.** La causa raíz está resuelta y la subida quedó
+validada contra las Storage Rules reales de `salda-dev`, pero **no desde la app**.
+Falta el camino completo por Flutter con una foto real:
+
+1. Crear un ticket **nuevo** con foto **nueva** y comprobar que `putFile` no
+   devuelve 403 ni `StorageException -13021`, que existe
+   `receipts/{sid}/{tid}/original.jpg` en Storage y que el ticket queda con
+   `imagePath`.
+2. **Prueba gratis, antes incluso de la anterior:** abrir en la app un ticket
+   **antiguo** que tenga copia local. El reintento transparente de P0.2 debería
+   subir la foto y rellenar `imagePath` **solo**, sin acción del usuario. Si eso
+   ocurre, las fotos históricas del dispositivo se recuperan de paso.
+3. Comprobar que no hay bucle de reintentos ni regresión nueva de permisos.
+
+**No hace falta recompilar:** el arreglo fue de entorno y no cambió una línea de
+código, así que el APK ya instalado sirve.
 
 ## Pendientes conocidos observados, NO contados como bugs
 
