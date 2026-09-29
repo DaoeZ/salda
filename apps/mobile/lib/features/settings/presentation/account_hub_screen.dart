@@ -33,6 +33,9 @@ class AccountHubScreen extends ConsumerWidget {
         l10n.guestAccount;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.accountHubTitle)),
+      // Una sola hoja: la identidad arriba y, debajo, las puertas. Antes cada
+      // fila vivía en su propia caja bajo un encabezado que repetía su
+      // nombre («Personas» → «Personas»): cuatro cajas para cuatro enlaces.
       body: ScreenBody(
         children: [
           SaldaCardList(
@@ -41,7 +44,7 @@ class AccountHubScreen extends ConsumerWidget {
                 leading: ProfileAvatar(
                   seed: user?.uid ?? '',
                   displayName: name,
-                  radius: 18,
+                  radius: 20,
                 ),
                 title: Text(name),
                 subtitle: profile == null ? null : Text('@${profile.username}'),
@@ -50,40 +53,20 @@ class AccountHubScreen extends ConsumerWidget {
                   fullAccount ? '/home/profile' : '/home/guest-name',
                 ),
               ),
-            ],
-          ),
-          const SectionGap(),
-          if (fullAccount) ...[
-            SectionHeader(title: l10n.personasTitle),
-            SaldaCardList(
-              children: [
+              if (fullAccount)
                 ListTile(
                   leading: const Icon(Icons.people_outline),
                   title: Text(l10n.personasTitle),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/home/personas'),
                 ),
-              ],
-            ),
-            const SectionGap(),
-          ],
-          if (fullAccount) ...[
-            SectionHeader(title: l10n.accountHubData),
-            SaldaCardList(
-              children: [
+              if (fullAccount)
                 ListTile(
                   leading: const Icon(Icons.inventory_2_outlined),
                   title: Text(l10n.historyTitle),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/home/history'),
                 ),
-              ],
-            ),
-            const SectionGap(),
-          ],
-          SectionHeader(title: l10n.settingsTitle),
-          SaldaCardList(
-            children: [
               ListTile(
                 leading: const Icon(Icons.settings_outlined),
                 title: Text(l10n.accountHubOpenSettings),

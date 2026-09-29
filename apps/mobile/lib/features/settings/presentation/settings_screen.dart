@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/theme_controller.dart';
+import '../../../core/ui/badges.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../auth/data/auth_repository.dart';
@@ -52,9 +53,12 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(title: Text(l10n.settingsTitle)),
       body: ScreenBody(
         children: [
-          section(l10n.settingsAppearance, [
-            Padding(
-              padding: const EdgeInsets.all(TokenSpacing.md),
+          // Un control, no una lista: va suelto y a todo el ancho, sin hoja.
+          SectionHeader(title: l10n.settingsAppearance),
+          Padding(
+            padding: const EdgeInsets.only(bottom: TokenSpacing.xxl),
+            child: SizedBox(
+              width: double.infinity,
               child: SegmentedButton<ThemeMode>(
                 segments: [
                   ButtonSegment(
@@ -76,7 +80,7 @@ class SettingsScreen extends ConsumerWidget {
                     .set(selection.first),
               ),
             ),
-          ]),
+          ),
           if (isFullAccount) ...[
             section(l10n.profileTitle, [const _ProfileTile()]),
             section(l10n.settingsPayments, [const _PaymentMethodsForm()]),
@@ -91,9 +95,10 @@ class SettingsScreen extends ConsumerWidget {
               else
                 for (final person in people)
                   ListTile(
-                    leading: CircleAvatar(
+                    leading: SaldaAvatar(
+                      seed: person.id,
+                      label: person.name,
                       radius: 16,
-                      child: Text(person.name[0]),
                     ),
                     title: Text(person.name),
                     trailing: IconButton(
@@ -106,7 +111,9 @@ class SettingsScreen extends ConsumerWidget {
                   ),
             ]),
           ],
-          section(l10n.aiTitle, [
+          // El encabezado repetía la única fila («Proveedores de IA» sobre
+          // «Proveedores de IA»): la sección es lo avanzado.
+          section(l10n.accountHubAdvanced, [
             ListTile(
               leading: const Icon(Icons.auto_awesome_outlined),
               title: Text(l10n.aiTitle),
