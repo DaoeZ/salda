@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/ui/money_text.dart';
+import '../../core/utils/money_format.dart';
 import '../../core/ui/states.dart';
 import '../../core/ui/surfaces.dart';
 import '../../l10n/generated/app_localizations.dart';
@@ -44,6 +44,9 @@ class BalanceHero extends ConsumerWidget {
   }
 }
 
+/// El saldo global es la cifra que manda en Inicio: por eso es la ÚNICA
+/// superficie de tinta de la pantalla. Dos columnas, como el debe y el haber
+/// de un libro, una fila por moneda.
 class _CurrencyHero extends StatelessWidget {
   const _CurrencyHero({required this.summaries});
   final List<CurrencyEconomicSummary> summaries;
@@ -52,42 +55,45 @@ class _CurrencyHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final c = context.salda;
-    return SaldaCard(
+    return InkPanel(
       onTap: () => context.push('/home/economy'),
-      padding: const EdgeInsets.all(TokenSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.balanceHeroTitle,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: c.textMuted,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Eyebrow(l10n.balanceHeroTitle, color: c.onInkMuted),
+              ),
+              Icon(Icons.arrow_forward, size: 18, color: c.onInkMuted),
+            ],
           ),
           for (final summary in summaries) ...[
             const SizedBox(height: TokenSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _Leg(
-                    label: l10n.balanceTheyOweYou,
-                    amount: summary.owedToMe,
-                    currency: summary.currency,
-                    tone: MoneyTone.positive,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _Leg(
+                      label: l10n.balanceTheyOweYou,
+                      amount: summary.owedToMe,
+                      currency: summary.currency,
+                      color: c.inkPositive,
+                    ),
                   ),
-                ),
-                Container(width: 1, height: 46, color: c.border),
-                Expanded(
-                  child: _Leg(
-                    label: l10n.balanceYouOwe,
-                    amount: summary.iOwe,
-                    currency: summary.currency,
-                    tone: MoneyTone.negative,
-                    alignEnd: true,
+                  VerticalDivider(width: 1, thickness: 1, color: c.inkRule),
+                  Expanded(
+                    child: _Leg(
+                      label: l10n.balanceYouOwe,
+                      amount: summary.iOwe,
+                      currency: summary.currency,
+                      color: c.inkNegative,
+                      alignEnd: true,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ],
@@ -101,78 +107,97 @@ class _Leg extends StatelessWidget {
     required this.label,
     required this.amount,
     required this.currency,
-    required this.tone,
+    required this.color,
     this.alignEnd = false,
   });
 
   final String label;
   final Money amount;
   final String currency;
-  final MoneyTone tone;
+  final Color color;
   final bool alignEnd;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(
-      left: alignEnd ? TokenSpacing.md : 0,
-      right: alignEnd ? 0 : TokenSpacing.md,
-    ),
-    child: Column(
-      crossAxisAlignment: alignEnd
-          ? CrossAxisAlignment.end
-          : CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: alignEnd ? TextAlign.end : TextAlign.start,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: TokenSpacing.xs),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
-          child: MoneyText(
-            amount,
-            size: MoneySize.medium,
-            currency: currency,
-            tone: tone,
+  Widget build(BuildContext context) {
+    final c = context.salda;
+    // Un cero no es «a favor» ni «en contra»: va en tinta apagada, para que
+    // el verde y el rojo solo aparezcan cuando significan algo.
+    final zero = amount.cents == 0;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: alignEnd ? TokenSpacing.md : 0,
+        right: alignEnd ? 0 : TokenSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: alignEnd
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: alignEnd ? TextAlign.end : TextAlign.start,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: c.onInkMuted),
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: TokenSpacing.xs),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+            child: Text(
+              formatCurrencyMoney(amount, currency),
+              maxLines: 1,
+              softWrap: false,
+              style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                color: zero ? c.onInkMuted : color,
+                fontSize: 30,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
+/// En paz: el único estado de Inicio que es un HECHO cerrado, y por eso el
+/// único que lleva sello. En papel, no en tinta: no hay cifra que destacar.
 class _SettledHero extends StatelessWidget {
   const _SettledHero();
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
     return SaldaCard(
       onTap: () => context.push('/home/economy'),
-      padding: const EdgeInsets.all(TokenSpacing.xl),
+      padding: const EdgeInsets.fromLTRB(
+        TokenSpacing.xl,
+        TokenSpacing.lg,
+        TokenSpacing.lg,
+        TokenSpacing.lg,
+      ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_outline),
-          const SizedBox(width: TokenSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Eyebrow(l10n.balanceHeroTitle),
+                const SizedBox(height: TokenSpacing.xs),
                 Text(
                   l10n.balanceSettled,
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: theme.textTheme.titleLarge?.copyWith(fontSize: 22),
                 ),
-                Text(
-                  l10n.balanceSettledBody,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                const SizedBox(height: 2),
+                Text(l10n.balanceSettledBody, style: theme.textTheme.bodySmall),
               ],
             ),
           ),
+          const SizedBox(width: TokenSpacing.md),
+          Stamp(l10n.settledState),
         ],
       ),
     );
@@ -214,12 +239,13 @@ class _HeroSkeleton extends StatelessWidget {
     label: AppLocalizations.of(context).scanProcessing,
     child: const ExcludeSemantics(
       child: SaldaCard(
+        padding: EdgeInsets.all(TokenSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Skeleton.line(width: 80, height: 12),
             SizedBox(height: TokenSpacing.md),
-            Skeleton.line(width: 190, height: 28),
+            Skeleton.line(width: 190, height: 30),
           ],
         ),
       ),

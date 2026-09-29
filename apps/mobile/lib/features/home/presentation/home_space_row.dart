@@ -38,77 +38,84 @@ class HomeSpaceRow extends ConsumerWidget {
       l10n,
       space.name,
     );
-    return InkWell(
-      onTap: () => context.push('/home/spaces/${space.id}'),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: TokenSpacing.lg,
-          vertical: TokenSpacing.md,
-        ),
-        child: Row(
-          children: [
-            SaldaAvatar(
-              seed: space.id,
-              label: title.isEmpty ? space.name : title,
-              emoji: space.avatarEmoji,
-              square: !space.isRelationship,
-              radius: 19,
-            ),
-            const SizedBox(width: TokenSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (title.isEmpty)
-                    const Skeleton.line(width: 110, height: 15)
-                  else
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall,
+    final theme = Theme.of(context);
+    // A1: la segunda línea solo existe cuando dice algo. La etiqueta fija
+    // «Espacios» que ocupaba su sitio no informaba de nada, y no se sustituye
+    // por una señal inventada: hoy la única fiable es la vinculación manual
+    // pendiente (A13 traerá el resto).
+    final Widget? context2 = !attentionKnown
+        ? const Skeleton.line(width: 72, height: 11)
+        : pendingManualLinks > 0
+        ? Semantics(
+            label: l10n.manualLinkPendingInSpace(pendingManualLinks),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.assignment_ind_outlined, size: 15, color: c.warning),
+                const SizedBox(width: TokenSpacing.xs),
+                Flexible(
+                  child: Text(
+                    l10n.manualLinkPendingInSpace(pendingManualLinks),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: c.warning,
                     ),
-                  const SizedBox(height: 4),
-                  if (!attentionKnown)
-                    const Skeleton.line(width: 72, height: 11)
-                  else if (pendingManualLinks > 0)
-                    Semantics(
-                      label: l10n.manualLinkPendingInSpace(pendingManualLinks),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.assignment_ind_outlined,
-                            size: 15,
-                            color: c.warning,
-                          ),
-                          const SizedBox(width: TokenSpacing.xs),
-                          Flexible(
-                            child: Text(
-                              l10n.manualLinkPendingInSpace(pendingManualLinks),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.copyWith(color: c.warning),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    Text(
-                      l10n.spacesTitle,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: c.textMuted),
-                    ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: TokenSpacing.md),
-            _CurrencyBalances(currencyBalances: currencyBalances),
-          ],
+          )
+        : null;
+    // Material propio: la hoja del libro es una decoración de sliver, y sin
+    // un Material por encima la tinta del toque se pintaría debajo de ella.
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () => context.push('/home/spaces/${space.id}'),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: TokenSpacing.lg,
+              vertical: TokenSpacing.md,
+            ),
+            child: Row(
+              children: [
+                SaldaAvatar(
+                  seed: space.id,
+                  label: title.isEmpty ? space.name : title,
+                  emoji: space.avatarEmoji,
+                  square: !space.isRelationship,
+                  radius: 21,
+                ),
+                const SizedBox(width: TokenSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (title.isEmpty)
+                        const Skeleton.line(width: 110, height: 15)
+                      else
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      if (context2 != null) ...[
+                        const SizedBox(height: 3),
+                        context2,
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: TokenSpacing.md),
+                _CurrencyBalances(currencyBalances: currencyBalances),
+              ],
+            ),
+          ),
         ),
       ),
     );

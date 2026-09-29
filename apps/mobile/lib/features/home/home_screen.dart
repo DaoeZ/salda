@@ -356,20 +356,45 @@ class _HomeSpaceSliver extends StatelessWidget {
   Widget build(BuildContext context) => SliverPadding(
     padding: const EdgeInsets.fromLTRB(
       TokenLayout.screenMargin,
-      TokenSpacing.sm,
+      0,
       TokenLayout.screenMargin,
       0,
     ),
-    sliver: SliverList.builder(
-      itemCount: spaces.length,
-      itemBuilder: (context, index) => _homeSpaceRow(
-        spaces[index],
-        balancesBySpace,
-        pendingBySpace,
-        attentionKnown,
+    sliver: _LedgerSheet(
+      sliver: SliverList.separated(
+        itemCount: spaces.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, index) => _homeSpaceRow(
+          spaces[index],
+          balancesBySpace,
+          pendingBySpace,
+          attentionKnown,
+        ),
       ),
     ),
   );
+}
+
+/// La hoja del libro en versión perezosa: la misma superficie que
+/// `SaldaCardList`, pero envolviendo un sliver para que 50+ contextos no
+/// se construyan de golpe.
+class _LedgerSheet extends StatelessWidget {
+  const _LedgerSheet({required this.sliver});
+
+  final Widget sliver;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.salda;
+    return DecoratedSliver(
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(SaldaRadius.surface),
+      ),
+      sliver: SliverPadding(padding: const EdgeInsets.all(1), sliver: sliver),
+    );
+  }
 }
 
 /// Se monta únicamente durante una búsqueda: es entonces cuando resolver los
@@ -416,13 +441,16 @@ class _HomeSearchSpaceSliver extends ConsumerWidget {
                 child: Text(l10n.homeNoSearchResults),
               ),
             )
-          : SliverList.builder(
-              itemCount: matched.length,
-              itemBuilder: (context, index) => _homeSpaceRow(
-                matched[index],
-                balancesBySpace,
-                pendingBySpace,
-                attentionKnown,
+          : _LedgerSheet(
+              sliver: SliverList.separated(
+                itemCount: matched.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) => _homeSpaceRow(
+                  matched[index],
+                  balancesBySpace,
+                  pendingBySpace,
+                  attentionKnown,
+                ),
               ),
             ),
     );
