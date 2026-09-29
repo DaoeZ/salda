@@ -1264,11 +1264,27 @@ recalcula mientras el reparto está reabierto** (C9 verificado en hardware).
 |---|---|---|---|
 | ~~BUG-CP-03~~ | ~~La foto del ticket no sube a Storage (403 `Permission denied` en `receipts/{sid}/{tid}/original.jpg`)~~ | — | **RESUELTO 2026-09-15.** Faltaba el binding IAM `roles/firebaserules.firestoreServiceAgent` en `salda-dev`. Solo entorno: sin cambios de código ni de Rules. Ver abajo y la Biblia de Código |
 | ~~BUG-CP-05~~ | ~~El estado del reparto no se refresca en vivo; hay que salir y reentrar~~ | — | **RESUELTO 2026-09-28.** `historicTicketProvider` era `FutureProvider` con `.get()` y `sessionTicketProvider` le daba precedencia sobre el stream vivo. Ahora derecho y ticket son streams. Solo cliente Flutter, sin deploy. Ver abajo y la Biblia de Código |
-| **BUG-CP-02** | El scroll del detalle de ticket queda atrapado hacia abajo | **P2** | Sin investigar |
+| **BUG-CP-02** | El scroll del detalle de ticket quedó atrapado hacia abajo en el checkpoint inicial | — | **NO REPRODUCIBLE EN SALDA 8 / vigilar en próximos checkpoints.** No existe causa raíz demostrada ni fix específico |
 | **BUG-CP-04** | El balance neto bilateral no explica ambas direcciones en su desglose | **P2** | El libro netea antes de la pantalla: `withUser()` devuelve un único balance y `openObligations()` solo trae esa dirección |
 | **BUG-CP-07** | El detalle del ticket no muestra «Corregido por … · fecha» | **P2** | `_ticketFrom` no lee `lastEditedByUid`/`lastEditedAt` → `_CorrectionSignature` es código muerto |
 | **BUG-CP-01** | Overflow visual al editar un producto | **P3** | Sin investigar |
 | ~~BUG-CP-06~~ | ~~Pago parcial rechazado~~ | — | **DESCARTADO** |
+
+**BUG-CP-02 — NO REPRODUCIBLE EN SALDA 8 (2026-09-29).** Se reconstruyó el
+flujo real: `/home/session/:sid/ticket/:tid` → `TicketRoute` →
+`TicketDetailScreen` → `Scaffold` → `ScreenBody` → un único `ListView`
+vertical. No hay `ScrollController` propio, `ensureVisible`, `animateTo`,
+`jumpTo`, recuperación de foco ni reposicionamiento programático; las
+primitivas visuales (`ReceiptPaper`, `ReceiptRule`, `ReceiptTotalRow`) solo
+componen o pintan. La única lista anidada del detalle es horizontal y aparece
+solo en líneas con más de 12 unidades. Una sonda con 27 productos desplazó
+hacia abajo y después hacia arriba correctamente. Baseline: análisis a cero,
+mobile 685 pass / 5 skip, domain 130/130 y ocr_parser 33/33. Validación manual
+posterior en Android 16: ticket largo, retorno hacia arriba, gestos lentos y
+rápidos y varias repeticiones, sin salto. **No se cambió código ni jerarquía de
+scroll, no hubo fix específico y no se atribuye el resultado a `ReceiptPaper` ni
+al rediseño.** El síntoma pudo desaparecer incidentalmente durante el rediseño,
+sin evidencia para afirmarlo; reabrir BUG-CP-02 si reaparece en un checkpoint.
 
 **BUG-CP-06 descartado, y por qué importa:** el rechazo de 3,00 € sobre una
 obligación de 7,98 € estaba explicado por una **reserva pendiente de 6,75 €**
@@ -1468,9 +1484,9 @@ y el plugin nativo no se aplica.
 2. ~~**BUG-CP-05** (P1)~~ — **RESUELTO 2026-09-28**: el detalle leía el ticket
    por derecho histórico con `.get()`; ahora es stream, con test de lectura
    propio sobre la ruta real.
-3. **BUG-CP-02** (P2) — dificulta navegar un workflow ya resuelto.
-4. **Bloque de auditabilidad**: BUG-CP-04 + BUG-CP-07 + OBS-CP-UX + OBS-CP-LEGACY.
-5. **BUG-CP-01** (P3).
+3. **Bloque de auditabilidad**: BUG-CP-04 + BUG-CP-07 + OBS-CP-UX + OBS-CP-LEGACY.
+4. **BUG-CP-01** (P3).
+5. **Vigilar BUG-CP-02** en próximos checkpoints; reabrir solo con reproducción.
 
 ---
 

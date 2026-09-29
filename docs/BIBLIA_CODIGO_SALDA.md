@@ -238,6 +238,42 @@ las reglas. Está documentado en `docs/ENTORNOS.md`.
 
 # Entradas cronológicas
 
+## BUG-CP-02 — SCROLL DEL DETALLE NO REPRODUCIBLE EN SALDA 8 — 2026-09-29
+
+**Rama:** `design/salda-8` · **HEAD al empezar:** `a7fb12d` · **Resultado:**
+**NO REPRODUCIBLE EN SALDA 8 / vigilar en próximos checkpoints.** No hubo
+causa raíz demostrada, cambio funcional ni fix específico. `main`, los puntos
+de retorno pre-Salda 8 y `salda-prod` permanecieron intactos.
+
+### Evidencia reunida
+
+- El árbol real es `/home/session/:sid/ticket/:tid` → `TicketRoute` →
+  `TicketDetailScreen` → `Scaffold` → `ScreenBody` → **un único `ListView`
+  vertical**. No hay `ScrollController` del detalle, `ensureVisible`,
+  `animateTo`, `jumpTo`, callbacks post-frame, recuperación de foco ni teclado
+  que pueda reposicionar la vista. `ReceiptPaper`, `ReceiptRule` y
+  `ReceiptTotalRow` solo pintan o componen; no participan en el scroll. La
+  única lista anidada es horizontal y solo se muestra con más de 12 unidades.
+- Una sonda con 27 productos ejercitó bajar y volver a subir en un viewport
+  reducido; el offset volvió a estar bajo control del gesto. Como pasaba antes
+  de cualquier cambio, no se conservó como «test de regresión»: no habría
+  demostrado un arreglo.
+- Baseline completo: `dart analyze --fatal-infos` a cero · `apps/mobile` 685
+  pass / 5 skip · `packages/domain` 130/130 · `packages/ocr_parser` 33/33.
+- Validación manual posterior en Android 16: ticket largo, bajar y volver
+  arriba, gestos lentos, rápidos y repetidos; sin salto hacia abajo.
+
+### Decisión y frontera
+
+No se añade un `ScrollController`, no se cambia la jerarquía y no se atribuye
+el comportamiento correcto a `ReceiptPaper` ni al rediseño sin evidencia. El
+síntoma puede haber desaparecido incidentalmente durante Salda 8, pero no se
+puede afirmar relación causal. Si reaparece en un checkpoint, BUG-CP-02 se
+reabre y se parte de una reproducción concreta; hasta entonces queda en
+vigilancia, no «resuelto por fix».
+
+---
+
 ## SALDA 8 — REDISEÑO VISUAL «PAPEL Y TINTA» — 2026-09-29
 
 **Rama:** `design/salda-8` (worktree `Salda-8`) · **Base:** `e6cd3fa` ·
