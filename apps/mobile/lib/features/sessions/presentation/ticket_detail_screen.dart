@@ -10,7 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/config/app_environment.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/badges.dart';
-import '../../../core/ui/money_text.dart';
+import '../../../core/ui/receipt.dart';
 import '../../../core/ui/states.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../core/utils/money_format.dart';
@@ -99,8 +99,9 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     }
 
     return Scaffold(
+      // Sin título: el comercio encabeza el propio recibo, justo debajo, y
+      // repetirlo en la barra era leer lo mismo dos veces.
       appBar: AppBar(
-        title: Text(t.merchantName),
         actions: [
           if (canDelete)
             IconButton(
@@ -134,51 +135,36 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
           ],
         ],
       ),
+      // El ticket es un OBJETO: cabecera, productos y total viven dentro de
+      // una tira de papel. Lo que no es del comprobante —el estado del
+      // reparto, la foto, las acciones— queda fuera del papel.
       body: ScreenBody(
         children: [
           if (_correcting) ...[
             Text(l10n.ticketCorrectBanner, style: theme.textTheme.bodySmall),
             const SizedBox(height: TokenSpacing.md),
           ],
-          SaldaCard(
-            padding: const EdgeInsets.all(TokenSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          _TicketLines(
+            ticketRef: ticket,
+            correcting: _correcting,
+            header: _ReceiptHeader(ticketRef: ticket),
+            footer: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  t.merchantName,
-                  style: theme.textTheme.titleMedium,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: TokenSpacing.sm),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: MoneyText(t.grandTotal, size: MoneySize.large),
-                ),
-                const SizedBox(height: TokenSpacing.lg),
-                _TicketFact(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: l10n.ticketPaidBy(ticket.payerName),
-                ),
-                if (t.date != null) ...[
-                  const SizedBox(height: TokenSpacing.sm),
-                  _TicketFact(icon: Icons.event_outlined, label: t.date!),
-                ],
-                // Quién tocó este gasto por última vez. Importa sobre todo
-                // cuando NO fue quien lo subió (A11c).
-                if (t.lastEditedByUid != null) ...[
-                  const SizedBox(height: TokenSpacing.sm),
-                  _CorrectionSignature(ticket: t),
-                ],
                 if (_correcting) ...[
-                  const SizedBox(height: TokenSpacing.md),
                   // El total y la suma de los productos son cosas distintas
                   // —impuestos, propina y descuentos viven en la diferencia—,
                   // así que al corregir se enseñan las dos. Que no cuadren no
                   // es necesariamente un error, pero esconderlo sí lo sería.
                   _LineSumCheck(ticketPath: t.path, grandTotal: t.grandTotal),
+                  const SizedBox(height: TokenSpacing.xs),
+                ],
+                ReceiptTotalRow(
+                  label: l10n.reviewGrandTotal,
+                  value: formatMoney(t.grandTotal),
+                  emphasis: true,
+                ),
+                if (_correcting) ...[
                   const SizedBox(height: TokenSpacing.md),
                   OutlinedButton.icon(
                     onPressed: () => showTicketHeaderCorrection(
@@ -201,9 +187,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
             SectionHeader(title: l10n.ticketPhotoTitle),
             _TicketPhoto(ticketPath: t.path, uploaded: t.imagePath != null),
           ],
-          const SectionGap(),
-          SectionHeader(title: l10n.reviewLines),
-          _TicketLines(ticketRef: ticket, correcting: _correcting),
         ],
       ),
     );
@@ -291,29 +274,54 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   }
 }
 
-/// Dato secundario del ticket: icono tenue y texto, en fila. Evita una
-/// tabla densa sin esconder nada detras de mas toques.
-class _TicketFact extends StatelessWidget {
-  const _TicketFact({required this.icon, required this.label});
+/// Cabecera del comprobante: el comercio como titular, centrado, y debajo
+/// la fecha en la voz de la impresora y quién pagó.
+class _ReceiptHeader extends StatelessWidget {
+  const _ReceiptHeader({required this.ticketRef});
 
-  final IconData icon;
-  final String label;
+  final TicketRef ticketRef;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final c = context.salda;
-    return Row(
+    final t = ticketRef.ticket;
+    return Column(
       children: [
-        Icon(icon, size: 16, color: c.textMuted),
-        const SizedBox(width: TokenSpacing.sm),
-        Expanded(
-          child: Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: c.textSecondary),
+        Text(
+          t.merchantName,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: SaldaType.serif(
+            size: 22,
+            weight: FontWeight.w600,
+            color: c.textPrimary,
+            tracking: -0.2,
           ),
         ),
+        if (t.date != null) ...[
+          const SizedBox(height: TokenSpacing.xs),
+          Text(
+            t.date!,
+            textAlign: TextAlign.center,
+            style: SaldaType.mono(size: 12.5, color: c.textMuted),
+          ),
+        ],
+        const SizedBox(height: TokenSpacing.xs),
+        Text(
+          l10n.ticketPaidBy(ticketRef.payerName),
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: c.textSecondary),
+        ),
+        // Quién tocó este gasto por última vez. Importa sobre todo cuando NO
+        // fue quien lo subió (A11c).
+        if (t.lastEditedByUid != null) ...[
+          const SizedBox(height: 2),
+          _CorrectionSignature(ticket: t),
+        ],
       ],
     );
   }
@@ -435,11 +443,11 @@ class _LineSumCheck extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TicketFact(
-          icon: Icons.functions_outlined,
-          label: '${l10n.reviewComputedTotal}: ${formatMoney(sum)}',
+        ReceiptTotalRow(
+          label: l10n.reviewComputedTotal,
+          value: formatMoney(sum),
         ),
-        const SizedBox(height: TokenSpacing.sm),
+        const SizedBox(height: TokenSpacing.xs),
         StatusBadge(
           balanced
               ? l10n.reviewBalanced
@@ -462,21 +470,34 @@ class _CorrectionSignature extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final profile = ref.watch(publicProfileProvider(ticket.lastEditedByUid!));
-    return _TicketFact(
-      icon: Icons.history_edu_outlined,
-      label: l10n.ticketCorrectedBy(
+    return Text(
+      l10n.ticketCorrectedBy(
         profile.value?.displayName ?? '…',
         (ticket.lastEditedAt ?? DateTime.now()).toLocal(),
       ),
+      textAlign: TextAlign.center,
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(color: context.salda.textMuted),
     );
   }
 }
 
 class _TicketLines extends ConsumerWidget {
-  const _TicketLines({required this.ticketRef, required this.correcting});
+  const _TicketLines({
+    required this.ticketRef,
+    required this.correcting,
+    required this.header,
+    required this.footer,
+  });
 
   final TicketRef ticketRef;
   final bool correcting;
+
+  /// Cabecera y pie del papel: se reciben de fuera para que el recibo sea
+  /// UNA pieza aunque las líneas sean las que cargan en vivo.
+  final Widget header;
+  final Widget footer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -490,12 +511,48 @@ class _TicketLines extends ConsumerWidget {
         const <SessionParticipant>[];
 
     final lines = linesAsync.value ?? const <TicketLine>[];
-    if (!linesAsync.hasValue) return const SkeletonList(rows: 3);
+    if (!linesAsync.hasValue) {
+      return ReceiptPaper(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            header,
+            const ReceiptRule(),
+            const ExcludeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Skeleton.line(width: 180),
+                  SizedBox(height: TokenSpacing.md),
+                  Skeleton.line(width: 140),
+                  SizedBox(height: TokenSpacing.md),
+                  Skeleton.line(width: 160),
+                ],
+              ),
+            ),
+            const ReceiptRule(),
+            footer,
+          ],
+        ),
+      );
+    }
     if (lines.isEmpty) {
-      return EmptyState(
-        icon: Icons.list_alt_outlined,
-        title: l10n.ticketNoLines,
-        body: l10n.ticketNoLinesBody,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ReceiptPaper(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [header, const ReceiptRule(), footer],
+            ),
+          ),
+          const SectionGap(height: TokenSpacing.lg),
+          EmptyState(
+            icon: Icons.list_alt_outlined,
+            title: l10n.ticketNoLines,
+            body: l10n.ticketNoLinesBody,
+          ),
+        ],
       );
     }
 
@@ -585,12 +642,8 @@ class _TicketLines extends ConsumerWidget {
           )[myPid];
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (canPick) ...[
-          Text(l10n.ticketPickHint, style: theme.textTheme.bodySmall),
-          const SizedBox(height: TokenSpacing.sm),
-        ],
         if (mode == SplitMode.equal) ...[
           Text(
             l10n.ticketSplitEqualHint(activePids.length),
@@ -600,10 +653,10 @@ class _TicketLines extends ConsumerWidget {
             const SizedBox(height: TokenSpacing.xs),
             Text(
               l10n.ticketSplitYourShare(formatMoney(myShare)),
-              style: theme.textTheme.bodyMedium,
+              style: theme.textTheme.titleSmall,
             ),
           ],
-          const SizedBox(height: TokenSpacing.sm),
+          const SizedBox(height: TokenSpacing.md),
         ],
         // A19: quién falta por terminar, y qué significa que falte alguien.
         // Sin esto, «no he mirado» y «no consumí nada» son indistinguibles
@@ -622,30 +675,41 @@ class _TicketLines extends ConsumerWidget {
           ),
           const SizedBox(height: TokenSpacing.md),
         ],
-        SaldaCardList(
-          children: [
-            for (final line in lines)
-              _LineTile(
-                line: line,
-                myPid: myPid,
-                canPick: canPick,
-                canEdit: canEdit,
-                canAssign: canAssign,
-                sessionId: ticketRef.sessionId,
-                correcting: correcting,
-                names: names,
-                activePids: activePids,
-                usesPicking: ticket.usesPicking,
-                pickingClosed:
-                    ticket.usesPicking &&
-                    !participants.any(
-                      (p) => p.active && ticket.pickingOpen.contains(p.id),
-                    ),
-                ticketId: ticket.id,
-                showAssignment: mode == SplitMode.byItem,
-                payerName: ticketRef.payerName,
-              ),
-          ],
+        if (canPick) ...[
+          Text(l10n.ticketPickHint, style: theme.textTheme.bodySmall),
+          const SizedBox(height: TokenSpacing.sm),
+        ],
+        ReceiptPaper(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              header,
+              const ReceiptRule(),
+              for (final line in lines)
+                _LineTile(
+                  line: line,
+                  myPid: myPid,
+                  canPick: canPick,
+                  canEdit: canEdit,
+                  canAssign: canAssign,
+                  sessionId: ticketRef.sessionId,
+                  correcting: correcting,
+                  names: names,
+                  activePids: activePids,
+                  usesPicking: ticket.usesPicking,
+                  pickingClosed:
+                      ticket.usesPicking &&
+                      !participants.any(
+                        (p) => p.active && ticket.pickingOpen.contains(p.id),
+                      ),
+                  ticketId: ticket.id,
+                  showAssignment: mode == SplitMode.byItem,
+                  payerName: ticketRef.payerName,
+                ),
+              const ReceiptRule(),
+              footer,
+            ],
+          ),
         ),
       ],
     );
@@ -710,9 +774,7 @@ class _PickingBanner extends ConsumerWidget {
           const SizedBox(height: TokenSpacing.xs),
           Text(
             abierto ? l10n.pickingOpenBody : l10n.pickingClosedBody,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
+            style: theme.textTheme.bodySmall,
           ),
           if (abierto) ...[
             const SizedBox(height: TokenSpacing.sm),
@@ -1003,11 +1065,16 @@ class _LineTile extends ConsumerWidget {
       );
     }
 
+    final c = context.salda;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ListTile(
           dense: true,
+          // Dentro del papel: sin sangría propia, la marca el recibo.
+          contentPadding: EdgeInsets.zero,
+          horizontalTitleGap: TokenSpacing.md,
+          minLeadingWidth: 24,
           onTap: correcting
               ? () => showLineCorrection(context, ref, line: line, names: names)
               // Con autoridad para repartir, la fila abre el selector de
@@ -1028,26 +1095,31 @@ class _LineTile extends ConsumerWidget {
                       ? Icons.check_circle
                       : Icons.circle_outlined,
                   color: (line.usesUnitModel ? line.unitIsMine(0, pid!) : mine)
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outline,
+                      ? c.primary
+                      : c.borderStrong,
                 )
               : null,
           title: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
               if (line.quantityMilli != 1000) ...[
                 Text(
                   line.quantityMilli % 1000 == 0
                       ? '${line.quantityMilli ~/ 1000}×'
                       : '${(line.quantityMilli / 1000).toStringAsFixed(3)} kg',
-                  style: theme.textTheme.labelMedium,
+                  style: SaldaType.mono(size: 13, color: c.textMuted),
                 ),
-                const SizedBox(width: TokenSpacing.xs),
+                const SizedBox(width: TokenSpacing.sm),
               ],
               Expanded(
                 child: Text(
                   line.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -1066,9 +1138,7 @@ class _LineTile extends ConsumerWidget {
               formatMoney(line.totalPrice),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
+              style: SaldaType.mono(size: 14, color: c.textPrimary),
             ),
           ),
         ),
@@ -1079,12 +1149,7 @@ class _LineTile extends ConsumerWidget {
             line.units > 1 &&
             line.usesUnitModel)
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              TokenSpacing.lg,
-              0,
-              TokenSpacing.lg,
-              TokenSpacing.sm,
-            ),
+            padding: const EdgeInsets.only(bottom: TokenSpacing.sm),
             child: line.units <= 12
                 ? Wrap(
                     spacing: TokenSpacing.xs,
@@ -1109,19 +1174,13 @@ class _LineTile extends ConsumerWidget {
         // entera: es edición del ticket, no selección propia.
         if (canEdit && interactive && line.units > 1 && !line.usesUnitModel)
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              TokenSpacing.lg,
-              0,
-              TokenSpacing.lg,
-              TokenSpacing.sm,
-            ),
+            padding: const EdgeInsets.only(bottom: TokenSpacing.sm),
             child: FilledButton.tonalIcon(
               onPressed: convertToUnits,
               icon: const Icon(Icons.grid_view_outlined),
               label: Text(l10n.unitsUpgradeAction),
             ),
           ),
-        const Divider(height: 1),
       ],
     );
   }
@@ -1147,8 +1206,8 @@ class _TicketPhoto extends ConsumerWidget {
       loading: () => Container(
         height: 220,
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(TokenRadius.card),
+          color: context.salda.skeleton,
+          borderRadius: BorderRadius.circular(SaldaRadius.surface),
         ),
         child: const Center(child: CircularProgressIndicator()),
       ),
@@ -1166,7 +1225,7 @@ class _TicketPhoto extends ConsumerWidget {
             ),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(TokenRadius.card),
+            borderRadius: BorderRadius.circular(SaldaRadius.surface),
             child: Image.memory(
               bytes,
               fit: BoxFit.contain,

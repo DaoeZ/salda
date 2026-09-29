@@ -139,7 +139,12 @@ void main() {
       final container = await pump(tester);
       expect(find.text('El total cuadra'), findsOneWidget);
 
-      await tester.tap(find.text('Total del ticket'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(InkWell),
+          matching: find.text('Total del ticket'),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '6,00');
       await tester.tap(find.text('Guardar'));

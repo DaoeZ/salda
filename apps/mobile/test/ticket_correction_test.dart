@@ -3,6 +3,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salda_mobile/core/ui/receipt.dart';
 import 'package:salda_mobile/features/sessions/data/firestore_session_repository.dart';
 import 'package:salda_mobile/features/sessions/domain/session_models.dart';
 import 'package:salda_mobile/features/sessions/domain/ticket_correction.dart';
@@ -346,7 +347,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 3,00 + 12,96 = 15,96 → cuadra con el total del ticket.
-      expect(find.textContaining('Suma de productos: 15,96'), findsOneWidget);
+      expect(_lineSum('15,96'), findsOneWidget);
       // A15: el estado verde dice lo que de verdad comprueba —la aritmética—
       // y ya no se presenta como un certificado del ticket entero.
       expect(find.text('El total cuadra'), findsOneWidget);
@@ -368,7 +369,7 @@ void main() {
 
       expect((await fake.doc(_ticketPath).get()).data()!['grandTotal'], 1596);
       expect(find.textContaining('Descuadre de 0,50'), findsOneWidget);
-      expect(find.textContaining('Suma de productos: 16,46'), findsOneWidget);
+      expect(_lineSum('16,46'), findsOneWidget);
     });
 
     testWidgets('corregir el total a conciencia vuelve a cuadrar el ticket', (
@@ -457,3 +458,9 @@ void main() {
     });
   });
 }
+
+/// Renglón «Suma de productos» del recibo con el importe [amount] dentro.
+Finder _lineSum(String amount) => find.descendant(
+  of: find.widgetWithText(ReceiptTotalRow, 'Suma de productos'),
+  matching: find.textContaining(amount),
+);

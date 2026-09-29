@@ -158,14 +158,7 @@ class _AmountHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.reviewGrandTotal.toUpperCase(),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: c.textMuted,
-              letterSpacing: 0.8,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Eyebrow(l10n.reviewGrandTotal, color: c.textMuted),
           const SizedBox(height: TokenSpacing.sm),
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -192,12 +185,7 @@ class _AmountHero extends StatelessWidget {
           // o una cantidad equivocada — se midió con tickets reales.
           if (draft.balanced) ...[
             const SizedBox(height: TokenSpacing.xs),
-            Text(
-              l10n.reviewBalancedHint,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
+            Text(l10n.reviewBalancedHint, style: theme.textTheme.bodySmall),
           ],
         ],
       ),
@@ -213,33 +201,37 @@ class _AttentionBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      color: scheme.secondaryContainer,
-      margin: const EdgeInsets.only(bottom: TokenSpacing.lg),
-      child: Padding(
-        padding: const EdgeInsets.all(TokenSpacing.lg),
+    final c = context.salda;
+    // Aviso de lectura dudosa: ocre, porque es un «revisa esto», no un error
+    // ni una acción principal.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: TokenSpacing.lg),
+      child: SaldaCard(
+        color: c.accentMuted,
+        borderColor: c.warning.withValues(alpha: 0.35),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.help_outline, color: scheme.onSecondaryContainer),
+                Icon(Icons.help_outline, color: c.warning, size: 20),
                 const SizedBox(width: TokenSpacing.sm),
                 Expanded(child: Text(l10n.reviewBannerLowConfidence)),
               ],
             ),
-            const SizedBox(height: TokenSpacing.sm),
+            const SizedBox(height: TokenSpacing.md),
             // Orden DC-4: ① repetir foto ② editar ③ IA (último recurso).
             Wrap(
               spacing: TokenSpacing.sm,
+              runSpacing: TokenSpacing.xs,
               children: [
-                FilledButton.tonalIcon(
+                OutlinedButton.icon(
                   onPressed: () => context.pop(),
                   icon: const Icon(Icons.photo_camera_outlined, size: 18),
                   label: Text(l10n.reviewRetake),
                 ),
-                FilledButton.tonalIcon(
+                OutlinedButton.icon(
                   onPressed: onEditManually, // descarta el aviso (bug 3 MVP)
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: Text(l10n.reviewEditManually),
@@ -299,9 +291,7 @@ class _AiReviewAction extends ConsumerWidget {
             const SizedBox(height: TokenSpacing.xs),
             Text(
               l10n.reviewAiWithoutPhoto,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-              ),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ],
@@ -401,10 +391,23 @@ class _EditableTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // Rótulo arriba y valor como protagonista: es el dato lo que se revisa.
+    // El icono de cada campo se conserva en la API pero no se pinta: los
+    // tres campos ya se distinguen por su rótulo.
+    final theme = Theme.of(context);
     return ListTile(
-      leading: Icon(icon),
-      title: Text(label, style: Theme.of(context).textTheme.labelMedium),
-      subtitle: Text(value),
+      title: Text(
+        label,
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: context.salda.textMuted,
+        ),
+      ),
+      subtitle: Text(
+        value,
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: context.salda.textPrimary,
+        ),
+      ),
       trailing: const Icon(Icons.edit_outlined, size: 18),
       onTap: () async {
         final controller = TextEditingController(
@@ -441,35 +444,36 @@ class _LineTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
+    final c = context.salda;
     final quantity = line.quantityMilli == 1000
         ? null
         : line.quantityMilli % 1000 == 0
         ? '${line.quantityMilli ~/ 1000} ×'
         : '${(line.quantityMilli / 1000).toStringAsFixed(3)} kg';
-    return Card(
-      margin: const EdgeInsets.only(bottom: TokenSpacing.sm),
-      child: ListTile(
-        title: Text(line.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: quantity == null && line.unitPrice == null
-            ? null
-            : Text(
-                [
-                  ?quantity,
-                  if (line.unitPrice != null) formatMoney(line.unitPrice!),
-                ].join('  ·  '),
-              ),
-        leading: line.lowConfidence
-            ? Icon(Icons.warning_amber_outlined, color: scheme.settlementMarked)
-            : null,
-        trailing: Text(
-          formatMoney(line.totalPrice),
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-        onTap: () => showLineEditSheet(context, ref, index: index),
+    // Una fila del libro, no una tarjeta dentro de otra: la hoja ya agrupa.
+    return ListTile(
+      title: Text(line.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: quantity == null && line.unitPrice == null
+          ? null
+          : Text(
+              [
+                ?quantity,
+                if (line.unitPrice != null) formatMoney(line.unitPrice!),
+              ].join('  ·  '),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontFeatures: SaldaType.tabular),
+            ),
+      leading: line.lowConfidence
+          ? Icon(Icons.warning_amber_outlined, color: c.warning)
+          : null,
+      trailing: Text(
+        formatMoney(line.totalPrice),
+        style: Theme.of(
+          context,
+        ).textTheme.titleSmall?.copyWith(fontFeatures: SaldaType.tabular),
       ),
+      onTap: () => showLineEditSheet(context, ref, index: index),
     );
   }
 }
@@ -494,7 +498,11 @@ class _TotalsCard extends ConsumerWidget {
             _totalRow(context, l10n.reviewTip, formatMoney(draft.tip!)),
           for (final d in draft.discounts)
             _totalRow(context, d.label, '−${formatMoney(d.amount)}'),
-          const Divider(),
+          const SizedBox(height: TokenSpacing.xs),
+          const Divider(height: 1),
+          const SizedBox(height: 2),
+          const Divider(height: 1),
+          const SizedBox(height: TokenSpacing.xs),
           // El TOTAL es lo único que no se podía corregir antes de guardar,
           // y es el dato que manda: el reparto se hace sobre él. A11c ya
           // permite corregirlo DESPUÉS; no tenía sentido que fuese imposible
@@ -572,7 +580,7 @@ class _TotalsCard extends ConsumerWidget {
     VoidCallback? onEdit,
   }) {
     final style = emphasized
-        ? Theme.of(context).textTheme.titleLarge
+        ? Theme.of(context).textTheme.titleMedium
         : Theme.of(context).textTheme.bodyMedium;
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -582,12 +590,7 @@ class _TotalsCard extends ConsumerWidget {
           Expanded(
             child: Text(label, style: style, overflow: TextOverflow.ellipsis),
           ),
-          Text(
-            amount,
-            style: style?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
+          Text(amount, style: style?.copyWith(fontFeatures: SaldaType.tabular)),
           if (onEdit != null) ...[
             const SizedBox(width: TokenSpacing.sm),
             const Icon(Icons.edit_outlined, size: 18),
