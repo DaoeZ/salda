@@ -2,16 +2,17 @@ import 'package:design_tokens/design_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Sistema visual de Salda.
+/// Sistema visual de Salda 8: «papel y tinta».
 ///
-/// El tema NO se deriva de una semilla: `ColorScheme.fromSeed` reparte tonos
-/// por algoritmo y produce exactamente lo que hay que evitar —Material sin
-/// personalizar—. Cada rol se declara en `design_tokens.json` y se elige
-/// aquí, de modo que claro y oscuro están DISEÑADOS los dos, no uno invertido
-/// desde el otro.
+/// Un libro de cuentas contemporáneo: fondo de papel templado, texto en tinta
+/// azul-negra, una sola tinta de acción (ultramar) y el verde/rojo reservados
+/// a lo que significan —a tu favor, en tu contra—, nunca a decorar.
 ///
-/// Jerarquía por **superficie y borde**, nunca por sombra: el producto es una
-/// herramienta de dinero y las sombras profundas la vuelven ruidosa.
+/// La paleta vive AQUÍ y no en `design_tokens.json` a propósito: los tokens
+/// compartidos también pintan la web de invitados, y este rediseño es solo de
+/// la app. Espaciado, movimiento y layout siguen saliendo de los tokens.
+///
+/// Jerarquía por superficie, borde y tipografía, nunca por sombra.
 abstract final class AppTheme {
   static ThemeData light() => _build(Brightness.light);
 
@@ -19,8 +20,12 @@ abstract final class AppTheme {
 
   static ThemeData _build(Brightness brightness) {
     final c = SaldaColors._of(brightness);
-    final text = _textTheme(c);
     final dark = brightness == Brightness.dark;
+    // Sobre la tipografía de la PLATAFORMA (Roboto en Android, SF en iOS):
+    // los estilos que se pasan a los componentes deben llevar ya la familia,
+    // o un botón hereda la del motor y no la del sistema.
+    final platform = Typography.material2021();
+    final text = (dark ? platform.white : platform.black).merge(_textTheme(c));
 
     // El ColorScheme sigue existiendo porque los widgets de Material lo leen;
     // se rellena a mano con los roles para que nada quede al azar.
@@ -30,10 +35,13 @@ abstract final class AppTheme {
       onPrimary: c.onPrimary,
       primaryContainer: c.primaryMuted,
       onPrimaryContainer: c.primary,
-      secondary: c.accent,
-      onSecondary: dark ? c.background : Colors.white,
-      secondaryContainer: c.accentMuted,
-      onSecondaryContainer: c.accent,
+      // Secundario = la misma tinta en su versión tenue. El ocre de aviso
+      // NO entra en el esquema: los botones tonales y los chips seleccionados
+      // lo usaban como si fuera un color de acción.
+      secondary: c.primary,
+      onSecondary: c.onPrimary,
+      secondaryContainer: c.primaryMuted,
+      onSecondaryContainer: c.primary,
       tertiary: c.positive,
       onTertiary: dark ? c.background : Colors.white,
       tertiaryContainer: c.positiveMuted,
@@ -54,21 +62,21 @@ abstract final class AppTheme {
       outlineVariant: c.border,
       shadow: Colors.black,
       scrim: c.overlay,
-      inverseSurface: c.textPrimary,
-      onInverseSurface: c.background,
+      inverseSurface: c.ink,
+      onInverseSurface: c.onInk,
       inversePrimary: c.primaryMuted,
     );
 
     final cardShape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(TokenRadius.card),
+      borderRadius: BorderRadius.circular(SaldaRadius.surface),
       side: BorderSide(color: c.border),
     );
     final controlShape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(TokenRadius.button),
+      borderRadius: BorderRadius.circular(SaldaRadius.control),
     );
 
     InputBorder field(Color color, {double width = 1}) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(TokenRadius.field),
+      borderRadius: BorderRadius.circular(SaldaRadius.control),
       borderSide: BorderSide(color: color, width: width),
     );
 
@@ -80,7 +88,8 @@ abstract final class AppTheme {
       canvasColor: c.background,
       fontFamily: TokenTypography.fontFamily,
       textTheme: text,
-      splashFactory: InkSparkle.splashFactory,
+      // Tinta plana, sin destellos: el brillo de InkSparkle choca con el papel.
+      splashFactory: InkRipple.splashFactory,
       extensions: [c],
 
       appBarTheme: AppBarTheme(
@@ -90,7 +99,14 @@ abstract final class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: text.titleMedium,
+        // El título de cada pantalla es un titular, no una etiqueta: va en
+        // la serifa editorial, como la cabecera de una página del libro.
+        titleTextStyle: SaldaType.serif(
+          size: 20,
+          weight: FontWeight.w600,
+          color: c.textPrimary,
+          tracking: -0.2,
+        ),
         systemOverlayStyle: dark
             ? SystemUiOverlayStyle.light.copyWith(
                 statusBarColor: Colors.transparent,
@@ -106,9 +122,6 @@ abstract final class AppTheme {
 
       cardTheme: CardThemeData(
         elevation: 0,
-        // Separación por defecto hacia abajo: las pantallas que aún apilan
-        // `Card` sueltas mantienen el mismo ritmo vertical que las migradas
-        // a `SaldaCard`, en vez de quedar pegadas unas a otras.
         margin: const EdgeInsets.only(bottom: TokenSpacing.md),
         color: c.surface,
         surfaceTintColor: Colors.transparent,
@@ -128,7 +141,7 @@ abstract final class AppTheme {
           disabledBackgroundColor: c.disabled.withValues(alpha: 0.35),
           disabledForegroundColor: c.textMuted,
           minimumSize: const Size(0, TokenLayout.minTouchTarget),
-          padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.xxl),
+          padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.xl),
           textStyle: text.labelLarge,
           shape: controlShape,
           elevation: 0,
@@ -139,7 +152,7 @@ abstract final class AppTheme {
           foregroundColor: c.textPrimary,
           side: BorderSide(color: c.borderStrong),
           minimumSize: const Size(0, TokenLayout.minTouchTarget),
-          padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.xl),
+          padding: const EdgeInsets.symmetric(horizontal: TokenSpacing.lg),
           textStyle: text.labelLarge,
           shape: controlShape,
         ),
@@ -164,7 +177,8 @@ abstract final class AppTheme {
       ),
       iconTheme: IconThemeData(color: c.textSecondary, size: 22),
 
-      // Un FAB discreto: el acceso principal no necesita un botón enorme.
+      // Botón principal de tinta, esquina contenida: un tampón, no una
+      // pastilla flotante.
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: c.primary,
         foregroundColor: c.onPrimary,
@@ -174,24 +188,24 @@ abstract final class AppTheme {
         highlightElevation: 0,
         extendedTextStyle: text.labelLarge,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(TokenRadius.card),
+          borderRadius: BorderRadius.circular(SaldaRadius.control),
         ),
       ),
 
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: c.surfaceMuted,
+        fillColor: c.surface,
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: TokenSpacing.lg,
           vertical: TokenSpacing.md,
         ),
-        border: field(c.border),
-        enabledBorder: field(c.border),
+        border: field(c.borderStrong),
+        enabledBorder: field(c.borderStrong),
         focusedBorder: field(c.focus, width: 1.5),
         errorBorder: field(c.negative),
         focusedErrorBorder: field(c.negative, width: 1.5),
-        disabledBorder: field(c.border.withValues(alpha: 0.5)),
+        disabledBorder: field(c.border),
         labelStyle: text.bodyMedium?.copyWith(color: c.textSecondary),
         floatingLabelStyle: text.labelMedium?.copyWith(color: c.primary),
         hintStyle: text.bodyMedium?.copyWith(color: c.textMuted),
@@ -210,9 +224,9 @@ abstract final class AppTheme {
         subtitleTextStyle: text.bodySmall?.copyWith(color: c.textSecondary),
         iconColor: c.textSecondary,
         minVerticalPadding: TokenSpacing.md,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(TokenRadius.control),
-        ),
+        // Filas de libro: rectas. La esquina redondeada por fila era el
+        // origen de la sensación de «plantilla».
+        shape: const RoundedRectangleBorder(),
       ),
 
       bottomSheetTheme: BottomSheetThemeData(
@@ -223,10 +237,10 @@ abstract final class AppTheme {
         modalElevation: 0,
         showDragHandle: true,
         dragHandleColor: c.borderStrong,
-        dragHandleSize: const Size(36, 4),
+        dragHandleSize: const Size(32, 3),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
-            top: Radius.circular(TokenRadius.sheet),
+            top: Radius.circular(SaldaRadius.sheet),
           ),
         ),
       ),
@@ -235,79 +249,56 @@ abstract final class AppTheme {
         backgroundColor: c.surfaceElevated,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        titleTextStyle: text.titleMedium,
+        titleTextStyle: SaldaType.serif(
+          size: 20,
+          weight: FontWeight.w600,
+          color: c.textPrimary,
+        ),
         contentTextStyle: text.bodyMedium,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(TokenRadius.sheet),
+          borderRadius: BorderRadius.circular(SaldaRadius.sheet),
         ),
       ),
 
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: c.textPrimary,
-        contentTextStyle: text.bodyMedium?.copyWith(color: c.background),
-        actionTextColor: dark ? c.primary : c.primaryMuted,
+        backgroundColor: c.ink,
+        contentTextStyle: text.bodyMedium?.copyWith(color: c.onInk),
+        actionTextColor: c.inkAccent,
         elevation: 0,
         insetPadding: const EdgeInsets.all(TokenSpacing.lg),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(TokenRadius.control),
+          borderRadius: BorderRadius.circular(SaldaRadius.control),
         ),
       ),
 
       chipTheme: ChipThemeData(
-        backgroundColor: c.surfaceMuted,
+        backgroundColor: c.surface,
         selectedColor: c.primaryMuted,
         disabledColor: c.surfaceMuted,
         checkmarkColor: c.primary,
-        side: BorderSide(color: c.border),
+        side: BorderSide(color: c.borderStrong),
         labelStyle: text.labelMedium,
         secondaryLabelStyle: text.labelMedium,
         padding: const EdgeInsets.symmetric(
-          horizontal: TokenSpacing.md,
-          vertical: TokenSpacing.sm,
+          horizontal: TokenSpacing.sm,
+          vertical: TokenSpacing.xs,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(TokenRadius.control),
+          borderRadius: BorderRadius.circular(SaldaRadius.badge),
         ),
       ),
 
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: SegmentedButton.styleFrom(
-          backgroundColor: c.surfaceMuted,
+          backgroundColor: c.surface,
           foregroundColor: c.textSecondary,
-          selectedBackgroundColor: c.primaryMuted,
-          selectedForegroundColor: c.primary,
-          side: BorderSide(color: c.border),
+          selectedBackgroundColor: c.ink,
+          selectedForegroundColor: c.onInk,
+          side: BorderSide(color: c.borderStrong),
           textStyle: text.labelMedium,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(TokenRadius.control),
-          ),
-        ),
-      ),
-
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: c.surface,
-        surfaceTintColor: Colors.transparent,
-        indicatorColor: Colors.transparent,
-        elevation: 0,
-        height: 62,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        labelTextStyle: WidgetStateProperty.resolveWith(
-          (states) => text.labelSmall?.copyWith(
-            color: states.contains(WidgetState.selected)
-                ? c.primary
-                : c.textMuted,
-            fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w600
-                : FontWeight.w500,
-          ),
-        ),
-        iconTheme: WidgetStateProperty.resolveWith(
-          (states) => IconThemeData(
-            size: 22,
-            color: states.contains(WidgetState.selected)
-                ? c.primary
-                : c.textMuted,
+            borderRadius: BorderRadius.circular(SaldaRadius.control),
           ),
         ),
       ),
@@ -316,7 +307,7 @@ abstract final class AppTheme {
         color: c.primary,
         linearTrackColor: c.skeleton,
         circularTrackColor: c.skeleton,
-        strokeWidth: 2.5,
+        strokeWidth: 2,
       ),
 
       switchTheme: SwitchThemeData(
@@ -337,7 +328,7 @@ abstract final class AppTheme {
         ),
         checkColor: WidgetStateProperty.all(c.onPrimary),
         side: BorderSide(color: c.borderStrong, width: 1.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
       ),
       radioTheme: RadioThemeData(
         fillColor: WidgetStateProperty.resolveWith(
@@ -351,10 +342,10 @@ abstract final class AppTheme {
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: c.textPrimary,
-          borderRadius: BorderRadius.circular(TokenRadius.control),
+          color: c.ink,
+          borderRadius: BorderRadius.circular(SaldaRadius.badge),
         ),
-        textStyle: text.bodySmall?.copyWith(color: c.background),
+        textStyle: text.bodySmall?.copyWith(color: c.onInk),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: c.surfaceElevated,
@@ -362,9 +353,18 @@ abstract final class AppTheme {
         elevation: 0,
         textStyle: text.bodyMedium,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(TokenRadius.card),
-          side: BorderSide(color: c.border),
+          borderRadius: BorderRadius.circular(SaldaRadius.control),
+          side: BorderSide(color: c.borderStrong),
         ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: c.textPrimary,
+        unselectedLabelColor: c.textMuted,
+        labelStyle: text.labelLarge,
+        unselectedLabelStyle: text.labelMedium,
+        indicatorColor: c.textPrimary,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: c.border,
       ),
       // Transición corta y sin deslizamientos largos: la navegación no debe
       // hacer esperar.
@@ -377,8 +377,12 @@ abstract final class AppTheme {
     );
   }
 
-  /// Escala tipográfica del sistema mapeada sobre los slots de Material, para
-  /// que cualquier widget no migrado herede ya la jerarquía correcta.
+  /// Escala tipográfica mapeada sobre los slots de Material, para que
+  /// cualquier widget no migrado herede ya la jerarquía correcta.
+  ///
+  /// Dos voces y nada más: la serifa para lo que es TITULAR (páginas, cifra
+  /// agregada) y la sans del sistema para todo lo que se opera. La mono solo
+  /// aparece dentro del recibo, ver [SaldaType.mono].
   static TextTheme _textTheme(SaldaColors c) {
     TextStyle s(
       double size,
@@ -395,23 +399,28 @@ abstract final class AppTheme {
     );
 
     return TextTheme(
-      displayLarge: s(
-        TokenTypography.displaySize,
-        TokenTypography.displayWeight,
-        TokenTypography.displayTracking,
-        TokenTypography.displayHeight,
+      displayLarge: SaldaType.serif(
+        size: 40,
+        weight: FontWeight.w600,
+        color: c.textPrimary,
+        tracking: -1.0,
+        height: 1.05,
       ),
-      displayMedium: s(
-        TokenTypography.moneyLargeSize,
-        TokenTypography.moneyLargeWeight,
-        TokenTypography.moneyLargeTracking,
-        TokenTypography.moneyLargeHeight,
+      // Cifra agregada (MoneySize.large): serifa con cifras tabulares, como
+      // el total al pie de una página del libro mayor.
+      displayMedium: SaldaType.serif(
+        size: 34,
+        weight: FontWeight.w600,
+        color: c.textPrimary,
+        tracking: -0.8,
+        height: 1.1,
       ),
-      headlineMedium: s(
-        TokenTypography.pageTitleSize,
-        TokenTypography.pageTitleWeight,
-        TokenTypography.pageTitleTracking,
-        TokenTypography.pageTitleHeight,
+      headlineMedium: SaldaType.serif(
+        size: 28,
+        weight: FontWeight.w600,
+        color: c.textPrimary,
+        tracking: -0.5,
+        height: 1.15,
       ),
       headlineSmall: s(
         TokenTypography.moneyMediumSize,
@@ -419,11 +428,12 @@ abstract final class AppTheme {
         TokenTypography.moneyMediumTracking,
         TokenTypography.moneyMediumHeight,
       ),
-      titleLarge: s(
-        TokenTypography.pageTitleSize,
-        TokenTypography.pageTitleWeight,
-        TokenTypography.pageTitleTracking,
-        TokenTypography.pageTitleHeight,
+      titleLarge: SaldaType.serif(
+        size: 24,
+        weight: FontWeight.w600,
+        color: c.textPrimary,
+        tracking: -0.4,
+        height: 1.2,
       ),
       titleMedium: s(
         TokenTypography.cardTitleSize,
@@ -450,14 +460,14 @@ abstract final class AppTheme {
         TokenTypography.bodyHeight,
       ),
       bodySmall: s(
-        TokenTypography.captionSize,
+        TokenTypography.captionSize + 1,
         TokenTypography.captionWeight,
         TokenTypography.captionTracking,
         TokenTypography.captionHeight,
         color: c.textSecondary,
       ),
       labelLarge: s(
-        TokenTypography.labelSize,
+        TokenTypography.labelSize + 1,
         600,
         TokenTypography.labelTracking,
         TokenTypography.labelHeight,
@@ -476,6 +486,82 @@ abstract final class AppTheme {
       ),
     );
   }
+}
+
+/// Radios de Salda 8. Contenidos a propósito: el papel tiene esquinas, y
+/// el redondeo generoso repetido en cada caja era lo que hacía que todo
+/// pareciera la misma plantilla.
+abstract final class SaldaRadius {
+  /// Etiquetas, chips, sellos.
+  static const double badge = 3;
+
+  /// Botones, campos, menús.
+  static const double control = 6;
+
+  /// Superficies de contenido (listas, bloques, el panel de tinta).
+  static const double surface = 6;
+
+  /// Hojas inferiores y diálogos.
+  static const double sheet = 14;
+}
+
+/// Las dos familias adicionales del sistema, ambas de PLATAFORMA: no se
+/// empaqueta ninguna fuente (licencia, peso del APK y funcionamiento offline
+/// resueltos por construcción).
+///
+/// En Android `serif` resuelve a Noto Serif y `monospace` a Droid Sans Mono,
+/// presentes en todas las versiones soportadas. Los repliegues cubren iOS.
+abstract final class SaldaType {
+  static const serifFamily = 'serif';
+  static const serifFallback = ['Noto Serif', 'Georgia', 'Times New Roman'];
+  static const monoFamily = 'monospace';
+  static const monoFallback = ['Droid Sans Mono', 'Menlo', 'Courier New'];
+
+  static const tabular = [FontFeature.tabularFigures()];
+
+  /// Cifras de caja alta y ancho fijo: una serifa de libro trae por defecto
+  /// cifras «elzevirianas» que bailan en la línea y no encolumnan.
+  static const tabularLining = [
+    FontFeature.tabularFigures(),
+    FontFeature.liningFigures(),
+  ];
+
+  /// Voz de titular: páginas, cifras agregadas, el comercio del recibo.
+  static TextStyle serif({
+    required double size,
+    required FontWeight weight,
+    required Color color,
+    double tracking = 0,
+    double height = 1.2,
+  }) => TextStyle(
+    fontFamily: serifFamily,
+    fontFamilyFallback: serifFallback,
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+    letterSpacing: tracking,
+    height: height,
+    fontFeatures: tabularLining,
+  );
+
+  /// Voz de recibo. SOLO dentro del ticket, donde el ancho fijo tiene
+  /// significado: columnas de cantidad e importe que se leen como un
+  /// comprobante impreso. Fuera del recibo, la sans tabular basta.
+  static TextStyle mono({
+    required double size,
+    required Color color,
+    FontWeight weight = FontWeight.w400,
+    double tracking = 0,
+  }) => TextStyle(
+    fontFamily: monoFamily,
+    fontFamilyFallback: monoFallback,
+    fontSize: size,
+    fontWeight: weight,
+    color: color,
+    letterSpacing: tracking,
+    height: 1.35,
+    fontFeatures: tabular,
+  );
 }
 
 /// Roles de color del sistema, disponibles en cualquier widget mediante
@@ -511,20 +597,38 @@ class SaldaColors extends ThemeExtension<SaldaColors> {
     required this.overlay,
     required this.skeleton,
     required this.focus,
+    required this.ink,
+    required this.onInk,
+    required this.onInkMuted,
+    required this.inkRule,
+    required this.inkPositive,
+    required this.inkNegative,
+    required this.inkAccent,
+    required this.paper,
+    required this.paperRule,
   });
 
+  /// Papel: el fondo de todas las pantallas.
   final Color background;
+
+  /// Hoja: listas y bloques contenidos, un punto más clara que el papel.
   final Color surface;
   final Color surfaceElevated;
   final Color surfaceMuted;
   final Color border;
   final Color borderStrong;
+
+  /// Tinta azul-negra.
   final Color textPrimary;
   final Color textSecondary;
   final Color textMuted;
+
+  /// Ultramar: la ÚNICA tinta de acción.
   final Color primary;
   final Color onPrimary;
   final Color primaryMuted;
+
+  /// Ocre de aviso (no de marca).
   final Color accent;
   final Color accentMuted;
   final Color positive;
@@ -538,66 +642,96 @@ class SaldaColors extends ThemeExtension<SaldaColors> {
   final Color skeleton;
   final Color focus;
 
-  static SaldaColors _of(Brightness brightness) {
-    final dark = brightness == Brightness.dark;
-    Color pick(int light, int darkValue) => Color(dark ? darkValue : light);
-    return SaldaColors(
-      background: pick(TokenColors.backgroundLight, TokenColors.backgroundDark),
-      surface: pick(TokenColors.surfaceLight, TokenColors.surfaceDark),
-      surfaceElevated: pick(
-        TokenColors.surfaceElevatedLight,
-        TokenColors.surfaceElevatedDark,
-      ),
-      surfaceMuted: pick(
-        TokenColors.surfaceMutedLight,
-        TokenColors.surfaceMutedDark,
-      ),
-      border: pick(TokenColors.borderLight, TokenColors.borderDark),
-      borderStrong: pick(
-        TokenColors.borderStrongLight,
-        TokenColors.borderStrongDark,
-      ),
-      textPrimary: pick(
-        TokenColors.textPrimaryLight,
-        TokenColors.textPrimaryDark,
-      ),
-      textSecondary: pick(
-        TokenColors.textSecondaryLight,
-        TokenColors.textSecondaryDark,
-      ),
-      // El token claro original no alcanzaba contraste AA sobre blanco para
-      // texto pequeño. Se ajusta en el rol semántico de la app sin alterar la
-      // marca compartida ni la paleta oscura.
-      textMuted: Color(dark ? TokenColors.textMutedDark : 0xFF59645F),
-      primary: pick(TokenColors.primaryLight, TokenColors.primaryDark),
-      onPrimary: pick(TokenColors.onPrimaryLight, TokenColors.onPrimaryDark),
-      primaryMuted: pick(
-        TokenColors.primaryMutedLight,
-        TokenColors.primaryMutedDark,
-      ),
-      accent: pick(TokenColors.accentLight, TokenColors.accentDark),
-      accentMuted: pick(
-        TokenColors.accentMutedLight,
-        TokenColors.accentMutedDark,
-      ),
-      positive: pick(TokenColors.positiveLight, TokenColors.positiveDark),
-      positiveMuted: pick(
-        TokenColors.positiveMutedLight,
-        TokenColors.positiveMutedDark,
-      ),
-      negative: pick(TokenColors.negativeLight, TokenColors.negativeDark),
-      negativeMuted: pick(
-        TokenColors.negativeMutedLight,
-        TokenColors.negativeMutedDark,
-      ),
-      warning: pick(TokenColors.warningLight, TokenColors.warningDark),
-      pending: pick(TokenColors.pendingLight, TokenColors.pendingDark),
-      disabled: pick(TokenColors.disabledLight, TokenColors.disabledDark),
-      overlay: pick(TokenColors.overlayLight, TokenColors.overlayDark),
-      skeleton: pick(TokenColors.skeletonLight, TokenColors.skeletonDark),
-      focus: pick(TokenColors.focusLight, TokenColors.focusDark),
-    );
-  }
+  /// Superficie de tinta para cifras agregadas. EXCEPCIONAL: una por
+  /// pantalla como mucho.
+  final Color ink;
+  final Color onInk;
+  final Color onInkMuted;
+  final Color inkRule;
+  final Color inkPositive;
+  final Color inkNegative;
+  final Color inkAccent;
+
+  /// Papel del recibo: solo el detalle del ticket.
+  final Color paper;
+  final Color paperRule;
+
+  static SaldaColors _of(Brightness brightness) =>
+      brightness == Brightness.dark ? _dark : _light;
+
+  static const _light = SaldaColors(
+    background: Color(0xFFF3F0E8),
+    surface: Color(0xFFFBFAF6),
+    surfaceElevated: Color(0xFFFDFCF9),
+    surfaceMuted: Color(0xFFEAE6DC),
+    border: Color(0xFFDDD8CC),
+    borderStrong: Color(0xFFB7B0A1),
+    textPrimary: Color(0xFF181A21),
+    textSecondary: Color(0xFF474A54),
+    textMuted: Color(0xFF5F626C),
+    primary: Color(0xFF22389A),
+    onPrimary: Color(0xFFFFFFFF),
+    primaryMuted: Color(0xFFE2E5F2),
+    accent: Color(0xFF8E5410),
+    accentMuted: Color(0xFFF3E6D1),
+    positive: Color(0xFF1C6A42),
+    positiveMuted: Color(0xFFE1EDE4),
+    negative: Color(0xFFA7261D),
+    negativeMuted: Color(0xFFF5E3DF),
+    warning: Color(0xFF855400),
+    pending: Color(0xFF686456),
+    disabled: Color(0xFFA6A49C),
+    overlay: Color(0xFF181A21),
+    skeleton: Color(0xFFE3DFD4),
+    focus: Color(0xFF22389A),
+    ink: Color(0xFF171A26),
+    onInk: Color(0xFFF3F0E8),
+    onInkMuted: Color(0xFFA7AAB9),
+    inkRule: Color(0xFF30344A),
+    inkPositive: Color(0xFF8AD6AA),
+    inkNegative: Color(0xFFF4A59B),
+    inkAccent: Color(0xFFB6C4FF),
+    paper: Color(0xFFFFFDF8),
+    paperRule: Color(0xFFC9C1B0),
+  );
+
+  static const _dark = SaldaColors(
+    background: Color(0xFF121419),
+    surface: Color(0xFF191C23),
+    surfaceElevated: Color(0xFF20242C),
+    surfaceMuted: Color(0xFF16181E),
+    border: Color(0xFF2A2E38),
+    borderStrong: Color(0xFF414654),
+    textPrimary: Color(0xFFECE8DE),
+    textSecondary: Color(0xFFB6B3AA),
+    textMuted: Color(0xFF94918A),
+    primary: Color(0xFFA3B4FF),
+    onPrimary: Color(0xFF0F1638),
+    primaryMuted: Color(0xFF1F2849),
+    accent: Color(0xFFE2A95E),
+    accentMuted: Color(0xFF33281A),
+    positive: Color(0xFF7FCC9E),
+    positiveMuted: Color(0xFF15291E),
+    negative: Color(0xFFF1978D),
+    negativeMuted: Color(0xFF34191A),
+    warning: Color(0xFFE9B65C),
+    pending: Color(0xFFB0A995),
+    disabled: Color(0xFF535866),
+    overlay: Color(0xFF000000),
+    skeleton: Color(0xFF252933),
+    focus: Color(0xFFA3B4FF),
+    // En oscuro la tinta se hunde un punto por debajo del fondo y se
+    // separa con borde: invertir a claro convertiría la excepción en un foco.
+    ink: Color(0xFF0B0D12),
+    onInk: Color(0xFFECE8DE),
+    onInkMuted: Color(0xFF9A9DAB),
+    inkRule: Color(0xFF2A2E3A),
+    inkPositive: Color(0xFF7FCC9E),
+    inkNegative: Color(0xFFF1978D),
+    inkAccent: Color(0xFFA3B4FF),
+    paper: Color(0xFF1D2028),
+    paperRule: Color(0xFF454A57),
+  );
 
   @override
   SaldaColors copyWith() => this;
@@ -617,33 +751,18 @@ extension SaldaColorsAccess on BuildContext {
 }
 
 /// Colores semánticos que no forman parte del ColorScheme M3
-/// (estados de liquidación y signo de balances — §3.1).
+/// (estados de liquidación y signo de balances — §3.1). Salen de los mismos
+/// roles que el resto de la app para que un estado no tenga dos verdes.
 extension SemanticColors on ColorScheme {
-  bool get _dark => brightness == Brightness.dark;
+  SaldaColors get _c => SaldaColors._of(brightness);
 
-  Color get settlementPending => Color(
-    _dark
-        ? TokenColors.settlementPendingDark
-        : TokenColors.settlementPendingLight,
-  );
+  Color get settlementPending => _c.pending;
 
-  Color get settlementMarked => Color(
-    _dark
-        ? TokenColors.settlementMarkedDark
-        : TokenColors.settlementMarkedLight,
-  );
+  Color get settlementMarked => _c.warning;
 
-  Color get settlementConfirmed => Color(
-    _dark
-        ? TokenColors.settlementConfirmedDark
-        : TokenColors.settlementConfirmedLight,
-  );
+  Color get settlementConfirmed => _c.positive;
 
-  Color get balancePositive => Color(
-    _dark ? TokenColors.balancePositiveDark : TokenColors.balancePositiveLight,
-  );
+  Color get balancePositive => _c.positive;
 
-  Color get balanceNegative => Color(
-    _dark ? TokenColors.balanceNegativeDark : TokenColors.balanceNegativeLight,
-  );
+  Color get balanceNegative => _c.negative;
 }

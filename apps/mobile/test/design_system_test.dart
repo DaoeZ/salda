@@ -60,8 +60,14 @@ void main() {
       final dc = AppTheme.dark().extension<SaldaColors>()!;
       final lc = AppTheme.light().extension<SaldaColors>()!;
       expect(dc.background, isNot(const Color(0xFF000000)));
-      // Fondo carbón con matiz verde: el verde manda sobre el azul.
-      expect(dc.background.g, greaterThan(dc.background.b));
+      // Salda 8: fondo de tinta azul-negra (antes carbón verdoso). Lo que se
+      // exige es que no sea negro puro y que tenga luz suficiente para que
+      // la superficie de tinta de las cifras agregadas se hunda por debajo.
+      expect(dc.background.computeLuminance(), greaterThan(0.004));
+      expect(
+        dc.ink.computeLuminance(),
+        lessThan(dc.background.computeLuminance()),
+      );
       // Claro templado: el rojo manda sobre el azul (nada de blanco frío).
       expect(lc.background.r, greaterThan(lc.background.b));
     });

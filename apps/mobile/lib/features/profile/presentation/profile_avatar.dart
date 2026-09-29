@@ -1,11 +1,14 @@
-import 'package:design_tokens/design_tokens.dart';
-import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
+
+import '../../../core/ui/badges.dart';
 
 /// Avatar de identidad pública: iniciales sobre un color CONSISTENTE
 /// derivado del uid (mismo usuario = mismo color en cualquier pantalla y
 /// dispositivo). Cuando exista foto de perfil, este widget la mostrará y
 /// las iniciales quedarán como fallback.
+///
+/// Delega en [SaldaAvatar] para que una persona se pinte igual en la barra,
+/// en su perfil y en una fila de balance.
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
     super.key,
@@ -20,24 +23,6 @@ class ProfileAvatar extends StatelessWidget {
   final double radius;
 
   @override
-  Widget build(BuildContext context) {
-    final color = Color(
-      TokenColors.avatarPalette[avatarColorIndex(
-        seed,
-        TokenColors.avatarPalette.length,
-      )],
-    );
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: color,
-      child: Text(
-        avatarInitials(displayName),
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-          fontSize: radius * 0.8,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      SaldaAvatar(seed: seed, label: displayName, radius: radius);
 }

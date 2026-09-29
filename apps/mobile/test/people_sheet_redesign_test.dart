@@ -150,7 +150,7 @@ void main() {
   ) async {
     await seedGrupo();
     await pump(tester);
-    expect(find.text('Cómo se reparte'.toUpperCase()), findsOneWidget);
+    expect(find.text('Cómo se reparte'), findsOneWidget);
     expect(find.textContaining('se divide a partes iguales'), findsOneWidget);
     await tester.tap(find.text('Cada uno lo suyo'));
     await tester.pumpAndSettle();

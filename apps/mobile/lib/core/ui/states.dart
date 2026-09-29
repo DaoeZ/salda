@@ -7,8 +7,8 @@ import 'surfaces.dart';
 
 /// Estado vacío: qué pasa, por qué, y qué hacer ahora.
 ///
-/// Sin ilustración genérica y sin texto infantilizado — un icono discreto,
-/// una frase que explica y, si existe, UNA acción. Alineado a la izquierda
+/// Sin ilustración genérica y sin texto infantilizado — una frase que
+/// explica y, si existe, UNA acción. Alineado a la izquierda
 /// como el resto del contenido: centrar todo hace que parezca un error.
 class EmptyState extends StatelessWidget {
   const EmptyState({
@@ -30,17 +30,21 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.salda;
     final theme = Theme.of(context);
+    // Un hueco del libro todavía sin rellenar: marco de papel, sin relleno
+    // ni ilustración. El icono se conserva en la API pero no se pinta: en
+    // un estado vacío era adorno, y la frase ya dice qué pasa.
     return SaldaCard(
-      color: c.surfaceMuted,
-      borderColor: c.border,
-      padding: const EdgeInsets.all(TokenSpacing.xl),
+      color: c.background,
+      borderColor: c.borderStrong,
+      padding: const EdgeInsets.fromLTRB(
+        TokenSpacing.lg,
+        TokenSpacing.lg,
+        TokenSpacing.lg,
+        TokenSpacing.lg,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 22, color: c.textMuted),
-            const SizedBox(height: TokenSpacing.md),
-          ],
           Text(title, style: theme.textTheme.titleSmall),
           const SizedBox(height: TokenSpacing.xs),
           Text(
@@ -48,7 +52,7 @@ class EmptyState extends StatelessWidget {
             style: theme.textTheme.bodyMedium?.copyWith(color: c.textSecondary),
           ),
           if (action != null && onAction != null) ...[
-            const SizedBox(height: TokenSpacing.lg),
+            const SizedBox(height: TokenSpacing.md),
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton(onPressed: onAction, child: Text(action!)),

@@ -74,7 +74,7 @@ void main() {
     expect(find.text('Propietario'), findsNothing);
     // Los archivados van en su propia sección, siempre visible: plegarlos
     // escondía espacios que el usuario sí busca.
-    expect(find.text('ARCHIVADOS (1)'), findsOneWidget);
+    expect(find.text('Archivados (1)'), findsOneWidget);
     expect(find.text('Piso antiguo'), findsOneWidget);
     await _cerrar(tester);
   });

@@ -24,11 +24,14 @@ class SaldaWordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     Brand.appName,
-    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+    // La marca escrita en la misma serifa que los titulares, en tinta de
+    // acción: una firma, no un logotipo improvisado.
+    style: SaldaType.serif(
+      size: size + 2,
+      weight: FontWeight.w700,
       color: color ?? context.salda.primary,
-      fontSize: size,
-      letterSpacing: -0.6,
-      fontWeight: FontWeight.w700,
+      tracking: -0.4,
+      height: 1.1,
     ),
   );
 }

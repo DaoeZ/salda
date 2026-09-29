@@ -135,7 +135,7 @@ void main() {
     );
     await _pump(tester, firestore: firestore, child: const FriendsScreen());
 
-    expect(find.text('SOLICITUDES RECIBIDAS'), findsOneWidget);
+    expect(find.text('Solicitudes recibidas'), findsOneWidget);
     expect(find.text('Alba'), findsOneWidget);
     expect(find.text('Aceptar'), findsOneWidget);
     expect(find.text('Rechazar'), findsOneWidget);

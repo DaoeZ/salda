@@ -10,8 +10,9 @@ enum BadgeTone { neutral, positive, negative, warning, pending, info }
 
 /// Etiqueta de estado compacta: pendiente, aceptada, caducada, saldado…
 ///
-/// Rectángulo de esquina suave, no cápsula: la app ya tiene bastantes
-/// píldoras y a cierto tamaño todas se parecen.
+/// Rectángulo de esquina casi recta, sin borde: una anotación al margen del
+/// libro, no una píldora. Los hechos cerrados (cobrado, saldado) no usan
+/// esto sino [Stamp].
 class StatusBadge extends StatelessWidget {
   const StatusBadge(
     this.label, {
@@ -36,14 +37,10 @@ class StatusBadge extends StatelessWidget {
       BadgeTone.info => (c.primary, c.primaryMuted),
     };
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: TokenSpacing.sm,
-        vertical: 3,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: fg.withValues(alpha: 0.22)),
+        borderRadius: BorderRadius.circular(SaldaRadius.badge),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -104,12 +101,14 @@ class SaldaAvatar extends StatelessWidget {
       )],
     );
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // En oscuro el disco lleno vibra: se usa un fondo tenue con el color
-    // como texto, que es lo mismo que hacen los badges.
-    final bg = dark
-        ? Color.alphaBlend(base.withValues(alpha: 0.22), context.salda.surface)
-        : base;
-    final fg = dark ? _lighten(base) : Colors.white;
+    // Entintado, no disco lleno: sobre papel, ocho colores saturados
+    // compitiendo en una lista eran lo más ruidoso de la pantalla. El color
+    // sigue identificando (fondo tenue + iniciales en su tono), sin gritar.
+    final bg = Color.alphaBlend(
+      base.withValues(alpha: dark ? 0.24 : 0.16),
+      context.salda.surface,
+    );
+    final fg = dark ? _lighten(base) : _darken(base);
     final text = (emoji != null && emoji!.isNotEmpty)
         ? emoji!
         : avatarInitials(label);
@@ -122,7 +121,9 @@ class SaldaAvatar extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           shape: square ? BoxShape.rectangle : BoxShape.circle,
-          borderRadius: square ? BorderRadius.circular(radius * 0.55) : null,
+          borderRadius: square
+              ? BorderRadius.circular(SaldaRadius.control)
+              : null,
         ),
         child: Text(
           text,
@@ -135,6 +136,11 @@ class SaldaAvatar extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static Color _darken(Color color) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl.withLightness((hsl.lightness - 0.12).clamp(0.0, 1.0)).toColor();
   }
 
   static Color _lighten(Color color) {
