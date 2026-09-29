@@ -1266,7 +1266,7 @@ recalcula mientras el reparto está reabierto** (C9 verificado en hardware).
 | ~~BUG-CP-05~~ | ~~El estado del reparto no se refresca en vivo; hay que salir y reentrar~~ | — | **RESUELTO 2026-09-28.** `historicTicketProvider` era `FutureProvider` con `.get()` y `sessionTicketProvider` le daba precedencia sobre el stream vivo. Ahora derecho y ticket son streams. Solo cliente Flutter, sin deploy. Ver abajo y la Biblia de Código |
 | **BUG-CP-02** | El scroll del detalle de ticket quedó atrapado hacia abajo en el checkpoint inicial | — | **NO REPRODUCIBLE EN SALDA 8 / vigilar en próximos checkpoints.** No existe causa raíz demostrada ni fix específico |
 | **BUG-CP-04** | El balance neto bilateral no explica ambas direcciones en su desglose | **P2** | El libro netea antes de la pantalla: `withUser()` devuelve un único balance y `openObligations()` solo trae esa dirección |
-| **BUG-CP-07** | El detalle del ticket no muestra «Corregido por … · fecha» | **P2** | `_ticketFrom` no lee `lastEditedByUid`/`lastEditedAt` → `_CorrectionSignature` es código muerto |
+| ~~BUG-CP-07~~ | ~~El detalle del ticket no muestra «Corregido por … · fecha»~~ | — | **RESUELTO 2026-09-29.** `_ticketFrom` ya mapea `lastEditedByUid`/`lastEditedAt`; la firma se actualiza en vivo y usa «Alguien» si el perfil ya no existe |
 | **BUG-CP-01** | Overflow visual al editar un producto | **P3** | Sin investigar |
 | ~~BUG-CP-06~~ | ~~Pago parcial rechazado~~ | — | **DESCARTADO** |
 
@@ -1285,6 +1285,27 @@ rápidos y varias repeticiones, sin salto. **No se cambió código ni jerarquía
 scroll, no hubo fix específico y no se atribuye el resultado a `ReceiptPaper` ni
 al rediseño.** El síntoma pudo desaparecer incidentalmente durante el rediseño,
 sin evidencia para afirmarlo; reabrir BUG-CP-02 si reaparece en un checkpoint.
+
+**BUG-CP-07 RESUELTO (2026-09-29) — mapper de vuelta, no Activity ni
+corrección.** La escritura A11c ya era correcta: `_correctionSignature` deja
+`lastEditedByUid` y `lastEditedAt` en el ticket, y P6 conserva el evento. El
+fallo estaba solo en la vuelta Firestore → `SessionTicket`: `_ticketFrom` omitía
+ambos campos, pese a que el modelo y `_CorrectionSignature` ya los tenían. Ahora
+el mapper conserva `String? lastEditedByUid` y `Timestamp? lastEditedAt` →
+`DateTime?`, y la firma discreta del encabezado de `ReceiptPaper` se muestra
+solo cuando existen UID no vacío y fecha; nunca inventa una fecha para un dato
+incompleto. Un perfil resoluble muestra su nombre público; si ya no existe se
+usa el fallback existente «Alguien», sin exponer el UID. Tickets legacy sin los
+campos siguen sin firma.
+
+**Realtime y regresión:** `ticket_live_detail_test.dart` monta la ruta real,
+escribe los campos DESPUÉS de abrirla y exige que aparezca «Corregido por Alba
+García» en el mismo `State` del detalle, sin reapertura. Cubre además legacy sin
+firma y actor sin perfil. El test falló contra el mapper anterior y pasa con el
+arreglo; aprovecha los streams de BUG-CP-05, sin tocar Activity, Rules,
+Functions, economía ni audit diff. Validación: `dart analyze --fatal-infos` a
+cero y `flutter test` 688 pass / 5 skip; el caso realtime también pasó en el
+Android 16 conectado. No se modificó un ticket económico real en hardware.
 
 **BUG-CP-06 descartado, y por qué importa:** el rechazo de 3,00 € sobre una
 obligación de 7,98 € estaba explicado por una **reserva pendiente de 6,75 €**

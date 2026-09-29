@@ -10,7 +10,7 @@
 // camino del derecho y exigen que cada cambio llegue SIN reabrir la pantalla.
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
+import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue, Timestamp;
 import 'package:domain/domain.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart' show FirebaseException;
@@ -283,6 +283,55 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Bar Pepe'), findsWidgets);
       expect(_detalle(tester), same(detalle));
+      await _cerrar(tester);
+    });
+  });
+
+  group('BUG-CP-07: firma de corrección del ticket', () {
+    testWidgets('un ticket legacy sin firma no inventa una corrección', (
+      tester,
+    ) async {
+      final fake = await _seed();
+      await _pump(tester, fake);
+
+      expect(find.textContaining('Corregido por'), findsNothing);
+      await _cerrar(tester);
+    });
+
+    testWidgets('mapea la firma y la muestra en vivo sin reabrir el detalle', (
+      tester,
+    ) async {
+      final fake = await _seed();
+      await _pump(tester, fake);
+      final detalle = _detalle(tester);
+
+      expect(find.textContaining('Corregido por'), findsNothing);
+      await fake.doc('profiles/uid-alba').set({
+        'displayName': 'Alba García',
+        'username': 'alba',
+      });
+      await fake.doc(_ticketPath).update({
+        'lastEditedByUid': 'uid-alba',
+        'lastEditedAt': Timestamp.fromDate(DateTime.utc(2026, 9, 29)),
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Corregido por Alba García'), findsOneWidget);
+      expect(_detalle(tester), same(detalle));
+      await _cerrar(tester);
+    });
+
+    testWidgets('si el perfil del actor ya no existe, usa el fallback público', (
+      tester,
+    ) async {
+      final fake = await _seed();
+      await fake.doc(_ticketPath).update({
+        'lastEditedByUid': 'uid-eliminado',
+        'lastEditedAt': Timestamp.fromDate(DateTime.utc(2026, 9, 29)),
+      });
+      await _pump(tester, fake);
+
+      expect(find.textContaining('Corregido por Alguien'), findsOneWidget);
       await _cerrar(tester);
     });
   });

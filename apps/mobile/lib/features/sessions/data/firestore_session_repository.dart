@@ -352,6 +352,8 @@ class FirestoreSessionRepository implements SessionRepository {
       },
       spaceId: data['spaceId'] as String?,
       contextModelVersion: (data['contextModelVersion'] as int?) ?? 0,
+      lastEditedByUid: data['lastEditedByUid'] as String?,
+      lastEditedAt: (data['lastEditedAt'] as Timestamp?)?.toDate(),
       pickingModelVersion: (data['pickingModelVersion'] as int?) ?? 0,
       pickingOpen: {
         for (final entry

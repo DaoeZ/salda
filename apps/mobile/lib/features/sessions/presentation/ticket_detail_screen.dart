@@ -318,7 +318,7 @@ class _ReceiptHeader extends StatelessWidget {
         ),
         // Quién tocó este gasto por última vez. Importa sobre todo cuando NO
         // fue quien lo subió (A11c).
-        if (t.lastEditedByUid != null) ...[
+        if ((t.lastEditedByUid ?? '').isNotEmpty && t.lastEditedAt != null) ...[
           const SizedBox(height: 2),
           _CorrectionSignature(ticket: t),
         ],
@@ -472,8 +472,8 @@ class _CorrectionSignature extends ConsumerWidget {
     final profile = ref.watch(publicProfileProvider(ticket.lastEditedByUid!));
     return Text(
       l10n.ticketCorrectedBy(
-        profile.value?.displayName ?? '…',
-        (ticket.lastEditedAt ?? DateTime.now()).toLocal(),
+        profile.value?.displayName ?? l10n.activityActorFallback,
+        ticket.lastEditedAt!.toLocal(),
       ),
       textAlign: TextAlign.center,
       style: Theme.of(

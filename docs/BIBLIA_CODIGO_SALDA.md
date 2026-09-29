@@ -166,11 +166,13 @@ tests que lo comprueban… y **nadie verifica el camino de vuelta**.
   `.get()` en vez de `.snapshots()`, al que `sessionTicketProvider` da
   **precedencia sobre el stream vivo**. El estado no se refresca nunca —
   comprobado esperando 7 minutos.
-- **BUG-CP-07**: la corrección escribe `lastEditedByUid`/`lastEditedAt` y P6
-  emite su evento, pero `_ticketFrom` —el **único** mapper del ticket— no lee
-  esos campos. `_CorrectionSignature` es **código muerto**: no puede
-  renderizarse jamás. `ticket_correction_test.dart` afirma **seis veces** que el
-  documento se escribió; ninguna que alguien lo lea.
+- **BUG-CP-07** (resuelto 2026-09-29): la corrección escribía
+  `lastEditedByUid`/`lastEditedAt` y P6 emitía su evento, pero `_ticketFrom` —el
+  **único** mapper del ticket— omitía ambos campos. El arreglo los mapea a
+  `SessionTicket`, y `_CorrectionSignature` solo aparece con UID no vacío y
+  fecha real; conserva el fallback público «Alguien» si el perfil ya no existe.
+  `ticket_live_detail_test.dart` recorre la ruta real y demuestra mapper,
+  renderizado y actualización en vivo sin reapertura.
 
 La regla que sale de aquí: **un test que hace `expect(doc['campo'], …)` no
 cubre la funcionalidad**, solo la escritura. Si un campo existe para que un
@@ -237,6 +239,40 @@ las reglas. Está documentado en `docs/ENTORNOS.md`.
 ---
 
 # Entradas cronológicas
+
+## BUG-CP-07 — FIRMA DE CORRECCIÓN VISIBLE Y VIVA — 2026-09-29
+
+**Rama:** `design/salda-8` · **Alcance:** solo cliente Flutter; no cambia
+Activity P6, A11c, Rules, Functions, economía ni el futuro `AUDIT-DIFF`.
+
+### Causa y arreglo
+
+`_correctionSignature` ya escribía en el ticket `lastEditedByUid` y
+`lastEditedAt` bajo las Rules existentes. `SessionTicket` ya declaraba ambos
+campos, y el detalle ya contenía `_CorrectionSignature`; el corte era
+`FirestoreSessionRepository._ticketFrom`, que no los deserializaba. Se añadió el
+mapeo `lastEditedByUid: String?` y `lastEditedAt: Timestamp? → DateTime?`.
+
+La anotación sigue dentro de la cabecera del `ReceiptPaper`, no añade tarjeta ni
+otra fuente de verdad. Se pinta únicamente si UID no vacío y fecha existen: los
+tickets legacy y los datos incompletos no inventan una firma ni la hora actual.
+El perfil público resuelve el nombre en vivo; si falta porque el actor ya no es
+miembro o fue eliminado, se aplica el fallback público existente «Alguien», sin
+mostrar el UID.
+
+### Regresión y validación
+
+`ticket_live_detail_test.dart` monta `/home/session/:sid/ticket/:tid`, comienza
+sin firma, escribe perfil + firma DESPUÉS de abrir y exige «Corregido por Alba
+García» en el mismo `TicketDetailScreen`; por tanto prueba el mapper, la
+presentación y el stream de BUG-CP-05, no solo la escritura. Cubre también
+ticket legacy sin campos y actor sin perfil. Falló con el mapper anterior.
+
+Validado: test específico verde · `dart analyze --fatal-infos` a cero ·
+`flutter test` **688 pass / 5 skip**. El caso realtime específico pasó también
+en Android 16 conectado; no se alteró ningún ticket económico real para probarlo.
+
+---
 
 ## BUG-CP-02 — SCROLL DEL DETALLE NO REPRODUCIBLE EN SALDA 8 — 2026-09-29
 
