@@ -121,9 +121,12 @@ Fotos:
 
 ## Qué falta
 
-1. **La segunda línea genérica sigue viva.** `home_space_row.dart` cae en
-   `l10n.spacesTitle` = **«Espacios»** siempre que no haya vinculación manual
-   pendiente. Es exactamente lo que el contrato manda quitar.
+1. ~~**La segunda línea genérica sigue viva.**~~ **Resuelto en
+   `design/salda-8` (2026-09-29, pendiente de fusionar):** la fila ya no cae
+   en «Espacios»; la segunda línea solo aparece cuando hay una vinculación
+   manual pendiente. No se inventó ninguna señal sustituta. Las filas ganan
+   avatar mayor y viven en una sola hoja. A1 sigue PARCIAL por los puntos 2
+   y 3.
 2. **Contexto útil**: solo existe `manualLinkPendingInSpace`. Faltan los estados
    accionables (ver A13, del que A1 debe beber) y «Todo al día».
 3. **Fotos: 0%.** `SaldaAvatar` no acepta imagen. No hay foto de grupo, ni campo

@@ -238,6 +238,73 @@ las reglas. Está documentado en `docs/ENTORNOS.md`.
 
 # Entradas cronológicas
 
+## SALDA 8 — REDISEÑO VISUAL «PAPEL Y TINTA» — 2026-09-29
+
+**Rama:** `design/salda-8` (worktree `Salda-8`) · **Base:** `e6cd3fa` ·
+**Alcance:** SOLO presentación y UX de `apps/mobile`. Ni motores, ni Rules,
+ni Functions, ni esquemas, ni web de invitados.
+
+### Qué se decidió y por qué
+
+- **La paleta vive en `apps/mobile/lib/core/theme/app_theme.dart`, no en
+  `design_tokens.json`.** Los tokens compartidos pintan también la web de
+  invitados; cambiarlos habría rediseñado la web sin querer. Espaciado,
+  movimiento y layout siguen saliendo de los tokens. Si algún día la web
+  adopta la dirección, se promociona la paleta a tokens en su propio ticket.
+- **Tipografía sin empaquetar nada.** Serifa y mono son las de PLATAFORMA
+  (`serif` → Noto Serif, `monospace` → Droid Sans Mono en Android), con
+  repliegues para iOS. Sin licencias, sin peso en el APK, offline por
+  construcción. La serifa se reserva a titulares y cifras agregadas; la mono,
+  al recibo. Lo vigila `design_system_test.dart`.
+- **Cuatro recursos con reglas de uso, no estilos libres:**
+  `InkPanel` (tinta, como mucho uno por pantalla, solo para LA cifra que
+  manda), `Stamp` (solo hechos cerrados: cobrado, saldado, confirmado),
+  `ReceiptPaper` (solo el detalle del ticket) y el verde/rojo (solo a favor /
+  en contra; un cero o un «en paz» NO es verde).
+- **Las filas con acción de cobro reservan siempre el hueco del botón**: si
+  no, la columna de importes se desalinea entre filas con y sin ✓.
+
+### Trampas encontradas (no repetir)
+
+- **`dart format` sobre un directorio reformatea archivos ajenos.** Hay
+  archivos del repo que no están en el formato del SDK actual (incluido
+  `sessions/domain/ticket_correction.dart`). Formatear `lib/features` metió
+  diffs de solo formato en dominio y tests que no tocaban el rediseño; se
+  revirtieron. Formatear SOLO los archivos editados.
+- **Un estilo de componente sin familia sale en Ahem en los tests y en la
+  fuente del motor en dispositivo.** El `TextTheme` propio se monta ahora
+  sobre `Typography.material2021()` para que botones y ListTile hereden la
+  familia de plataforma.
+- **`colorScheme.outline` es un color de BORDE.** Se usaba como color de
+  texto en la hoja de edición de línea y en la del reparto por unidades
+  (contraste ~1,5:1). Pasó al rol de texto secundario.
+- **`DecoratedSliver` pinta por encima del Material del Scaffold**: una fila
+  con `InkWell` dentro necesita su propio `Material(transparency)` o la tinta
+  del toque queda oculta bajo la hoja.
+
+### Hallazgos registrados y NO corregidos (fuera de alcance)
+
+- **`_LineSumCheck` (`ticket_detail_screen.dart`) usa tolerancia del 1 %
+  (mínimo 2 céntimos)**, mientras A15/C10 fijan 2 céntimos
+  (`receiptBalanceToleranceCents`). En modo corrección un ticket de 15,96 €
+  puede decir «El total cuadra» con 15 céntimos de descuadre. Se conservó tal
+  cual: es lógica, no presentación. Debe corregirse en su propio ticket.
+- **«Deuda original: 0,00 €»** en «Balance con X» cuando es el otro quien
+  debe: `_originalForViewer` enseña la dirección visor→otro. Es semántica
+  preexistente; se registra por si confunde en uso real.
+- Código muerto que se dejó en paz a propósito: `home/home_shell.dart` y
+  `ToneDot`.
+
+### Validación
+
+`dart analyze --fatal-infos` a cero · `apps/mobile` 685 pass / 5 skip (682 de
+partida + 3 contratos nuevos del sistema) · `domain` 130/130 ·
+`ocr_parser` 33/33 · goldens de fase 2.5 regenerados y revisados a mano.
+Sin dispositivo conectado durante la sesión: la validación en hardware del
+rediseño sigue pendiente.
+
+---
+
 ## BUG-CP-05 — EL DETALLE DEL TICKET NO SE ACTUALIZABA EN VIVO — 2026-09-28
 
 **Rama:** `codex/relations-groups-navigation` · **HEAD al empezar:** `4c90fee`
