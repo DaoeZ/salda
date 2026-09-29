@@ -147,6 +147,7 @@ class _SpaceBalanceRow extends ConsumerWidget {
                 ? MoneyTone.negative
                 : MoneyTone.positive,
           ),
+          // Hueco de acción fijo: los importes encolumnan con o sin cobro.
           if (canConfirm)
             IconButton(
               tooltip: l10n.economyConfirmPayment,
@@ -158,7 +159,9 @@ class _SpaceBalanceRow extends ConsumerWidget {
                 currency: balance.currency,
                 spaceId: spaceId,
               ),
-            ),
+            )
+          else
+            const SizedBox(width: TokenLayout.minTouchTarget),
         ],
       ),
       onTap: linkEnabled

@@ -194,13 +194,14 @@ class _Statement extends StatelessWidget {
             const SizedBox(height: TokenSpacing.sm),
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    l10n.economyNet,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: c.onInk),
-                  ),
+                Text(
+                  l10n.economyNet,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: c.onInk),
                 ),
-                Flexible(
+                const SizedBox(width: TokenSpacing.md),
+                // A ras del margen derecho, en la misma columna que el debe
+                // y el haber de encima.
+                Expanded(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
@@ -325,6 +326,8 @@ class _RelationshipTile extends ConsumerWidget {
           ),
           // Cobrar se alcanza desde el propio saldo, sin pasar por el
           // detalle: es la misma acción y el mismo sistema en todas partes.
+          // El hueco de la acción existe en TODAS las filas: así los
+          // importes encolumnan tengan o no cobro pendiente.
           if (!iOwe && balance.debtorUid != null)
             IconButton(
               tooltip: l10n.economyConfirmPayment,
@@ -335,7 +338,9 @@ class _RelationshipTile extends ConsumerWidget {
                 creditorActor: viewerUid,
                 currency: balance.currency,
               ),
-            ),
+            )
+          else
+            const SizedBox(width: TokenLayout.minTouchTarget),
         ],
       ),
     );

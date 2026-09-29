@@ -235,8 +235,14 @@ class InkPanel extends StatelessWidget {
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: theme.filledButtonTheme.style?.copyWith(
-              backgroundColor: WidgetStatePropertyAll(c.onInk),
-              foregroundColor: WidgetStatePropertyAll(c.ink),
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (s) => s.contains(WidgetState.disabled)
+                    ? c.onInk.withValues(alpha: 0.24)
+                    : c.onInk,
+              ),
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (s) => s.contains(WidgetState.disabled) ? c.onInkMuted : c.ink,
+              ),
             ),
           ),
         ),
@@ -356,12 +362,28 @@ class Stamp extends StatelessWidget {
               ),
             ),
           );
+    final placed = tilt
+        ? Transform.rotate(angle: -3 * math.pi / 180, child: stamp)
+        : stamp;
+    // El único gesto de la app: el sello se ESTAMPA una vez al aparecer
+    // (baja de un poco más grande y se asienta). Con «reducir movimiento»
+    // aparece quieto.
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return Semantics(
       label: label,
       excludeSemantics: true,
-      child: tilt
-          ? Transform.rotate(angle: -3 * math.pi / 180, child: stamp)
-          : stamp,
+      child: still
+          ? placed
+          : TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: TokenMotion.enterMs),
+              curve: Curves.easeOutCubic,
+              builder: (context, t, child) => Opacity(
+                opacity: t,
+                child: Transform.scale(scale: 1.14 - 0.14 * t, child: child),
+              ),
+              child: placed,
+            ),
     );
   }
 }
