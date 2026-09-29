@@ -103,9 +103,7 @@ class _UnitAssignmentSheet extends ConsumerWidget {
               consumers.isEmpty
                   ? l10n.unitAssignResidual(payerName)
                   : l10n.unitAssignShareHint,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
+              style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: TokenSpacing.md),
             Flexible(

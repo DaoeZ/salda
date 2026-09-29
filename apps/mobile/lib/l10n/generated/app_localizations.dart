@@ -1039,7 +1039,7 @@ abstract class AppLocalizations {
   /// No description provided for @allSettled.
   ///
   /// In es, this message translates to:
-  /// **'Todo saldado 🎉'**
+  /// **'Todo saldado.'**
   String get allSettled;
 
   /// No description provided for @activityEmpty.

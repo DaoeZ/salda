@@ -154,7 +154,7 @@ class _Hint extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 56, color: theme.colorScheme.outline),
+          Icon(icon, size: 28, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(height: TokenSpacing.md),
           Text(
             text,

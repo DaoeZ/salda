@@ -183,7 +183,11 @@ class ActivityEmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history, size: 56, color: theme.colorScheme.outline),
+            Icon(
+              Icons.history,
+              size: 28,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: TokenSpacing.md),
             Text(
               l10n.activityEmpty,

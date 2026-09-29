@@ -185,9 +185,7 @@ class _LineEditFormState extends State<_LineEditForm> {
             const SizedBox(height: TokenSpacing.sm),
             Text(
               l10n.lineSource(line.sourceText),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-              ),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
           const SizedBox(height: TokenSpacing.lg),

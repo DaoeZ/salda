@@ -58,7 +58,9 @@ abstract final class AppTheme {
       surfaceContainerHigh: c.surfaceElevated,
       surfaceContainerHighest: c.surfaceElevated,
       onSurfaceVariant: c.textSecondary,
-      outline: c.border,
+      // `outline` es el borde de los controles (campos, botones con
+      // contorno): necesita presencia. Los filetes de lista son la variante.
+      outline: c.borderStrong,
       outlineVariant: c.border,
       shadow: Colors.black,
       scrim: c.overlay,

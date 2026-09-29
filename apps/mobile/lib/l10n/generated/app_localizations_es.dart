@@ -527,7 +527,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get actionBackToPending => 'Volver a pendiente';
 
   @override
-  String get allSettled => 'Todo saldado 🎉';
+  String get allSettled => 'Todo saldado.';
 
   @override
   String get activityEmpty =>

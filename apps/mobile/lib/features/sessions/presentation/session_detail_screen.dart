@@ -269,7 +269,11 @@ class _SummaryTab extends ConsumerWidget {
         SaldaCardList(
           children: [
             for (final p in participants)
-              _CurrentBalanceRow(name: p.name, balance: detail.balances[p.id]),
+              _CurrentBalanceRow(
+                seed: p.id,
+                name: p.name,
+                balance: detail.balances[p.id],
+              ),
           ],
         ),
         const SectionGap(),
@@ -279,21 +283,8 @@ class _SummaryTab extends ConsumerWidget {
         if (settlements
             .where((s) => s.state != SettlementState.confirmed)
             .isEmpty)
-          SaldaCard(
-            color: context.salda.positiveMuted,
-            borderColor: context.salda.positive.withValues(alpha: 0.25),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.check_rounded,
-                  size: 18,
-                  color: context.salda.positive,
-                ),
-                const SizedBox(width: TokenSpacing.md),
-                Expanded(child: Text(l10n.allSettled)),
-              ],
-            ),
-          )
+          // Nada pendiente no es «a tu favor»: papel neutro, sin verde.
+          SaldaCard(child: Text(l10n.allSettled))
         else
           for (final settlement in settlements.where(
             (s) => s.state != SettlementState.confirmed,
@@ -376,6 +367,7 @@ class _SummaryTab extends ConsumerWidget {
           children: [
             for (final p in participants)
               _HistoricalBalanceRow(
+                seed: p.id,
                 name: p.name,
                 balance: detail.balances[p.id],
               ),
@@ -397,41 +389,26 @@ class _CurrentStateCard extends StatelessWidget {
     final theme = Theme.of(context);
     final confirmed = formatMoney(progress.confirmed);
     final required = formatMoney(progress.required);
-    final c = context.salda;
+    // Saldada, la cuenta se SELLA; mientras no, la frase dice cuánto falta.
+    // Sin caja verde: estar en paz es un hecho cerrado, no un saldo a favor.
     return SaldaCard(
-      color: progress.isSettled ? c.positiveMuted : c.surface,
-      borderColor: progress.isSettled
-          ? c.positive.withValues(alpha: 0.25)
-          : c.border,
       child: Padding(
         padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(
-                  progress.isSettled
-                      ? Icons.check_rounded
-                      : Icons.account_balance_wallet_outlined,
-                  size: 20,
-                  color: progress.isSettled ? c.positive : c.primary,
+            if (progress.isSettled)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Stamp(l10n.settledState),
+              )
+            else
+              Text(
+                l10n.settlementRemaining(formatMoney(progress.remaining)),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: TokenSpacing.sm),
-                Expanded(
-                  child: Text(
-                    progress.isSettled
-                        ? l10n.settledState
-                        : l10n.settlementRemaining(
-                            formatMoney(progress.remaining),
-                          ),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
             const SizedBox(height: TokenSpacing.md),
             SettlementProgressBar(
               progress: progress,
@@ -472,8 +449,13 @@ class _CurrentStateCard extends StatelessWidget {
 }
 
 class _CurrentBalanceRow extends StatelessWidget {
-  const _CurrentBalanceRow({required this.name, required this.balance});
+  const _CurrentBalanceRow({
+    required this.seed,
+    required this.name,
+    required this.balance,
+  });
 
+  final String seed;
   final String name;
   final ParticipantBalanceView? balance;
 
@@ -488,10 +470,7 @@ class _CurrentBalanceRow extends StatelessWidget {
         ? l10n.currentToReceive
         : l10n.currentToPay;
     return ListTile(
-      leading: CircleAvatar(
-        radius: 16,
-        child: Text(name.isEmpty ? '?' : name[0]),
-      ),
+      leading: SaldaAvatar(seed: seed, label: name, radius: 16),
       title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: Text(label),
       trailing: Text(
@@ -511,8 +490,13 @@ class _CurrentBalanceRow extends StatelessWidget {
 }
 
 class _HistoricalBalanceRow extends StatelessWidget {
-  const _HistoricalBalanceRow({required this.name, required this.balance});
+  const _HistoricalBalanceRow({
+    required this.seed,
+    required this.name,
+    required this.balance,
+  });
 
+  final String seed;
   final String name;
   final ParticipantBalanceView? balance;
 
@@ -522,10 +506,7 @@ class _HistoricalBalanceRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final net = balance?.net.cents ?? 0;
     return ListTile(
-      leading: CircleAvatar(
-        radius: 16,
-        child: Text(name.isEmpty ? '?' : name[0]),
-      ),
+      leading: SaldaAvatar(seed: seed, label: name, radius: 16),
       title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: balance == null
           ? null
