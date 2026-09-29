@@ -146,7 +146,11 @@ class _ObligationSettlementSheetState
           children: [
             Text(
               l10n.economySettleTitle(debtorName),
-              style: Theme.of(context).textTheme.titleMedium,
+              style: SaldaType.serif(
+                size: 20,
+                weight: FontWeight.w600,
+                color: context.salda.textPrimary,
+              ),
             ),
             const SizedBox(height: TokenSpacing.xs),
             Text(
@@ -173,7 +177,8 @@ class _ObligationSettlementSheetState
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    for (final obligation in obligations)
+                    for (final (index, obligation) in obligations.indexed) ...[
+                      if (index > 0) const Divider(height: 1),
                       _ObligationRow(
                         obligation: obligation,
                         checked: selected.contains(obligation.id),
@@ -190,6 +195,7 @@ class _ObligationSettlementSheetState
                             ? null
                             : () => _registerPartial(obligation),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -312,6 +318,7 @@ class _ObligationRow extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final entry = obligation.entry;
     return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
       value: checked,
       onChanged: onChanged == null
           ? null
@@ -325,7 +332,11 @@ class _ObligationRow extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (entry.ticketDate != null) Text(entry.ticketDate!),
+          if (entry.ticketDate != null)
+            Text(
+              entry.ticketDate!,
+              style: SaldaType.mono(size: 12, color: context.salda.textMuted),
+            ),
           // Una declaración del pagador es un AVISO, no un requisito: sin
           // ella la deuda se confirma igual.
           if (obligation.declaration != null)

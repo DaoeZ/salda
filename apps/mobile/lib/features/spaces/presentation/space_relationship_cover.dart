@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/badges.dart';
 import '../../../core/ui/surfaces.dart';
 import '../../../core/ui/states.dart';
 import '../../../l10n/generated/app_localizations.dart';
@@ -62,10 +63,9 @@ class _RelationshipSpaceCoverState
       appBar: AppBar(
         title: Row(
           children: [
-            CircleAvatar(
-              radius: 16,
-              child: Text(title.isEmpty ? '?' : title.substring(0, 1)),
-            ),
+            // Mismo avatar y misma semilla que la fila de Inicio: la persona
+            // se reconoce igual al entrar que en la lista.
+            SaldaAvatar(seed: space.id, label: title, radius: 16),
             const SizedBox(width: TokenSpacing.sm),
             Expanded(
               child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),

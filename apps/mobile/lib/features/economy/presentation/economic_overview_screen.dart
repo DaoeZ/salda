@@ -53,32 +53,20 @@ class EconomicHomeCard extends ConsumerWidget {
     return overview.maybeWhen(
       data: (data) {
         if (data.summaries.isEmpty) return const SizedBox.shrink();
-        return Card(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(TokenRadius.card),
-            onTap: () => context.push('/home/economy'),
-            child: Padding(
-              padding: const EdgeInsets.all(TokenSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        return SaldaCard(
+          onTap: () => context.push('/home/economy'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          l10n.economySummaryTitle,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                  for (final summary in data.summaries)
-                    _SummaryRow(summary: summary),
+                  Expanded(child: Eyebrow(l10n.economySummaryTitle)),
+                  const Icon(Icons.chevron_right),
                 ],
               ),
-            ),
+              for (final summary in data.summaries)
+                _SummaryRow(summary: summary),
+            ],
           ),
         );
       },
@@ -111,14 +99,8 @@ class _OverviewBody extends StatelessWidget {
     }
     return ScreenBody(
       children: [
-        for (final summary in overview.summaries)
-          Padding(
-            padding: const EdgeInsets.only(bottom: TokenSpacing.md),
-            child: SaldaCard(
-              padding: const EdgeInsets.all(TokenSpacing.xl),
-              child: _SummaryRow(summary: summary),
-            ),
-          ),
+        if (overview.summaries.isNotEmpty)
+          _Statement(summaries: overview.summaries),
         if (pendingToMe.isNotEmpty) ...[
           const SectionGap(),
           SectionHeader(title: l10n.economyPendingConfirmations),
@@ -144,6 +126,110 @@ class _OverviewBody extends StatelessWidget {
         ],
       ],
     );
+  }
+}
+
+/// El extracto: la cifra que manda en Economía, en la única superficie de
+/// tinta de la pantalla. Debe y haber en renglones y el neto bajo doble
+/// filete, como el pie de una página del libro mayor.
+class _Statement extends StatelessWidget {
+  const _Statement({required this.summaries});
+
+  final List<CurrencyEconomicSummary> summaries;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final c = context.salda;
+    final theme = Theme.of(context);
+    Widget line(String label, Money money, String currency, Color color) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: c.onInkMuted,
+                  ),
+                ),
+              ),
+              Text(
+                formatCurrencyMoney(money, currency),
+                maxLines: 1,
+                softWrap: false,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: money.cents == 0 ? c.onInkMuted : color,
+                  fontFeatures: SaldaType.tabular,
+                ),
+              ),
+            ],
+          ),
+        );
+    return InkPanel(
+      semanticLabel: l10n.economySummaryTitle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Eyebrow(l10n.economySummaryTitle, color: c.onInkMuted),
+          for (final (index, summary) in summaries.indexed) ...[
+            SizedBox(height: index == 0 ? TokenSpacing.sm : TokenSpacing.xl),
+            line(
+              l10n.economyOwedToMe,
+              summary.owedToMe,
+              summary.currency,
+              c.inkPositive,
+            ),
+            line(
+              l10n.economyIOwe,
+              summary.iOwe,
+              summary.currency,
+              c.inkNegative,
+            ),
+            const SizedBox(height: TokenSpacing.sm),
+            Divider(height: 1, thickness: 1, color: c.inkRule),
+            const SizedBox(height: 2),
+            Divider(height: 1, thickness: 1, color: c.inkRule),
+            const SizedBox(height: TokenSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.economyNet,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: c.onInk),
+                  ),
+                ),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      _signed(summary.net, summary.currency),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.displayMedium?.copyWith(
+                        fontSize: 30,
+                        color: summary.net.cents == 0
+                            ? c.onInk
+                            : summary.net.cents > 0
+                            ? c.inkPositive
+                            : c.inkNegative,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _signed(Money money, String currency) {
+    final text = formatCurrencyMoney(money, currency);
+    return money.cents > 0 ? '+$text' : text;
   }
 }
 
@@ -274,14 +360,49 @@ class _PendingConfirmationState extends ConsumerState<_PendingConfirmation> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final name = economicNameText(ref, l10n, widget.payment.payerUid);
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.all(TokenSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+        TokenSpacing.lg,
+        TokenSpacing.md,
+        TokenSpacing.md,
+        TokenSpacing.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-          Text(
-            formatCurrencyMoney(widget.payment.amount, widget.payment.currency),
+          Row(
+            children: [
+              SaldaAvatar(
+                seed: economicAvatarSeed(widget.payment.payerUid),
+                label: name,
+                radius: 18,
+              ),
+              const SizedBox(width: TokenSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    Text(
+                      l10n.economyDeclaredByPayer,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: TokenSpacing.sm),
+              MoneyText(
+                widget.payment.amount,
+                size: MoneySize.small,
+                currency: widget.payment.currency,
+              ),
+            ],
           ),
           if (widget.canMutate) ...[
             const SizedBox(height: TokenSpacing.sm),

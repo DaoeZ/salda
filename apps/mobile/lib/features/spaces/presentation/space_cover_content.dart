@@ -43,14 +43,9 @@ class SpaceBalances extends ConsumerWidget {
             final balances = scoped.balances
                 .where((balance) => balance.signedOutstandingCents != 0)
                 .toList();
-            if (balances.isEmpty) {
-              return ListTile(
-                leading: const Icon(Icons.check_circle_outline),
-                title: Text(l10n.spaceEconomicSettled),
-              );
-            }
+            if (balances.isEmpty) return const _SpaceSettled();
             final visible = compact ? balances.take(2).toList() : balances;
-            return Column(
+            return SaldaCardList(
               children: [
                 for (final balance in visible)
                   _SpaceBalanceRow(
@@ -62,6 +57,30 @@ class SpaceBalances extends ConsumerWidget {
             );
           },
         );
+  }
+}
+
+/// Nadie debe nada en este espacio: un hecho cerrado, y por eso lleva sello.
+class _SpaceSettled extends StatelessWidget {
+  const _SpaceSettled();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SaldaCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              l10n.spaceEconomicSettled,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          const SizedBox(width: TokenSpacing.md),
+          Stamp(l10n.settledState, compact: true),
+        ],
+      ),
+    );
   }
 }
 
@@ -342,13 +361,17 @@ class SpaceBalanceDetailScreen extends ConsumerWidget {
               .firstOrNull;
           return ScreenBody(
             children: [
-              for (final balance in balances)
-                _SpaceBalanceRow(
-                  spaceId: spaceId,
-                  balance: balance,
-                  viewerUid: data.viewerUid,
-                  linkEnabled: false,
-                ),
+              SaldaCardList(
+                children: [
+                  for (final balance in balances)
+                    _SpaceBalanceRow(
+                      spaceId: spaceId,
+                      balance: balance,
+                      viewerUid: data.viewerUid,
+                      linkEnabled: false,
+                    ),
+                ],
+              ),
               if (obligations.isNotEmpty) ...[
                 const SectionGap(),
                 SectionHeader(title: l10n.economyObligationsTitle),
@@ -419,15 +442,7 @@ class CoverSection extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-          ),
-          ?action,
-        ],
-      ),
-      const SizedBox(height: TokenSpacing.sm),
+      SectionHeader(title: title, trailing: action),
       child,
     ],
   );

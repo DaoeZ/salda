@@ -92,27 +92,6 @@ class _RelationBody extends ConsumerWidget {
     }
     return ScreenBody(
       children: [
-        // La persona encabeza la pantalla en una fila, no un avatar suelto
-        // centrado que no dice de quien es la deuda.
-        Row(
-          children: [
-            SaldaAvatar(
-              seed: economicAvatarSeed(otherUid),
-              label: otherName,
-              radius: 22,
-            ),
-            const SizedBox(width: TokenSpacing.lg),
-            Expanded(
-              child: Text(
-                otherName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ),
-          ],
-        ),
-        const SectionGap(height: TokenSpacing.lg),
         for (final balance in balances)
           _BalanceCard(
             balance: balance,
@@ -197,56 +176,54 @@ class _BalanceCardState extends ConsumerState<_BalanceCard> {
         ? l10n.economyYouOwe(widget.otherName)
         : l10n.economyOwesYou(widget.otherName);
     final c = context.salda;
+    final theme = Theme.of(context);
     final settled = balance.outstanding.cents == 0;
-    return SaldaCard(
-      padding: const EdgeInsets.all(TokenSpacing.xl),
+    // El neto con una persona es LA cifra de esta pantalla: tinta. La
+    // dirección la dicen la frase («Ana te debe») y el signo del color; el
+    // sello solo aparece cuando la cuenta está cerrada.
+    return InkPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              SaldaAvatar(
+                seed: economicAvatarSeed(widget.otherUid),
+                label: widget.otherName,
+                radius: 16,
+              ),
+              const SizedBox(width: TokenSpacing.md),
               Expanded(
                 child: Text(
                   title,
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: theme.textTheme.titleSmall?.copyWith(color: c.onInk),
                 ),
               ),
-              StatusBadge(
-                settled
-                    ? l10n.economySettledBadge
-                    : iOwe
-                    ? l10n.balanceNetNegative
-                    : l10n.balanceNetPositive,
-                tone: settled
-                    ? BadgeTone.neutral
-                    : iOwe
-                    ? BadgeTone.negative
-                    : BadgeTone.positive,
-              ),
+              if (settled) Stamp(l10n.economySettledBadge, color: c.inkAccent),
             ],
           ),
           const SizedBox(height: TokenSpacing.md),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: MoneyText(
-              balance.outstanding,
-              size: MoneySize.large,
-              currency: balance.currency,
-              tone: settled
-                  ? MoneyTone.muted
-                  : iOwe
-                  ? MoneyTone.negative
-                  : MoneyTone.positive,
+            child: Text(
+              formatCurrencyMoney(balance.outstanding, balance.currency),
+              maxLines: 1,
+              softWrap: false,
+              style: theme.textTheme.displayMedium?.copyWith(
+                color: settled
+                    ? c.onInkMuted
+                    : iOwe
+                    ? c.inkNegative
+                    : c.inkPositive,
+              ),
             ),
           ),
-          const SizedBox(height: TokenSpacing.sm),
+          const SizedBox(height: TokenSpacing.xs),
           Text(
             '${l10n.economyOriginalDebt}: '
             '${formatCurrencyMoney(_originalForViewer(balance), balance.currency)}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: c.textMuted),
+            style: theme.textTheme.bodySmall?.copyWith(color: c.onInkMuted),
           ),
           // El saldo es el punto de ENTRADA a las deudas que lo explican, en
           // los dos sentidos. Antes, quien cobraba no tenía ninguna acción
@@ -437,19 +414,37 @@ class _PaymentTileState extends ConsumerState<_PaymentTile> {
       EconomicPaymentStatus.confirmed => BadgeTone.positive,
       EconomicPaymentStatus.cancelled => BadgeTone.neutral,
     };
+    final confirmed = payment.status == EconomicPaymentStatus.confirmed;
     return Padding(
-      padding: const EdgeInsets.all(TokenSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(
+        TokenSpacing.lg,
+        TokenSpacing.md,
+        TokenSpacing.lg,
+        TokenSpacing.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Expanded(child: StatusBadge(label, tone: tone)),
+              // Un cobro confirmado es un hecho cerrado: sello. Lo pendiente
+              // o anulado sigue siendo una anotación.
+              Flexible(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: confirmed
+                      ? Stamp(label, compact: true, tilt: false)
+                      : StatusBadge(label, tone: tone),
+                ),
+              ),
               const SizedBox(width: TokenSpacing.sm),
               MoneyText(
                 payment.amount,
                 size: MoneySize.small,
                 currency: payment.currency,
+                tone: payment.status == EconomicPaymentStatus.cancelled
+                    ? MoneyTone.muted
+                    : MoneyTone.neutral,
               ),
             ],
           ),
