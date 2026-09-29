@@ -108,6 +108,36 @@ void main() {
       }
     });
 
+    test('la superficie de tinta contrasta sus cifras en ambos modos', () {
+      for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+        final c = theme.extension<SaldaColors>()!;
+        expect(_contrast(c.onInk, c.ink), greaterThanOrEqualTo(7.0));
+        expect(_contrast(c.onInkMuted, c.ink), greaterThanOrEqualTo(4.5));
+        expect(_contrast(c.inkPositive, c.ink), greaterThanOrEqualTo(4.5));
+        expect(_contrast(c.inkNegative, c.ink), greaterThanOrEqualTo(4.5));
+        // El papel del recibo tiene que seguir leyéndose en tinta.
+        expect(_contrast(c.textPrimary, c.paper), greaterThanOrEqualTo(7.0));
+        expect(_contrast(c.textMuted, c.paper), greaterThanOrEqualTo(4.5));
+      }
+    });
+
+    test('las voces extra son de PLATAFORMA, no fuentes empaquetadas', () {
+      // Salda 8 usa serifa y mono del sistema (Noto Serif / Droid Sans Mono
+      // en Android): sin licencia que gestionar, sin peso en el APK y
+      // disponibles sin conexión. Si alguien cambia esto por una fuente con
+      // nombre propio, tiene que empaquetarla y revisar licencia y tamaño.
+      expect(SaldaType.serifFamily, 'serif');
+      expect(SaldaType.monoFamily, 'monospace');
+      expect(AppTheme.light().textTheme.titleLarge?.fontFamily, 'serif');
+      // Las cifras de la serifa son de caja alta y tabulares.
+      expect(
+        AppTheme.light().textTheme.displayMedium?.fontFeatures?.map(
+          (f) => f.feature,
+        ),
+        containsAll(['tnum', 'lnum']),
+      );
+    });
+
     test('no se declara una fuente que no está empaquetada', () {
       // El token declaraba «Inter» sin que ningún asset la cargara: la app
       // caía en la fuente del sistema fingiendo que no lo hacía. Ahora el
@@ -185,6 +215,16 @@ void main() {
     ) async {
       await pump(tester, const SkeletonList(rows: 3));
       expect(find.byType(Skeleton), findsWidgets);
+    });
+
+    testWidgets('el sello se lee entero para el lector de pantalla', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await pump(tester, const Stamp('Cobrado'));
+      // Se pinta en versalitas, pero se anuncia con su rótulo normal.
+      expect(find.bySemanticsLabel('Cobrado'), findsOneWidget);
+      handle.dispose();
     });
 
     testWidgets('un badge lleva rótulo, no solo color', (tester) async {
